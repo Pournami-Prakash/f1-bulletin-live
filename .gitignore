@@ -1,4 +1,27 @@
-.venv/
-node_modules/
-.DS_Store
+# env / secrets
 .env
+.env.*
+!.env.example
+web/.env
+web/.env.*
+!web/.env.example
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# node / next
+node_modules/
+web/node_modules/
+.next/
+web/.next/
+
+# logs / temp / archives
+*.log
+*.zip
+snowflake.log
+
+# OS / editor
+.DS_Store
+.vscode/
