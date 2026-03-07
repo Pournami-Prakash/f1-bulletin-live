@@ -160,12 +160,30 @@ def sync_daily_briefings(sf, pg) -> int:
             generation_skipped, skip_reason
         FROM MART.DAILY_BRIEFINGS
         WHERE briefing_date >= DATEADD('day', -30, CURRENT_DATE())
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY briefing_date
+            ORDER BY generated_at DESC NULLS LAST
+        ) = 1
         ORDER BY briefing_date DESC
     """)
 
     if not rows:
         log.info('  → No briefings to sync')
         return 0
+
+    # Defensive dedupe in Python too
+    deduped = {}
+    for row in rows:
+        key = row['BRIEFING_DATE']
+        existing = deduped.get(key)
+        if existing is None or (
+            row['GENERATED_AT'] is not None and
+            (existing['GENERATED_AT'] is None or row['GENERATED_AT'] > existing['GENERATED_AT'])
+        ):
+            deduped[key] = row
+
+    rows = list(deduped.values())
+    rows.sort(key=lambda r: r['BRIEFING_DATE'], reverse=True)
 
     cur = pg.cursor()
 
@@ -200,6 +218,7 @@ def sync_daily_briefings(sf, pg) -> int:
             top_controversy_entity = EXCLUDED.top_controversy_entity,
             top_controversy_score  = EXCLUDED.top_controversy_score,
             generated_at           = EXCLUDED.generated_at,
+            model_used             = EXCLUDED.model_used,
             generation_skipped     = EXCLUDED.generation_skipped,
             skip_reason            = EXCLUDED.skip_reason
     """, [
