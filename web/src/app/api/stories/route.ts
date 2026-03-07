@@ -1,14 +1,15 @@
 /**
  * GET /api/stories
+ * Neon-backed story timeline API.
  *
  * Query params:
  *   cluster  all | TEAM_NEWS | DRIVER_NEWS | ...   (default: all)
  *   q        string full-text search                (default: "")
- *   hours    1–720                                  (default: 168 / 7 days)
+ *   hours    1–720                                  (default: 720 / 30 days)
  *   limit    1–200                                  (default: 100)
  */
 
-import { query, normalizeRows } from "@/lib/snowflake";
+import { neon } from "@neondatabase/serverless";
 import {
   ok, err, methodNotAllowed, toErrorMessage,
   clamp, toInt, toString,
@@ -16,99 +17,77 @@ import {
 
 interface StoryRow {
   story_id: string;
-  topic_cluster: string;
+  topic_cluster: string | null;
   story_title: string;
-  latest_url: string;
-  latest_source: string;
+  latest_url: string | null;
+  latest_source: string | null;
   latest_event_ts: string;
-  first_seen_at: string;
-  last_seen_at: string;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
   events_count: number;
   sources_count: number;
   updates_count: number;
-  max_priority_score: number;
-  best_priority_tier: string;
+  max_priority_score: number | null;
+  best_priority_tier: string | null;
   driver: string | null;
-  heat_index: number;
-  momentum_score: number;
+  heat_index: number | null;
+  momentum_score: number | null;
   is_breaking: boolean;
-  breaking_tier: string;
-  merge_key: string;
+  breaking_tier: string | null;
+  merge_key: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Route
-// ---------------------------------------------------------------------------
+export const revalidate = 120;
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
+  if (!process.env.NEON_DATABASE_URL) {
+    return err("NEON_DATABASE_URL not configured", 503, "CONFIG_ERROR");
+  }
 
+  const { searchParams } = new URL(req.url);
   const cluster = toString(searchParams.get("cluster")) || "all";
   const q = toString(searchParams.get("q"));
-  const hours = clamp(toInt(searchParams.get("hours"), 168), 1, 720);
+  const hours = clamp(toInt(searchParams.get("hours"), 720), 1, 720);
   const limit = clamp(toInt(searchParams.get("limit"), 100), 1, 200);
 
-  const where: string[] = [];
-  const binds: unknown[] = [];
-
-  where.push(`s.latest_event_ts >= DATEADD('hour', ?, CURRENT_TIMESTAMP())`);
-  binds.push(-hours);
-
-  if (cluster !== "all") {
-    where.push(`s.topic_cluster = ?`);
-    binds.push(cluster);
-  }
-
-  if (q) {
-    where.push(`(
-      s.story_title   ILIKE ?
-      OR s.latest_source ILIKE ?
-      OR s.latest_url    ILIKE ?
-    )`);
-    const like = `%${q}%`;
-    binds.push(like, like, like);
-  }
-
-  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-
-  const sql = `
-    SELECT
-      s.story_id,
-      s.topic_cluster,
-      s.story_title,
-      s.latest_url,
-      s.latest_source,
-      s.latest_event_ts,
-      s.first_seen_at,
-      s.last_seen_at,
-      s.events_count,
-      s.sources_count,
-      s.updates_count,
-      s.max_priority_score,
-      s.best_priority_tier,
-      s.driver,
-      s.heat_index,
-      s.momentum_score,
-      s.is_breaking,
-      s.breaking_tier,
-      s.merge_key
-    FROM F1_BULLETIN.MART.STORY_TIMELINE_DT s
-    ${whereSql}
-    ORDER BY s.is_breaking DESC, s.momentum_score DESC, s.latest_event_ts DESC
-    LIMIT ?
-  `;
-
   try {
-    const rows = await query<Record<string, unknown>>(sql, [...binds, limit], {
-      schema: "MART",
-      role: "F1_APP_READ_ROLE",
-      warehouse: "F1_APP_WH",
-    });
+    const sql = neon(process.env.NEON_DATABASE_URL!);
+    const rows = await sql`
+      SELECT
+        story_id,
+        topic_cluster,
+        story_title,
+        latest_url,
+        latest_source,
+        latest_event_ts,
+        first_seen_at,
+        last_seen_at,
+        events_count,
+        sources_count,
+        updates_count,
+        max_priority_score,
+        best_priority_tier,
+        driver,
+        heat_index,
+        momentum_score,
+        is_breaking,
+        breaking_tier,
+        merge_key
+      FROM story_timeline
+      WHERE latest_event_ts >= NOW() - (${hours} || ' hours')::interval
+        AND (${cluster} = 'all' OR topic_cluster = ${cluster})
+        AND (
+          ${q} = ''
+          OR story_title ILIKE ${`%${q}%`}
+          OR COALESCE(latest_source, '') ILIKE ${`%${q}%`}
+          OR COALESCE(latest_url, '') ILIKE ${`%${q}%`}
+        )
+      ORDER BY is_breaking DESC, COALESCE(momentum_score, 0) DESC, latest_event_ts DESC
+      LIMIT ${limit}
+    `;
 
-    const items = normalizeRows<StoryRow>(rows);
-    return ok(items, {
-      count: items.length,
-    });
+    const items = rows as unknown as StoryRow[];
+    return ok(items, { count: items.length });
   } catch (e) {
     return err(toErrorMessage(e));
   }
