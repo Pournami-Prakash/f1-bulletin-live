@@ -257,29 +257,3 @@ FROM MART.SEMANTIC_CLUSTERS sc
 ORDER BY sc.article_count DESC
 LIMIT 20;
 
--- ============================================================
--- INTEGRATION — paste into .github/workflows/ingest.yml
--- immediately after the "Run Phase 1 intelligence SQL" step:
---
---   - name: Run semantic clustering
---     env:
---       SNOWFLAKE_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
---       SNOWFLAKE_USER:      ${{ secrets.SNOWFLAKE_USER }}
---       SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
---     run: |
---       python3 - <<'EOF'
---       import snowflake.connector, os
---       conn = snowflake.connector.connect(
---           account=os.environ['SNOWFLAKE_ACCOUNT'],
---           user=os.environ['SNOWFLAKE_USER'],
---           password=os.environ['SNOWFLAKE_PASSWORD'],
---           warehouse='F1_APP_WH', database='F1_BULLETIN', schema='MART',
---       )
---       sql = open('sql/semantic_clustering.sql').read()
---       for stmt in [s.strip() for s in sql.split(';') if s.strip()
---                    and not s.strip().startswith('--')]:
---           conn.cursor().execute(stmt)
---       conn.close()
---       print('Semantic clustering done')
---       EOF
--- ============================================================

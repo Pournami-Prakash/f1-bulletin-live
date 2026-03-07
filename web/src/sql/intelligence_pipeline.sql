@@ -530,7 +530,3 @@ DELETE FROM MART.SPIKE_ALERTS
 WHERE detected_at < DATEADD('day', -60, CURRENT_TIMESTAMP())
   AND resolved = TRUE;
 
--- ============================================================
--- DONE — intelligence pipeline complete
--- Next: intelligence_sync.py exports results to Neon Postgres
--- ============================================================

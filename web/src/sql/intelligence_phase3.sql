@@ -808,12 +808,3 @@ WHERE created_at < DATEADD('day', -60, CURRENT_TIMESTAMP());
 -- Remove regulatory risk scores for old races
 DELETE FROM MART.REGULATORY_RISK_SCORE
 WHERE calculated_at < DATEADD('day', -90, CURRENT_TIMESTAMP());
-
--- ============================================================
--- DONE
--- New tables:
---   MART.WEEKEND_STATE            (single row, refreshed hourly)
---   MART.SESSION_CHATTER          (race week articles only)
---   MART.REGULATORY_RISK_SCORE    (per entity per race)
---   MART.PRE_RACE_INTELLIGENCE    (LLM snapshot per race weekend)
--- ============================================================
