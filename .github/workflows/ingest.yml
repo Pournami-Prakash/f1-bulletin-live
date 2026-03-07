@@ -142,7 +142,7 @@ jobs:
               if errors:
                   sys.exit(1)
 
-          execute_sql_file('/f1-bulletin/web/src/sql/intelligence_pipeline.sql', 'Phase 1 SQL')
+          execute_sql_file('./web/src/sql/intelligence_pipeline.sql', 'Phase 1 SQL')
           PYEOF
 
       - name: Sync core content to Neon
@@ -152,7 +152,7 @@ jobs:
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          python3 /f1-bulletin/web/src/scripts/core_content_sync.py
+          python3 ./web/src/scripts/core_content_sync.py
 
       - name: Sync Phase 1 intelligence to Neon
         env:
@@ -161,7 +161,7 @@ jobs:
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          python3 /f1-bulletin/web/src/scripts/intelligence_sync.py
+          python3 ./web/src/scripts/intelligence_sync.py
 
       - name: Run semantic clustering SQL
         env:
@@ -185,7 +185,7 @@ jobs:
               login_timeout=30,
           )
 
-          with open('/f1-bulletin/web/src/sql/semantic_clustering.sql', 'r', encoding='utf-8') as f:
+          with open('./web/src/sql/semantic_clustering.sql', 'r', encoding='utf-8') as f:
               full_sql = f.read()
 
           statements = []
@@ -243,7 +243,7 @@ jobs:
               login_timeout=30,
           )
 
-          with open('/f1-bulletin/web/src/sql/intelligence_phase2_completion.sql', 'r', encoding='utf-8') as f:
+          with open('./web/src/sql/intelligence_phase2_completion.sql', 'r', encoding='utf-8') as f:
               full_sql = f.read()
 
           statements = []
@@ -286,7 +286,7 @@ jobs:
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          python3 /f1-bulletin/web/src/scripts/intelligence_sync_phase2.py
+          python3 ./web/src/scripts/intelligence_sync_phase2.py
 
       - name: Run Phase 3 intelligence SQL
         env:
@@ -310,7 +310,7 @@ jobs:
               login_timeout=30,
           )
 
-          with open('/f1-bulletin/web/src/sql/intelligence_phase3.sql', 'r', encoding='utf-8') as f:
+          with open('./web/src/sql/intelligence_phase3.sql', 'r', encoding='utf-8') as f:
               full_sql = f.read()
 
           statements = []
@@ -353,7 +353,7 @@ jobs:
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          python3 /f1-bulletin/web/src/scripts/intelligence_sync_phase3.py
+          python3 ./web/src/scripts/intelligence_sync_phase3.py
 
       - name: Summary
         if: always()
