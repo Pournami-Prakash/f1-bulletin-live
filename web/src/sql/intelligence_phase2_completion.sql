@@ -830,12 +830,3 @@ WHERE briefing_date < DATEADD('day', -90, CURRENT_DATE());
 -- Keep 30 days of regulatory tags
 DELETE FROM MART.REGULATORY_TAGS
 WHERE tagged_at < DATEADD('day', -60, CURRENT_TIMESTAMP());
-
--- ============================================================
--- DONE
--- New tables created:
---   MART.CONTROVERSY_INDEX      (drivers + teams, daily)
---   MART.DAILY_BRIEFINGS        (AI briefing, once per day)
---   MART.REGULATORY_TAGS        (FIA article classification)
---   MART.CLUSTER_MOMENTUM_72H   (rolling 72h window)
--- ============================================================
