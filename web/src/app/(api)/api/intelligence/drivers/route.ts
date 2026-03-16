@@ -1,3 +1,5 @@
+// /Users/pournami/Documents/Projects/f1-bulletin/web/src/app/(api)/api/intelligence/drivers/route.ts
+
 import { neon } from '@neondatabase/serverless'
 import { NextResponse } from 'next/server'
 

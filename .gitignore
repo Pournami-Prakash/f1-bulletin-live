@@ -25,3 +25,17 @@ snowflake.log
 # OS / editor
 .DS_Store
 .vscode/
+
+# cache / data artifacts
+etl/cache/
+etl/*.sqlite
+data/*.sqlite
+
+# python artifacts
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# FastF1 cache
+fastf1_http_cache.sqlite
