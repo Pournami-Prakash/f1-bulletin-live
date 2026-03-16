@@ -3,7 +3,6 @@
 import { useState, useRef } from 'react'
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion'
 import Header from '@/components/Header'
-import Ticker from '@/components/Ticker'
 import Footer from '@/components/Footer'
 import BgCanvas from '@/components/BgCanvas'
 
@@ -805,7 +804,6 @@ export default function GuidePage() {
 
       <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh' }}>
         <Header />
-        <Ticker />
 
         {/* ══════════ HERO ══════════ */}
         <div ref={heroRef} style={{ position: 'relative', overflow: 'hidden' }}>
