@@ -18,22 +18,36 @@ on:
         type: choice
         options: ['false', 'true']
 
+env:
+  SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+  SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+  SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+  SNOWFLAKE_WAREHOUSE: F1_APP_WH
+  SNOWFLAKE_DATABASE: F1_BULLETIN
+  SNOWFLAKE_ROLE: SYSADMIN
+
 jobs:
+
+# ----------------------------------------------------
+# RSS INGEST
+# ----------------------------------------------------
+
   ingest:
     name: Ingest RSS to Snowflake
     runs-on: ubuntu-latest
     timeout-minutes: 12
 
     steps:
+
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install ingest dependencies
+      - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install \
@@ -43,237 +57,154 @@ jobs:
             python-dotenv
 
       - name: Run RSS ingestion
-        env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-          SNOWFLAKE_WAREHOUSE: F1_APP_WH
-          SNOWFLAKE_DATABASE: F1_BULLETIN
-          SNOWFLAKE_ROLE: SYSADMIN
         run: |
           python3 scripts/ingest_rss.py
 
       - name: Summary
         if: always()
-        run: echo "Ingest job completed with status ${{ job.status }}"
+        run: echo "RSS ingest completed with status ${{ job.status }}"
 
-  intelligence:
-    name: Intelligence Pipeline
+
+# ----------------------------------------------------
+# PHASE 1 INTELLIGENCE
+# ----------------------------------------------------
+
+  phase1_intelligence:
+    name: Phase 1 Intelligence
     runs-on: ubuntu-latest
     needs: ingest
-    timeout-minutes: 20
+
     if: |
       github.event.inputs.ingest_only != 'true' &&
       github.event.inputs.skip_intelligence != 'true'
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
           pip install \
-            requests \
             snowflake-connector-python \
             psycopg2-binary \
             python-dotenv
 
-      - name: Run Phase 1 intelligence SQL
-        env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      - name: Run Phase 1 SQL
         run: |
-          python3 - << 'PYEOF'
-          import os
-          import sys
-          import time
-          import snowflake.connector
-
-          def execute_sql_file(path: str, label: str):
-              conn = snowflake.connector.connect(
-                  account=os.environ['SNOWFLAKE_ACCOUNT'],
-                  user=os.environ['SNOWFLAKE_USER'],
-                  password=os.environ['SNOWFLAKE_PASSWORD'],
-                  warehouse='F1_APP_WH',
-                  database='F1_BULLETIN',
-                  schema='MART',
-                  login_timeout=30,
-              )
-
-              with open(path, 'r', encoding='utf-8') as f:
-                  full_sql = f.read()
-
-              statements = []
-              for s in full_sql.split(';'):
-                  lines = [l for l in s.split('\n') if not l.strip().startswith('--')]
-                  stmt = '\n'.join(lines).strip()
-                  if stmt:
-                      statements.append(stmt)
-
-              print(f"Running {len(statements)} {label} statements...")
-              cur = conn.cursor()
-              errors = []
-
-              for i, stmt in enumerate(statements):
-                  preview = stmt[:80].replace('\n', ' ')
-                  try:
-                      t0 = time.time()
-                      cur.execute(stmt)
-                      print(f"[{i+1:02d}] OK {preview} ({cur.rowcount} rows, {time.time()-t0:.1f}s)")
-                  except snowflake.connector.errors.ProgrammingError as e:
-                      err_str = str(e)
-                      if any(x in err_str for x in ['Nothing to insert', 'already exists']):
-                          print(f"[{i+1:02d}] SKIP {preview}")
-                      else:
-                          print(f"[{i+1:02d}] ERR {err_str}")
-                          errors.append(err_str)
-
-              cur.close()
-              conn.close()
-
-              if errors:
-                  sys.exit(1)
-
-          execute_sql_file('./sql/intelligence_pipeline.sql', 'Phase 1 SQL')
-          PYEOF
+          python3 scripts/run_sql_file.py sql/intelligence_pipeline.sql
 
       - name: Sync core content to Neon
         env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
           python3 scripts/core_content_sync.py
 
-      - name: Sync Phase 1 intelligence to Neon
+      - name: Sync Phase 1 intelligence
         env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
           python3 scripts/intelligence_sync.py
 
-      - name: Run semantic clustering SQL
-        env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+
+# ----------------------------------------------------
+# SEMANTIC CLUSTERING
+# ----------------------------------------------------
+
+  semantic_clustering:
+    name: Semantic Clustering
+    runs-on: ubuntu-latest
+    needs: phase1_intelligence
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
         run: |
-          python3 - << 'PYEOF'
-          import os
-          import time
-          import snowflake.connector
+          pip install snowflake-connector-python
 
-          conn = snowflake.connector.connect(
-              account=os.environ['SNOWFLAKE_ACCOUNT'],
-              user=os.environ['SNOWFLAKE_USER'],
-              password=os.environ['SNOWFLAKE_PASSWORD'],
-              warehouse='F1_APP_WH',
-              database='F1_BULLETIN',
-              schema='MART',
-          )
-
-          with open('./sql/semantic_clustering.sql', 'r', encoding='utf-8') as f:
-              sql = f.read()
-
-          cur = conn.cursor()
-          for stmt in sql.split(';'):
-              stmt = stmt.strip()
-              if stmt:
-                  cur.execute(stmt)
-
-          cur.close()
-          conn.close()
-          PYEOF
-
-      - name: Run Phase 2 intelligence SQL
-        env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      - name: Run clustering SQL
         run: |
-          python3 - << 'PYEOF'
-          import os
-          import snowflake.connector
+          python3 scripts/run_sql_file.py sql/semantic_clustering.sql
 
-          conn = snowflake.connector.connect(
-              account=os.environ['SNOWFLAKE_ACCOUNT'],
-              user=os.environ['SNOWFLAKE_USER'],
-              password=os.environ['SNOWFLAKE_PASSWORD'],
-              warehouse='F1_APP_WH',
-              database='F1_BULLETIN',
-              schema='MART',
-          )
 
-          with open('./sql/intelligence_phase2_completion.sql') as f:
-              sql = f.read()
+# ----------------------------------------------------
+# PHASE 2 INTELLIGENCE
+# ----------------------------------------------------
 
-          cur = conn.cursor()
-          for stmt in sql.split(';'):
-              stmt = stmt.strip()
-              if stmt:
-                  cur.execute(stmt)
+  phase2_intelligence:
+    name: Phase 2 Intelligence
+    runs-on: ubuntu-latest
+    needs: semantic_clustering
 
-          cur.close()
-          conn.close()
-          PYEOF
+    steps:
 
-      - name: Sync Phase 2 intelligence to Neon
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install \
+            snowflake-connector-python \
+            psycopg2-binary \
+            python-dotenv
+
+      - name: Run Phase 2 SQL
+        run: |
+          python3 scripts/run_sql_file.py sql/intelligence_phase2_completion.sql
+
+      - name: Sync Phase 2 intelligence
         env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
           python3 scripts/intelligence_sync_phase2.py
 
-      - name: Run Phase 3 intelligence SQL
-        env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+
+# ----------------------------------------------------
+# PHASE 3 INTELLIGENCE
+# ----------------------------------------------------
+
+  phase3_intelligence:
+    name: Phase 3 Intelligence
+    runs-on: ubuntu-latest
+    needs: phase2_intelligence
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
         run: |
-          python3 - << 'PYEOF'
-          import os
-          import snowflake.connector
+          pip install \
+            snowflake-connector-python \
+            psycopg2-binary \
+            python-dotenv
 
-          conn = snowflake.connector.connect(
-              account=os.environ['SNOWFLAKE_ACCOUNT'],
-              user=os.environ['SNOWFLAKE_USER'],
-              password=os.environ['SNOWFLAKE_PASSWORD'],
-              warehouse='F1_APP_WH',
-              database='F1_BULLETIN',
-              schema='MART',
-          )
+      - name: Run Phase 3 SQL
+        run: |
+          python3 scripts/run_sql_file.py sql/intelligence_phase3.sql
 
-          with open('./sql/intelligence_phase3.sql') as f:
-              sql = f.read()
-
-          cur = conn.cursor()
-          for stmt in sql.split(';'):
-              stmt = stmt.strip()
-              if stmt:
-                  cur.execute(stmt)
-
-          cur.close()
-          conn.close()
-          PYEOF
-
-      - name: Sync Phase 3 intelligence to Neon
+      - name: Sync Phase 3 intelligence
         env:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
           python3 scripts/intelligence_sync_phase3.py
 
-      - name: Summary
+      - name: Pipeline Summary
         if: always()
         run: echo "Intelligence pipeline completed with status ${{ job.status }}"
