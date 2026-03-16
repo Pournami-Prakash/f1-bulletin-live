@@ -1,7 +1,7 @@
 import { neon } from '@neondatabase/serverless'
 import { NextResponse } from 'next/server'
 
-export const revalidate = 120
+export const dynamic = "force-dynamic"
 
 export async function GET() {
   if (!process.env.NEON_DATABASE_URL) {

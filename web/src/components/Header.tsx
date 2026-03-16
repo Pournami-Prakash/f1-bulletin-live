@@ -17,12 +17,12 @@ export default function Header() {
     }
   }, [])
 
-  function toggleTheme() {
-    const next = theme === 'dark' ? 'light' : 'dark'
-    setTheme(next)
-    document.documentElement.setAttribute('data-theme', next)
-    localStorage.setItem('f1-theme', next)
-  }
+  // function toggleTheme() {
+  //   const next = theme === 'dark' ? 'light' : 'dark'
+  //   setTheme(next)
+  //   document.documentElement.setAttribute('data-theme', next)
+  //   localStorage.setItem('f1-theme', next)
+  // }
 
   const navItems = [
     { href: '/',          label: 'HOME' },
@@ -90,7 +90,7 @@ export default function Header() {
       </nav>
 
       {/* Right side */}
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+      {/* <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button
           onClick={toggleTheme}
           style={{
@@ -111,7 +111,7 @@ export default function Header() {
         }}>
           SUBSCRIBE
         </button>
-      </div>
+      </div> */}
     </header>
   )
 }
