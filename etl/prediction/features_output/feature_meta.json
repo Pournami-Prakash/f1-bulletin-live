@@ -1,0 +1,47 @@
+{
+  "prediction_features": [
+    "elo_rating",
+    "grid_position",
+    "gap_to_pole_sec",
+    "rolling_avg_finish",
+    "rolling_dnf_rate",
+    "team_strength",
+    "pu_strength_adjusted",
+    "circuit_affinity",
+    "sc_probability",
+    "overtaking_index",
+    "arw_effectiveness",
+    "tyre_deg_rate",
+    "ers_circuit_factor",
+    "track_temp",
+    "had_rain",
+    "pit_lane_delta_sec",
+    "pit_crew_speed",
+    "lap1_risk"
+  ],
+  "target": "finish_position",
+  "train_seasons": [
+    2018,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "test_seasons": [
+    2026
+  ],
+  "total_rows": 2359,
+  "train_rows": 2315,
+  "test_rows": 44,
+  "reg_break_discount": 0.4,
+  "elo_k_factor": 40,
+  "season_weights": {
+    "2021": 0.2,
+    "2022": 0.5,
+    "2023": 0.75,
+    "2024": 0.85,
+    "2025": 0.9,
+    "2026": 1.0
+  }
+}

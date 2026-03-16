@@ -1,0 +1,213 @@
+/* app/globals.css */
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@300;400;500&display=swap');
+@import "tailwindcss";
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --red:    #E10600;
+  --gold:   #F59E0B;
+  --blue:   #38BDF8;
+  --green:  #4ADE80;
+  --purple: #A78BFA;
+
+  --bg:     #0A0A0A;
+  --bg2:    #111111;
+  --card:   #141414;
+  --card-h: #1A1A1A;
+  --b1:     rgba(255,255,255,0.07);
+  --b2:     rgba(255,255,255,0.14);
+  --t1:     #FFFFFF;
+  --t2:     rgba(255,255,255,0.55);
+  --t3:     rgba(255,255,255,0.28);
+
+  --header-h: 52px;
+  --gutter: 28px;
+  --tr: 0.2s ease;
+  --font-bebas: 'Bebas Neue', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --bg:     #F5F5F5;
+  --bg2:    #ECECEC;
+  --card:   #FFFFFF;
+  --card-h: #F8F8F8;
+  --b1:     rgba(0,0,0,0.08);
+  --b2:     rgba(0,0,0,0.14);
+  --t1:     #0A0A0A;
+  --t2:     rgba(0,0,0,0.55);
+  --t3:     rgba(0,0,0,0.28);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--t1);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--b2); border-radius: 2px; }
+
+/* ── TYPOGRAPHY ── */
+.bebas { font-family: var(--font-bebas); }
+.mono  { font-family: var(--font-mono); }
+
+/* ── PULSE DOT ── */
+.pd {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+  animation: pd 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes pd {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: .4; transform: scale(.7); }
+}
+
+/* ── SECTION REVEAL ── */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.65s ease, transform 0.65s ease;
+}
+.reveal.vis {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── EYEBROW ── */
+.eyebrow {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 6px;
+}
+.eyebrow .line { width: 20px; height: 1px; background: var(--red); }
+.eyebrow span {
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: .16em;
+  color: var(--t2); text-transform: uppercase;
+}
+
+/* ── SECTION TITLE ── */
+.sec-title {
+  font-family: var(--font-bebas);
+  font-size: clamp(34px, 4.5vw, 56px);
+  letter-spacing: .03em;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+/* ── BADGE ── */
+.badge {
+  font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: .12em;
+  padding: 2px 8px; border-radius: 3px;
+  border: 1px solid currentColor;
+  display: inline-flex; align-items: center; gap: 4px;
+  text-transform: uppercase;
+}
+.badge-red    { color: var(--red);    background: rgba(225,6,0,.1); }
+.badge-gold   { color: var(--gold);   background: rgba(245,158,11,.1); }
+.badge-blue   { color: var(--blue);   background: rgba(56,189,248,.1); }
+.badge-green  { color: var(--green);  background: rgba(74,222,128,.1); }
+.badge-purple { color: var(--purple); background: rgba(167,139,250,.1); }
+.badge-gray   { color: var(--t2);     background: rgba(255,255,255,.05); }
+
+/* ── SENTIMENT PILL ── */
+.sentiment {
+  font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: .1em;
+  padding: 2px 8px; border-radius: 20px;
+  text-transform: uppercase; font-weight: 500;
+}
+.sentiment-positive { color: var(--green);  background: rgba(74,222,128,.12); }
+.sentiment-negative { color: var(--red);    background: rgba(225,6,0,.12); }
+.sentiment-neutral  { color: var(--t2);     background: rgba(255,255,255,.06); }
+.sentiment-mixed    { color: var(--gold);   background: rgba(245,158,11,.12); }
+
+/* ── PRIORITY BADGE ── */
+.priority-p0 { color: var(--red);    background: rgba(225,6,0,.15);     border-color: rgba(225,6,0,.3); }
+.priority-p1 { color: var(--gold);   background: rgba(245,158,11,.15);  border-color: rgba(245,158,11,.3); }
+.priority-p2 { color: var(--blue);   background: rgba(56,189,248,.15);  border-color: rgba(56,189,248,.3); }
+.priority-p3 { color: var(--t2);     background: rgba(255,255,255,.05); border-color: var(--b1); }
+
+/* ── RISK LABEL ── */
+.risk-CRITICAL { color: var(--red);    background: rgba(225,6,0,.15); }
+.risk-HIGH     { color: var(--gold);   background: rgba(245,158,11,.15); }
+.risk-MEDIUM   { color: var(--blue);   background: rgba(56,189,248,.15); }
+.risk-LOW      { color: var(--green);  background: rgba(74,222,128,.12); }
+.risk-CLEAR    { color: var(--t3);     background: rgba(255,255,255,.04); }
+
+/* ── SCORE BAR ── */
+.score-bar {
+  height: 2px; background: var(--b1);
+  border-radius: 2px; overflow: hidden; margin-top: 8px;
+}
+.score-fill {
+  height: 100%; border-radius: 2px;
+  transition: width 0.8s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── TICKER ── */
+.ticker {
+  height: 36px;
+  border-bottom: 1px solid var(--b1);
+  background: rgba(0,0,0,.45);
+  display: flex; overflow: hidden; align-items: center;
+}
+.ticker-tag {
+  flex-shrink: 0; display: flex; align-items: center; gap: 7px;
+  padding: 0 18px; height: 100%;
+  border-right: 1px solid var(--b1);
+  background: linear-gradient(90deg, rgba(225,6,0,.13), transparent);
+  font-size: 9px; letter-spacing: .18em; font-weight: 500;
+}
+.ticker-scroll { flex: 1; overflow: hidden; position: relative; }
+.ticker-inner  {
+  display: flex; gap: 0; white-space: nowrap;
+  animation: ticker 40s linear infinite;
+}
+.ticker-item {
+  padding: 0 32px; font-size: 11px;
+  color: var(--t2); letter-spacing: .04em;
+  border-right: 1px solid var(--b1);
+}
+.ticker-item .src-o { color: var(--red); }
+.ticker-item .src-r { color: var(--gold); }
+.ticker-item .src-n { color: var(--blue); }
+@keyframes ticker {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* ── MOMENTUM ARROW ── */
+.arrow-up   { color: var(--green); }
+.arrow-down { color: var(--red); }
+.arrow-flat { color: var(--t3); }
+
+/* ── LOADING STATES ── */
+.skeleton {
+  background: linear-gradient(90deg, var(--b1) 25%, var(--b2) 50%, var(--b1) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  :root { --gutter: 16px; }
+}

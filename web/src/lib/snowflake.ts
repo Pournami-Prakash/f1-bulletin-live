@@ -18,6 +18,7 @@ function getBaseConfig() {
     warehouse: process.env.SNOWFLAKE_WAREHOUSE,
     database:  process.env.SNOWFLAKE_DATABASE,
     role:      process.env.SNOWFLAKE_ROLE,
+    schema:    process.env.SNOWFLAKE_SCHEMA,
   };
 
   const missing = Object.entries(required).filter(([, v]) => !v).map(([k]) => k);
@@ -62,7 +63,7 @@ export function createConnection(opts: CreateConnectionOptions = {}): snowflake.
     database:  base.database,
     role:      opts.role      ?? base.role,
     ...(process.env.SNOWFLAKE_REGION ? { region: process.env.SNOWFLAKE_REGION } : {}),
-    ...(opts.schema ? { schema: opts.schema } : {}),
+    schema: opts.schema ?? base.schema,
     ...auth,
     logLevel: process.env.NODE_ENV === "development" ? "warn" : "error",
   } as snowflake.ConnectionOptions);

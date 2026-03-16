@@ -1,0 +1,156 @@
+name: F1 Race Predictions
+
+on:
+  # Run every Saturday at 20:00 UTC (after qualifying in all timezones)
+  schedule:
+    - cron: '0 20 * * 6'
+  # Also allow manual trigger with custom round
+  workflow_dispatch:
+    inputs:
+      season:
+        description: 'Season year'
+        required: true
+        default: '2026'
+        type: string
+      round:
+        description: 'Round number'
+        required: true
+        default: '3'
+        type: string
+      score_round:
+        description: 'Round to score (leave empty to skip)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run (no DB write)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: etl
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install fastf1 pandas numpy scikit-learn psycopg2-binary python-dotenv
+
+      - name: Create .env.local
+        run: |
+          echo "NEON_DATABASE_URL=${{ secrets.NEON_DATABASE_URL }}" > ../web/.env.local
+
+      - name: Detect current round (scheduled run)
+        if: github.event_name == 'schedule'
+        id: detect_round
+        run: |
+          python - <<'EOF'
+          import fastf1 as f1
+          from datetime import datetime, timezone
+          import os
+
+          schedule = f1.get_event_schedule(2026, include_testing=False)
+          now = datetime.now(timezone.utc)
+
+          # Find the next upcoming race
+          next_round = None
+          for _, event in schedule.iterrows():
+              event_date = event['EventDate']
+              if hasattr(event_date, 'tzinfo') and event_date.tzinfo is None:
+                  import pandas as pd
+                  event_date = pd.Timestamp(event_date).tz_localize('UTC')
+              if event_date > pd.Timestamp(now):
+                  next_round = int(event['RoundNumber'])
+                  break
+
+          if next_round:
+              print(f"Next round: {next_round}")
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f"round={next_round}\n")
+                  f.write(f"season=2026\n")
+          else:
+              print("No upcoming rounds found")
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write("round=0\n")
+                  f.write("season=2026\n")
+          EOF
+
+      - name: Set round variables
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "season=${{ steps.detect_round.outputs.season }}" >> $GITHUB_OUTPUT
+            echo "round=${{ steps.detect_round.outputs.round }}" >> $GITHUB_OUTPUT
+          else
+            echo "season=${{ inputs.season }}" >> $GITHUB_OUTPUT
+            echo "round=${{ inputs.round }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Skip if no upcoming round
+        if: steps.vars.outputs.round == '0'
+        run: |
+          echo "No upcoming round detected, skipping prediction run"
+          exit 0
+
+      # ── Load qualifying data for upcoming race ────────────────────────────
+      - name: Load qualifying data
+        run: |
+          python load_fastf1_v4.py \
+            --seasons ${{ steps.vars.outputs.season }} \
+            --round ${{ steps.vars.outputs.round }} \
+            --quali-only
+        continue-on-error: true   # quali may not be available yet
+
+      # ── Feature engineering ───────────────────────────────────────────────
+      - name: Run feature engineering
+        run: python prediction/feature_engineering.py
+
+      # ── Score previous race (if specified) ───────────────────────────────
+      - name: Score previous race
+        if: inputs.score_round != ''
+        run: |
+          python prediction/predict.py \
+            --season ${{ steps.vars.outputs.season }} \
+            --round ${{ inputs.score_round }} \
+            --score
+
+      - name: Refit calibrator (after scoring)
+        if: inputs.score_round != ''
+        run: python prediction/predict.py --fit-calibrator
+        continue-on-error: true   # needs 50+ scored rows to activate
+
+      # ── Generate prediction ───────────────────────────────────────────────
+      - name: Generate prediction (dry run)
+        if: inputs.dry_run == 'true'
+        run: |
+          python prediction/predict.py \
+            --season ${{ steps.vars.outputs.season }} \
+            --round ${{ steps.vars.outputs.round }} \
+            --dry-run
+
+      - name: Generate prediction (write to DB)
+        if: inputs.dry_run != 'true'
+        run: |
+          python prediction/predict.py \
+            --season ${{ steps.vars.outputs.season }} \
+            --round ${{ steps.vars.outputs.round }}
+
+      # ── Summary ───────────────────────────────────────────────────────────
+      - name: Print summary
+        run: |
+          echo "✓ Prediction complete"
+          echo "  Season: ${{ steps.vars.outputs.season }}"
+          echo "  Round:  ${{ steps.vars.outputs.round }}"
+          echo "  Mode:   ${{ inputs.dry_run == 'true' && 'DRY RUN' || 'LIVE' }}"

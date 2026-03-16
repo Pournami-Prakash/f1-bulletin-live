@@ -129,3 +129,69 @@ export interface TrendDay {
   velocity:     number;
   top_keywords: string[];
 }
+
+// ---------------------------------------------------------------------------
+// Jolpica / Championship Standings
+// ---------------------------------------------------------------------------
+export interface JolpicaConstructorRef {
+  constructorId: string;
+  name: string;
+  nationality: string;
+}
+
+export interface JolpicaDriverRef {
+  driverId: string;
+  givenName: string;
+  familyName: string;
+  nationality: string;
+  code: string;
+  permanentNumber?: string;
+}
+
+export interface DriverStanding {
+  position: string;
+  points: string;
+  wins: string;
+  Driver: JolpicaDriverRef;
+  Constructors: JolpicaConstructorRef[];
+}
+
+export interface ConstructorStanding {
+  position: string;
+  points: string;
+  wins: string;
+  Constructor: JolpicaConstructorRef;
+}
+
+export interface StandingsResponse {
+  standings: DriverStanding[] | ConstructorStanding[];
+  season: string;
+}
+
+// ---------------------------------------------------------------------------
+// Race results (Jolpica)
+// ---------------------------------------------------------------------------
+export interface RaceResult {
+  position: string;
+  points: string;
+  grid: string;
+  laps: string;
+  status: string;
+  Driver: JolpicaDriverRef;
+  Constructor: JolpicaConstructorRef;
+  Time?: { time: string };
+  FastestLap?: { rank: string; lap: string; Time: { time: string } };
+}
+
+export interface RaceSummary {
+  season: string;
+  round: string;
+  raceName: string;
+  date: string;
+  Circuit: {
+    circuitId: string;
+    circuitName: string;
+    Location: { locality: string; country: string };
+  };
+  Results?: RaceResult[];
+}
