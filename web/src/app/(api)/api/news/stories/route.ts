@@ -37,7 +37,7 @@ interface StoryRow {
   merge_key: string | null;
 }
 
-export const revalidate = 120;
+export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   if (!process.env.NEON_DATABASE_URL) {
