@@ -51,7 +51,7 @@ jobs:
           SNOWFLAKE_DATABASE: F1_BULLETIN
           SNOWFLAKE_ROLE: SYSADMIN
         run: |
-          python3 ingest_rss.py
+          python3 scripts/ingest_rss.py
 
       - name: Summary
         if: always()
@@ -126,23 +126,22 @@ jobs:
                   try:
                       t0 = time.time()
                       cur.execute(stmt)
-                      print(f"  [{i+1:02d}] OK  {preview}... ({cur.rowcount} rows, {time.time()-t0:.1f}s)")
+                      print(f"[{i+1:02d}] OK {preview} ({cur.rowcount} rows, {time.time()-t0:.1f}s)")
                   except snowflake.connector.errors.ProgrammingError as e:
                       err_str = str(e)
                       if any(x in err_str for x in ['Nothing to insert', 'already exists']):
-                          print(f"  [{i+1:02d}] SKIP {preview}")
+                          print(f"[{i+1:02d}] SKIP {preview}")
                       else:
-                          print(f"  [{i+1:02d}] ERR  {err_str}")
+                          print(f"[{i+1:02d}] ERR {err_str}")
                           errors.append(err_str)
 
               cur.close()
               conn.close()
 
-              print(f"{label} done. {len(errors)} errors.")
               if errors:
                   sys.exit(1)
 
-          execute_sql_file('./web/src/sql/intelligence_pipeline.sql', 'Phase 1 SQL')
+          execute_sql_file('./sql/intelligence_pipeline.sql', 'Phase 1 SQL')
           PYEOF
 
       - name: Sync core content to Neon
@@ -152,7 +151,7 @@ jobs:
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          python3 ./web/src/scripts/core_content_sync.py
+          python3 scripts/core_content_sync.py
 
       - name: Sync Phase 1 intelligence to Neon
         env:
@@ -161,7 +160,7 @@ jobs:
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          python3 ./web/src/scripts/intelligence_sync.py
+          python3 scripts/intelligence_sync.py
 
       - name: Run semantic clustering SQL
         env:
@@ -171,7 +170,6 @@ jobs:
         run: |
           python3 - << 'PYEOF'
           import os
-          import sys
           import time
           import snowflake.connector
 
@@ -182,43 +180,19 @@ jobs:
               warehouse='F1_APP_WH',
               database='F1_BULLETIN',
               schema='MART',
-              login_timeout=30,
           )
 
-          with open('./web/src/sql/semantic_clustering.sql', 'r', encoding='utf-8') as f:
-              full_sql = f.read()
+          with open('./sql/semantic_clustering.sql', 'r', encoding='utf-8') as f:
+              sql = f.read()
 
-          statements = []
-          for s in full_sql.split(';'):
-              lines = [l for l in s.split('\n') if not l.strip().startswith('--')]
-              stmt = '\n'.join(lines).strip()
-              if stmt:
-                  statements.append(stmt)
-
-          print(f"Running {len(statements)} semantic clustering statements...")
           cur = conn.cursor()
-          errors = []
-
-          for i, stmt in enumerate(statements):
-              preview = stmt[:80].replace('\n', ' ')
-              try:
-                  t0 = time.time()
+          for stmt in sql.split(';'):
+              stmt = stmt.strip()
+              if stmt:
                   cur.execute(stmt)
-                  print(f"  [{i+1:02d}] OK  {preview}... ({cur.rowcount} rows, {time.time()-t0:.1f}s)")
-              except snowflake.connector.errors.ProgrammingError as e:
-                  err_str = str(e)
-                  if any(x in err_str for x in ['Nothing to insert', 'already exists']):
-                      print(f"  [{i+1:02d}] SKIP {preview}")
-                  else:
-                      print(f"  [{i+1:02d}] ERR  {err_str}")
-                      errors.append(err_str)
 
           cur.close()
           conn.close()
-
-          print(f"Semantic clustering done. {len(errors)} errors.")
-          if errors:
-              sys.exit(1)
           PYEOF
 
       - name: Run Phase 2 intelligence SQL
@@ -229,8 +203,6 @@ jobs:
         run: |
           python3 - << 'PYEOF'
           import os
-          import sys
-          import time
           import snowflake.connector
 
           conn = snowflake.connector.connect(
@@ -240,43 +212,19 @@ jobs:
               warehouse='F1_APP_WH',
               database='F1_BULLETIN',
               schema='MART',
-              login_timeout=30,
           )
 
-          with open('./web/src/sql/intelligence_phase2_completion.sql', 'r', encoding='utf-8') as f:
-              full_sql = f.read()
+          with open('./sql/intelligence_phase2_completion.sql') as f:
+              sql = f.read()
 
-          statements = []
-          for s in full_sql.split(';'):
-              lines = [l for l in s.split('\n') if not l.strip().startswith('--')]
-              stmt = '\n'.join(lines).strip()
-              if stmt:
-                  statements.append(stmt)
-
-          print(f"Running {len(statements)} Phase 2 SQL statements...")
           cur = conn.cursor()
-          errors = []
-
-          for i, stmt in enumerate(statements):
-              preview = stmt[:80].replace('\n', ' ')
-              try:
-                  t0 = time.time()
+          for stmt in sql.split(';'):
+              stmt = stmt.strip()
+              if stmt:
                   cur.execute(stmt)
-                  print(f"  [{i+1:02d}] OK  {preview}... ({cur.rowcount} rows, {time.time()-t0:.1f}s)")
-              except snowflake.connector.errors.ProgrammingError as e:
-                  err_str = str(e)
-                  if any(x in err_str for x in ['Nothing to insert', 'already exists']):
-                      print(f"  [{i+1:02d}] SKIP {preview}")
-                  else:
-                      print(f"  [{i+1:02d}] ERR  {err_str}")
-                      errors.append(err_str)
 
           cur.close()
           conn.close()
-
-          print(f"Phase 2 SQL done. {len(errors)} errors.")
-          if errors:
-              sys.exit(1)
           PYEOF
 
       - name: Sync Phase 2 intelligence to Neon
@@ -286,7 +234,7 @@ jobs:
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          python3 ./web/src/scripts/intelligence_sync_phase2.py
+          python3 scripts/intelligence_sync_phase2.py
 
       - name: Run Phase 3 intelligence SQL
         env:
@@ -296,8 +244,6 @@ jobs:
         run: |
           python3 - << 'PYEOF'
           import os
-          import sys
-          import time
           import snowflake.connector
 
           conn = snowflake.connector.connect(
@@ -307,53 +253,26 @@ jobs:
               warehouse='F1_APP_WH',
               database='F1_BULLETIN',
               schema='MART',
-              login_timeout=30,
           )
 
-          with open('./web/src/sql/intelligence_phase3.sql', 'r', encoding='utf-8') as f:
-              full_sql = f.read()
+          with open('./sql/intelligence_phase3.sql') as f:
+              sql = f.read()
 
-          statements = []
-          for s in full_sql.split(';'):
-              lines = [l for l in s.split('\n') if not l.strip().startswith('--')]
-              stmt = '\n'.join(lines).strip()
-              if stmt:
-                  statements.append(stmt)
-
-          print(f"Running {len(statements)} Phase 3 SQL statements...")
           cur = conn.cursor()
-          errors = []
-
-          for i, stmt in enumerate(statements):
-              preview = stmt[:80].replace('\n', ' ')
-              try:
-                  t0 = time.time()
+          for stmt in sql.split(';'):
+              stmt = stmt.strip()
+              if stmt:
                   cur.execute(stmt)
-                  print(f"  [{i+1:02d}] OK  {preview}... ({cur.rowcount} rows, {time.time()-t0:.1f}s)")
-              except snowflake.connector.errors.ProgrammingError as e:
-                  err_str = str(e)
-                  if any(x in err_str for x in ['Nothing to insert', 'already exists']):
-                      print(f"  [{i+1:02d}] SKIP {preview}")
-                  else:
-                      print(f"  [{i+1:02d}] ERR  {err_str}")
-                      errors.append(err_str)
 
           cur.close()
           conn.close()
-
-          print(f"Phase 3 SQL done. {len(errors)} errors.")
-          if errors:
-              sys.exit(1)
           PYEOF
 
       - name: Sync Phase 3 intelligence to Neon
         env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          python3 ./web/src/scripts/intelligence_sync_phase3.py
+          python3 scripts/intelligence_sync_phase3.py
 
       - name: Summary
         if: always()
