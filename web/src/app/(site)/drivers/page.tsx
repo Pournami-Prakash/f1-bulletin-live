@@ -25,7 +25,7 @@ import {
   computeCorrelationMatrix,
   computeStoryArc,
   compareEntities,
-} from "@/app/(api)/api/drivers/analytics/route"
+} from "@/lib/drivers-analytics"
 
 /* ─── COLORS ──────────────────────────────────────────────────── */
 const EC: Record<string, string> = {
