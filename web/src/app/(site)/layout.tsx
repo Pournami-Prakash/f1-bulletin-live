@@ -17,11 +17,11 @@ const mono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'F1 Bulletin — Race Control Live',
-  description: 'Real-time F1 intelligence. Breaking news, Reddit pulse, FIA bulletins and driver sentiment from 6 live sources.',
+  title: 'F1 Bulletin - Live F1 News and Race Analytics',
+  description: 'Track the latest F1 headlines, race analytics, standings, schedule, and circuit insights in one live dashboard.',
   openGraph: {
-    title: 'F1 Bulletin — Race Control Live',
-    description: 'AI-powered F1 intelligence terminal. No filler. Just the numbers that matter.',
+    title: 'F1 Bulletin - Live F1 News and Race Analytics',
+    description: 'Track the latest F1 headlines, race analytics, standings, schedule, and circuit insights in one live dashboard.',
     type: 'website',
   },
 }
@@ -33,6 +33,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${bebas.variable} ${mono.variable}`}>
+      <head>
+        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏎️</text></svg>" />
+      </head>
       <body>{children}</body>
     </html>
   )
