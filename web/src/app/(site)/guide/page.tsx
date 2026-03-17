@@ -525,15 +525,9 @@ function InteractiveCar({ color = '#E8002D' }: { color?: string }) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 14, marginBottom: 32,
-    }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 32 }}>
       <div style={{ width: 32, height: 1, background: 'var(--red)' }} />
-      <span style={{
-        fontSize: 9, fontFamily: 'var(--font-mono)',
-        letterSpacing: '.24em', color: 'var(--t3)',
-        textTransform: 'uppercase',
-      }}>
+      <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '.24em', color: 'var(--t3)', textTransform: 'uppercase' }}>
         {children}
       </span>
       <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.06)' }} />
@@ -541,131 +535,71 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-function GlossaryTerm({ term, def, detail, color }: {
-  term: string; def: string; detail: string; color: string
-}) {
-  const [open, setOpen] = useState(false)
+function WeekendCalendar({ schedule }: { schedule: typeof RACE_WEEKEND }) {
   return (
-    <div
-      onClick={() => setOpen(o => !o)}
-      style={{
-        border: `1px solid ${open ? color + '35' : 'var(--b1)'}`,
-        borderRadius: 10, padding: '12px 14px',
-        background: open ? `${color}06` : 'rgba(0,0,0,.2)',
-        cursor: 'pointer', transition: 'all .18s',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-        <div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color, letterSpacing: '.1em', marginBottom: 4 }}>
-            {term}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--t2)', lineHeight: 1.6 }}>{def}</div>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${schedule.length}, 1fr)`, border: '1px solid var(--b1)', borderRadius: 12, overflow: 'hidden' }}>
+      {schedule.map((day, di) => (
+        <div key={`hdr-${di}`} style={{
+          padding: '10px 14px', background: 'rgba(255,255,255,.03)',
+          borderRight: di < schedule.length - 1 ? '1px solid var(--b1)' : 'none',
+          borderBottom: '1px solid var(--b1)',
+          display: 'flex', alignItems: 'baseline', gap: 8,
+        }}>
+          <span style={{ fontFamily: 'var(--font-bebas)', fontSize: 22, color: 'var(--t1)', letterSpacing: '.04em' }}>{day.day}</span>
+          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--t3)', letterSpacing: '.1em' }}>
+            {['DAY 1', 'DAY 2', 'DAY 3', 'DAY 4'][di] ?? ''}
+          </span>
         </div>
-        <span style={{
-          fontSize: 11, color: 'var(--t3)', flexShrink: 0, marginTop: 2,
-          transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .18s',
-        }}>›</span>
-      </div>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            style={{ overflow: 'hidden' }}
-          >
-            <div style={{
-              marginTop: 10, paddingTop: 10,
-              borderTop: `1px solid ${color}20`,
-              fontSize: 11, color: 'var(--t3)', lineHeight: 1.65, fontStyle: 'italic',
-            }}>
-              {detail}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      ))}
+      {schedule.map((day, di) => (
+        <DayColumn key={`col-${di}`} day={day} di={di} total={schedule.length} />
+      ))}
     </div>
   )
 }
 
-function RaceWeekend({ sprint = false }: { sprint?: boolean }) {
-  const [activeSession, setActiveSession] = useState<string | null>(null)
-  const schedule = sprint ? SPRINT_WEEKEND : RACE_WEEKEND
-
+function DayColumn({ day, di, total }: { day: { day: string; sessions: { name: string; type: string; desc: string }[] }; di: number; total: number }) {
+  const [activeSession, setActiveSession] = useState<number | null>(null)
   return (
-    <div style={{ display: 'grid', gap: 8 }}>
-      {schedule.map((day, di) => (
-        <div key={day.day} style={{ display: 'grid', gridTemplateColumns: '52px 1fr', gap: 12, alignItems: 'start' }}>
-          <div style={{
-            fontFamily: 'var(--font-bebas)', fontSize: 22,
-            color: 'var(--t3)', letterSpacing: '.06em',
-            paddingTop: 12, textAlign: 'center',
-          }}>
-            {day.day}
+    <div style={{ borderRight: di < total - 1 ? '1px solid var(--b1)' : 'none', padding: 10, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 160, background: 'rgba(0,0,0,.15)' }}>
+      {day.sessions.map((session, si) => {
+        const c = SESSION_COLORS[session.type] ?? '#888'
+        const isOpen = activeSession === si
+        return (
+          <div key={si} onClick={() => setActiveSession(isOpen ? null : si)} style={{ borderRadius: 8, border: `1px solid ${isOpen ? c + '50' : c + '25'}`, background: isOpen ? `${c}12` : `${c}08`, cursor: 'pointer', transition: 'all .18s' }}>
+            <div style={{ borderLeft: `3px solid ${c}`, padding: '8px 10px' }}>
+              <div style={{ fontFamily: 'var(--font-bebas)', fontSize: 13, color: c, letterSpacing: '.06em', lineHeight: 1 }}>{session.name}</div>
+              <AnimatePresence>
+                {isOpen && (
+                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }} style={{ overflow: 'hidden' }}>
+                    <div style={{ fontSize: 10, color: 'var(--t2)', lineHeight: 1.55, marginTop: 6, paddingTop: 6, borderTop: `1px solid ${c}20` }}>{session.desc}</div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
-          <div style={{ display: 'grid', gap: 6 }}>
-            {day.sessions.map((session, si) => {
-              const key = `${di}-${si}`
-              const isActive = activeSession === key
-              const c = SESSION_COLORS[session.type] ?? '#888'
-              return (
-                <motion.div
-                  key={key}
-                  onClick={() => setActiveSession(isActive ? null : key)}
-                  whileHover={{ x: 4 }}
-                  style={{
-                    borderTop: `1px solid ${isActive ? c + '60' : 'var(--b1)'}`,
-                    borderRight: `1px solid ${isActive ? c + '60' : 'var(--b1)'}`,
-                    borderBottom: `1px solid ${isActive ? c + '60' : 'var(--b1)'}`,
-                    borderLeft: `3px solid ${c}`,
-                    borderRadius: '0 10px 10px 0',
-                    padding: '12px 16px',
-                    background: isActive ? `${c}10` : 'rgba(0,0,0,.2)',
-                    cursor: 'pointer',
-                    transition: 'background .2s, border-color .2s',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{
-                      fontFamily: 'var(--font-bebas)', fontSize: 14,
-                      color: c, letterSpacing: '.06em',
-                    }}>
-                      {session.name}
-                    </span>
-                    <span style={{
-                      fontSize: 9, color: 'var(--t3)',
-                      fontFamily: 'var(--font-mono)',
-                      transform: isActive ? 'rotate(90deg)' : 'none',
-                      transition: 'transform .2s',
-                    }}>›</span>
-                  </div>
-                  <AnimatePresence>
-                    {isActive && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        style={{ overflow: 'hidden' }}
-                      >
-                        <div style={{
-                          fontSize: 11, color: 'var(--t2)',
-                          lineHeight: 1.6, marginTop: 8,
-                          paddingTop: 8, borderTop: `1px solid ${c}30`,
-                        }}>
-                          {session.desc}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-              )
-            })}
-          </div>
-        </div>
-      ))}
+        )
+      })}
+    </div>
+  )
+}
+
+function GlossaryTerm({ term, def, detail, color }: { term: string; def: string; detail: string; color: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div onClick={() => setOpen(o => !o)} style={{ borderBottom: '1px solid rgba(255,255,255,.05)', padding: '10px 0', cursor: 'pointer' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color, letterSpacing: '.08em', minWidth: 140, flexShrink: 0, fontWeight: 700 }}>{term}</span>
+        <span style={{ fontSize: 11, color: 'var(--t2)', lineHeight: 1.55, flex: 1 }}>{def}</span>
+        <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0, marginLeft: 8, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s', display: 'inline-block' }}>›</span>
+      </div>
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }} style={{ overflow: 'hidden' }}>
+            <div style={{ marginTop: 8, paddingLeft: 152, fontSize: 10, color: 'var(--t3)', lineHeight: 1.65, fontStyle: 'italic' }}>{detail}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -691,7 +625,7 @@ function ChangeCard({ change, index }: { change: typeof CHANGES_2026[0]; index: 
           padding: '18px 20px',
           cursor: 'pointer',
           transition: 'all .25s ease',
-          position: 'relative', overflow: 'hidden',
+          position: 'relative',
         }}
       >
         {/* Top accent */}
@@ -805,25 +739,24 @@ export default function GuidePage() {
       <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh' }}>
         <Header />
 
-        {/* ══════════ HERO ══════════ */}
         <div ref={heroRef} style={{ position: 'relative', overflow: 'hidden' }}>
           <motion.div
             style={{ opacity: heroOpacity, y: heroY }}
           >
             <div style={{
               maxWidth: 1100, margin: '0 auto',
-              padding: 'calc(var(--header-h) + 36px + 48px) 24px 64px',
+              padding: 'calc(var(--header-h) + 20px) 24px 48px',
+              textAlign: 'center',
             }}>
               <motion.div
                 initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6 }}
               >
-                {/* Classified stamp */}
                 <div style={{
                   display: 'inline-flex', alignItems: 'center', gap: 8,
                   border: '1px solid var(--red)',
-                  padding: '4px 12px', borderRadius: 4, marginBottom: 28,
+                  padding: '4px 12px', borderRadius: 4, marginBottom: 20,
                 }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red)' }} />
                   <span style={{
@@ -834,67 +767,43 @@ export default function GuidePage() {
                   </span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48, alignItems: 'end' }}>
-                  <div>
-                    <h1 style={{
-                      fontFamily: 'var(--font-bebas)',
-                      fontSize: 'clamp(56px, 8vw, 120px)',
-                      lineHeight: 0.88,
-                      letterSpacing: '.02em',
-                      color: 'var(--t1)',
-                      marginBottom: 0,
-                    }}>
-                      <div style={{ color: 'var(--t2)', fontSize: '0.42em', marginBottom: 6 }}>THE COMPLETE</div>
-                      F1 FIELD
-                      <div style={{ color: 'var(--red)' }}>MANUAL</div>
-                    </h1>
-                  </div>
-                  <div>
-                    <p style={{
-                      fontSize: 14, color: 'var(--t2)',
-                      lineHeight: 1.8, marginBottom: 28,
-                    }}>
-                      Everything you need to understand Formula 1 — from the basics of a race weekend to the deepest technical regulations, and what the sweeping 2026 rule changes mean for the championship.
-                    </p>
-                    {/* Jump links */}
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {[
-                        { href: '#basics', label: 'The Basics' },
-                        { href: '#weekend', label: 'Race Weekend' },
-                        { href: '#car', label: 'The Car' },
-                        { href: '#2026', label: '2026 Changes' },
-                        { href: '#glossary', label: 'Glossary' },
-                      ].map(l => (
-                        <a
-                          key={l.href}
-                          href={l.href}
-                          style={{
-                            padding: '8px 16px', borderRadius: 20,
-                            border: '1px solid var(--b1)',
-                            background: 'rgba(255,255,255,.03)',
-                            fontSize: 10, fontFamily: 'var(--font-mono)',
-                            letterSpacing: '.12em', color: 'var(--t2)',
-                            textDecoration: 'none',
-                            transition: 'all .18s ease',
-                          }}
-                          onMouseEnter={e => {
-                            const el = e.currentTarget as HTMLAnchorElement
-                            el.style.borderColor = 'var(--red)'
-                            el.style.color = 'var(--t1)'
-                            el.style.background = 'rgba(232,0,45,.06)'
-                          }}
-                          onMouseLeave={e => {
-                            const el = e.currentTarget as HTMLAnchorElement
-                            el.style.borderColor = 'var(--b1)'
-                            el.style.color = 'var(--t2)'
-                            el.style.background = 'rgba(255,255,255,.03)'
-                          }}
-                        >
-                          {l.label}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
+                <h1 style={{
+                  fontFamily: 'var(--font-bebas)',
+                  fontSize: 'clamp(40px, 7vw, 100px)',
+                  lineHeight: 0.9,
+                  letterSpacing: '.02em',
+                  margin: '0 0 20px',
+                }}>
+                  THE F1 FIELD <span style={{ color: 'var(--red)' }}>MANUAL</span>
+                </h1>
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {[
+                    { href: '#basics', label: 'The Basics', num: '01' },
+                    { href: '#weekend', label: 'Race Weekend', num: '02' },
+                    { href: '#car', label: 'The Car', num: '03' },
+                    { href: '#2026', label: '2026 Changes', num: '04' },
+                    { href: '#glossary', label: 'Glossary', num: '05' },
+                  ].map(l => (
+                    <a
+                      key={l.href}
+                      href={l.href}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 7,
+                        padding: '7px 16px', borderRadius: 6,
+                        border: '1px solid var(--b1)',
+                        background: 'rgba(255,255,255,.02)',
+                        fontSize: 10, fontFamily: 'var(--font-mono)',
+                        letterSpacing: '.1em', color: 'var(--t2)',
+                        textDecoration: 'none', transition: 'all .16s ease',
+                      }}
+                      onMouseEnter={e => { const el = e.currentTarget as HTMLAnchorElement; el.style.borderColor = 'rgba(232,0,45,.4)'; el.style.color = 'var(--t1)'; el.style.background = 'rgba(232,0,45,.05)' }}
+                      onMouseLeave={e => { const el = e.currentTarget as HTMLAnchorElement; el.style.borderColor = 'var(--b1)'; el.style.color = 'var(--t2)'; el.style.background = 'rgba(255,255,255,.02)' }}
+                    >
+                      <span style={{ color: 'var(--red)', fontSize: 8 }}>{l.num}</span>
+                      {l.label}
+                    </a>
+                  ))}
                 </div>
               </motion.div>
             </div>
@@ -969,7 +878,7 @@ export default function GuidePage() {
               padding: '40px 0',
               borderTop: '1px solid var(--b1)',
               borderBottom: '1px solid var(--b1)',
-              position: 'relative', overflow: 'hidden',
+              position: 'relative',
             }}
           >
             <div style={{
@@ -998,116 +907,56 @@ export default function GuidePage() {
           <section id="weekend">
             <SectionLabel>02 · Race Weekend Format</SectionLabel>
 
-            {/* Toggle */}
-            <div style={{
-              display: 'flex', gap: 0, marginBottom: 28,
-              border: '1px solid var(--b1)', borderRadius: 10,
-              width: 'fit-content', overflow: 'hidden',
-            }}>
-              {[
-                { key: 'standard', label: 'Standard Weekend' },
-                { key: 'sprint', label: 'Sprint Weekend' },
-              ].map(opt => (
-                <button
-                  key={opt.key}
-                  onClick={() => setWeekendType(opt.key as any)}
-                  style={{
-                    padding: '9px 20px',
-                    background: weekendType === opt.key ? 'rgba(255,255,255,.06)' : 'transparent',
-                    border: 'none',
-                    borderRight: opt.key === 'standard' ? '1px solid var(--b1)' : 'none',
-                    color: weekendType === opt.key ? 'var(--t1)' : 'var(--t3)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 9, letterSpacing: '.14em',
-                    cursor: 'pointer',
-                    transition: 'all .18s',
-                  }}
-                >
-                  {opt.label.toUpperCase()}
-                </button>
+            <div style={{ display: 'flex', gap: 0, marginBottom: 24, border: '1px solid var(--b1)', borderRadius: 8, width: 'fit-content', overflow: 'hidden' }}>
+              {[{ key: 'standard', label: 'Standard Weekend' }, { key: 'sprint', label: 'Sprint Weekend' }].map(opt => (
+                <button key={opt.key} onClick={() => setWeekendType(opt.key as any)} style={{
+                  padding: '8px 20px', background: weekendType === opt.key ? 'rgba(232,0,45,.12)' : 'transparent',
+                  border: 'none', borderRight: opt.key === 'standard' ? '1px solid var(--b1)' : 'none',
+                  color: weekendType === opt.key ? 'var(--red)' : 'var(--t3)',
+                  fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.14em', cursor: 'pointer', transition: 'all .18s',
+                }}>{opt.label.toUpperCase()}</button>
               ))}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={weekendType}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 10 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <RaceWeekend sprint={weekendType === 'sprint'} />
-                </motion.div>
-              </AnimatePresence>
+            <AnimatePresence mode="wait">
+              <motion.div key={weekendType} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                <WeekendCalendar schedule={weekendType === 'sprint' ? SPRINT_WEEKEND : RACE_WEEKEND} />
+              </motion.div>
+            </AnimatePresence>
 
-              {/* Legend + context */}
-              <div style={{ display: 'grid', gap: 14 }}>
-                <div style={{
-                  border: '1px solid var(--b1)', borderRadius: 14,
-                  padding: '18px', background: 'rgba(0,0,0,.2)',
-                }}>
-                  <div style={{ fontSize: 8, letterSpacing: '.18em', color: 'var(--t3)', marginBottom: 12 }}>
-                    SESSION TYPES
-                  </div>
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    {[
-                      { type: 'practice', label: 'Practice', desc: 'Data gathering, setup work' },
-                      { type: 'qualifying', label: 'Qualifying', desc: 'Sets the grid order' },
-                      { type: 'sprint', label: 'Sprint', desc: '100km points race (sprint weekends only)' },
-                      { type: 'race', label: 'Race', desc: '305km+ championship points' },
-                    ].map(s => (
-                      <div key={s.type} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{
-                          width: 3, height: 28, borderRadius: 2,
-                          background: SESSION_COLORS[s.type],
-                          flexShrink: 0,
-                        }} />
-                        <div>
-                          <div style={{
-                            fontFamily: 'var(--font-bebas)', fontSize: 12,
-                            color: SESSION_COLORS[s.type], letterSpacing: '.06em',
-                          }}>
-                            {s.label.toUpperCase()}
-                          </div>
-                          <div style={{ fontSize: 10, color: 'var(--t3)' }}>{s.desc}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{
-                  border: '1px solid rgba(245,158,11,.25)', borderRadius: 14,
-                  padding: '16px 18px', background: 'rgba(245,158,11,.04)',
-                }}>
-                  <div style={{ fontSize: 8, letterSpacing: '.16em', color: '#F59E0B', marginBottom: 8 }}>
-                    QUALIFYING FORMAT
-                  </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 20 }}>
+              <div style={{ border: '1px solid var(--b1)', borderRadius: 12, padding: '16px 18px', background: 'rgba(0,0,0,.2)' }}>
+                <div style={{ fontSize: 8, letterSpacing: '.18em', color: 'var(--t3)', marginBottom: 12 }}>SESSION TYPES</div>
+                <div style={{ display: 'grid', gap: 8 }}>
                   {[
-                    { phase: 'Q1', dur: '18 min', cut: 'P16–P20 eliminated (5 cars)' },
-                    { phase: 'Q2', dur: '15 min', cut: 'P11–P15 eliminated (5 cars)' },
-                    { phase: 'Q3', dur: '12 min', cut: 'Top 10 fight for pole' },
-                  ].map((q, i) => (
-                    <div key={q.phase} style={{
-                      display: 'grid', gridTemplateColumns: '36px 52px 1fr',
-                      gap: 8, alignItems: 'center',
-                      padding: '6px 0',
-                      borderBottom: i < 2 ? '1px solid rgba(255,255,255,.06)' : 'none',
-                    }}>
-                      <span style={{
-                        fontFamily: 'var(--font-bebas)', fontSize: 13,
-                        color: '#F59E0B',
-                      }}>
-                        {q.phase}
-                      </span>
-                      <span style={{ fontSize: 9, color: 'var(--t3)', fontFamily: 'var(--font-mono)' }}>
-                        {q.dur}
-                      </span>
-                      <span style={{ fontSize: 10, color: 'var(--t2)' }}>{q.cut}</span>
+                    { type: 'practice', label: 'Practice', desc: 'Data gathering, setup work' },
+                    { type: 'qualifying', label: 'Qualifying', desc: 'Sets the grid order' },
+                    { type: 'sprint', label: 'Sprint', desc: '100km points race (sprint weekends only)' },
+                    { type: 'race', label: 'Race', desc: '305km+ championship points' },
+                  ].map(s => (
+                    <div key={s.type} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 3, height: 28, borderRadius: 2, background: SESSION_COLORS[s.type], flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-bebas)', fontSize: 12, color: SESSION_COLORS[s.type], letterSpacing: '.06em' }}>{s.label.toUpperCase()}</div>
+                        <div style={{ fontSize: 10, color: 'var(--t3)' }}>{s.desc}</div>
+                      </div>
                     </div>
                   ))}
                 </div>
+              </div>
+              <div style={{ border: '1px solid rgba(245,158,11,.25)', borderRadius: 12, padding: '16px 18px', background: 'rgba(245,158,11,.04)' }}>
+                <div style={{ fontSize: 8, letterSpacing: '.16em', color: '#F59E0B', marginBottom: 12 }}>QUALIFYING FORMAT</div>
+                {[
+                  { phase: 'Q1', dur: '18 min', cut: 'P16–P20 eliminated (5 cars)' },
+                  { phase: 'Q2', dur: '15 min', cut: 'P11–P15 eliminated (5 cars)' },
+                  { phase: 'Q3', dur: '12 min', cut: 'Top 10 fight for pole' },
+                ].map((q, i) => (
+                  <div key={q.phase} style={{ display: 'grid', gridTemplateColumns: '36px 52px 1fr', gap: 8, alignItems: 'center', padding: '8px 0', borderBottom: i < 2 ? '1px solid rgba(255,255,255,.06)' : 'none' }}>
+                    <span style={{ fontFamily: 'var(--font-bebas)', fontSize: 14, color: '#F59E0B' }}>{q.phase}</span>
+                    <span style={{ fontSize: 9, color: 'var(--t3)', fontFamily: 'var(--font-mono)' }}>{q.dur}</span>
+                    <span style={{ fontSize: 10, color: 'var(--t2)' }}>{q.cut}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </section>
@@ -1117,7 +966,7 @@ export default function GuidePage() {
             <SectionLabel>03 · Anatomy of an F1 Car</SectionLabel>
             <p style={{
               fontSize: 13, color: 'var(--t2)', lineHeight: 1.7,
-              maxWidth: 640, marginBottom: 28,
+              marginBottom: 28,
             }}>
               Every component on an F1 car is governed by the FIA Technical Regulations — a 400+ page document defining permitted dimensions, materials, and constructions. Hover the zones below to explore what the rules say about each part.
             </p>
@@ -1210,7 +1059,7 @@ export default function GuidePage() {
                 }}>
                   2026 IS THE BIGGEST TECHNICAL RESET SINCE 2022
                 </div>
-                <p style={{ fontSize: 12, color: 'var(--t2)', lineHeight: 1.7, margin: 0, maxWidth: 760 }}>
+                <p style={{ fontSize: 12, color: 'var(--t2)', lineHeight: 1.7, margin: 0 }}>
                   The 2022 regulations introduced ground-effect aerodynamics to improve racing. 2026 goes further — new power units, active aerodynamics, lighter cars, and a new manufacturer. It's the most comprehensive regulation change in a decade, designed to close the performance gap between teams and reduce costs simultaneously.
                 </p>
               </motion.div>
@@ -1227,85 +1076,37 @@ export default function GuidePage() {
           <section id="glossary">
             <SectionLabel>05 · Glossary</SectionLabel>
 
-            <div style={{ position: 'relative', marginBottom: 28 }}>
-              <input
-                type="text"
-                value={glossarySearch}
-                onChange={e => setGlossarySearch(e.target.value)}
-                placeholder="Search 30+ terms..."
-                style={{
-                  width: '100%', padding: '12px 16px 12px 40px',
-                  background: 'rgba(0,0,0,.3)',
-                  border: '1px solid var(--b1)', borderRadius: 10,
-                  color: 'var(--t1)', fontFamily: 'var(--font-mono)',
-                  fontSize: 11, outline: 'none',
-                  boxSizing: 'border-box',
-                }}
+            <div style={{ position: 'relative', marginBottom: 24 }}>
+              <input type="text" value={glossarySearch} onChange={e => setGlossarySearch(e.target.value)} placeholder="Search terms..."
+                style={{ width: '100%', padding: '11px 16px 11px 38px', background: 'rgba(0,0,0,.3)', border: '1px solid var(--b1)', borderRadius: 8, color: 'var(--t1)', fontFamily: 'var(--font-mono)', fontSize: 11, outline: 'none', boxSizing: 'border-box' }}
               />
-              <span style={{
-                position: 'absolute', left: 14, top: '50%',
-                transform: 'translateY(-50%)',
-                fontSize: 14, opacity: 0.4,
-              }}>
-                🔍
-              </span>
+              <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 13, opacity: 0.35 }}>🔍</span>
             </div>
 
             {glossarySearch ? (
-              // Flat search results
-              <div style={{ display: 'grid', gap: 8 }}>
+              <div style={{ display: 'grid', gap: 2 }}>
                 {GLOSSARY_CATEGORIES.flatMap(cat =>
-                  cat.terms.filter(t =>
-                    t.term.toLowerCase().includes(glossarySearch.toLowerCase()) ||
-                    t.def.toLowerCase().includes(glossarySearch.toLowerCase())
-                  ).map(t => ({ ...t, catColor: cat.color, category: cat.category }))
-                ).map((item, i) => (
+                  cat.terms.filter(t => t.term.toLowerCase().includes(glossarySearch.toLowerCase()) || t.def.toLowerCase().includes(glossarySearch.toLowerCase()))
+                    .map(t => ({ ...t, catColor: cat.color }))
+                ).map(item => (
                   <GlossaryTerm key={item.term} term={item.term} def={item.def} detail={item.detail} color={item.catColor} />
                 ))}
-                {GLOSSARY_CATEGORIES.flatMap(c => c.terms).filter(t =>
-                  t.term.toLowerCase().includes(glossarySearch.toLowerCase()) ||
-                  t.def.toLowerCase().includes(glossarySearch.toLowerCase())
-                ).length === 0 && (
-                  <div style={{
-                    textAlign: 'center', padding: '32px',
-                    color: 'var(--t3)', fontSize: 12, fontFamily: 'var(--font-mono)',
-                  }}>
-                    No terms matching "{glossarySearch}"
-                  </div>
+                {GLOSSARY_CATEGORIES.flatMap(c => c.terms).filter(t => t.term.toLowerCase().includes(glossarySearch.toLowerCase()) || t.def.toLowerCase().includes(glossarySearch.toLowerCase())).length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '32px', color: 'var(--t3)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>No terms matching "{glossarySearch}"</div>
                 )}
               </div>
             ) : (
-              // Categorized view
-              <div style={{ display: 'grid', gap: 24 }}>
+              <div style={{ display: 'grid', gap: 32 }}>
                 {GLOSSARY_CATEGORIES.map(cat => (
                   <div key={cat.category}>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      marginBottom: 14,
-                    }}>
-                      <div style={{
-                        width: 3, height: 16, borderRadius: 2,
-                        background: cat.color, flexShrink: 0,
-                      }} />
-                      <span style={{
-                        fontFamily: 'var(--font-mono)', fontSize: 9,
-                        letterSpacing: '.18em', color: cat.color,
-                      }}>
-                        {cat.category.toUpperCase()}
-                      </span>
-                      <span style={{ fontSize: 9, color: 'var(--t3)', fontFamily: 'var(--font-mono)' }}>
-                        · {cat.terms.length} terms
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, paddingBottom: 10, borderBottom: `1px solid ${cat.color}30` }}>
+                      <div style={{ width: 28, height: 2, background: cat.color, borderRadius: 2 }} />
+                      <span style={{ fontFamily: 'var(--font-bebas)', fontSize: 18, color: cat.color, letterSpacing: '.06em' }}>{cat.category.toUpperCase()}</span>
+                      <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--t3)', letterSpacing: '.1em' }}>{cat.terms.length} TERMS</span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div style={{ display: 'grid', gap: 1 }}>
                       {cat.terms.map(t => (
-                        <GlossaryTerm
-                          key={t.term}
-                          term={t.term}
-                          def={t.def}
-                          detail={t.detail}
-                          color={cat.color}
-                        />
+                        <GlossaryTerm key={t.term} term={t.term} def={t.def} detail={t.detail} color={cat.color} />
                       ))}
                     </div>
                   </div>

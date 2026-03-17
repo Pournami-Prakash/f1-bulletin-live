@@ -5,6 +5,8 @@
     "gap_to_pole_sec",
     "rolling_avg_finish",
     "rolling_dnf_rate",
+    "rolling_points_last3",
+    "sprint_points_last3",
     "team_strength",
     "pu_strength_adjusted",
     "circuit_affinity",
@@ -17,7 +19,9 @@
     "had_rain",
     "pit_lane_delta_sec",
     "pit_crew_speed",
-    "lap1_risk"
+    "lap1_risk",
+    "q1_to_q3_ms",
+    "q2_to_q3_ms"
   ],
   "target": "finish_position",
   "train_seasons": [
@@ -36,6 +40,7 @@
   "test_rows": 44,
   "reg_break_discount": 0.4,
   "elo_k_factor": 40,
+  "sprint_elo_k_scale": 0.17,
   "season_weights": {
     "2021": 0.2,
     "2022": 0.5,
@@ -43,5 +48,6 @@
     "2024": 0.85,
     "2025": 0.9,
     "2026": 1.0
-  }
+  },
+  "sprint_races_found": 1
 }

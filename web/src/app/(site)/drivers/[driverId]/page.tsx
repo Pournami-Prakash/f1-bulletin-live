@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/Header'
-import Ticker from '@/components/Ticker'
 import Footer from '@/components/Footer'
 import BgCanvas from '@/components/BgCanvas'
 
@@ -1339,12 +1338,11 @@ export default function DriverProfilePage() {
 
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'relative', zIndex: 1 }}>
         <Header />
-        <Ticker />
 
         <main style={{
           width: '100%', maxWidth: 1200,
           margin: '0 auto',
-          padding: 'calc(var(--header-h) + 36px + 36px) 24px 80px',
+          padding: 'calc(var(--header-h) + 36px) 24px 80px',
           display: 'grid', gap: 28,
         }}>
 
@@ -1896,6 +1894,19 @@ export default function DriverProfilePage() {
           )}
 
         </main>
+        {/* F1 Attribution */}
+        <div style={{
+        borderTop: '1px solid var(--b1)',
+        padding: '16px 24px',
+        maxWidth: 1100, margin: '0 auto',
+        display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
+        }}>
+        <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', letterSpacing: '.1em', color: 'var(--t3)', lineHeight: 1.6 }}>
+            Driver images © Formula 1. Formula 1, F1 and related marks are trademarks of Formula One Licensing BV.
+            Used for portfolio demonstration purposes only. Not affiliated with or endorsed by Formula 1.
+            Race data via <a href="https://jolpi.ca" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--t2)', textDecoration: 'none' }}>Jolpica F1 API</a>.
+        </span>
+        </div>
         <Footer />
       </div>
     </>

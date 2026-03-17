@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { neon } from '@neondatabase/serverless'
 
 const sql = neon(process.env.NEON_DATABASE_URL!)
+
 const RACES_PER_SEASON = 24
 
 export type DriverPrediction = {
@@ -88,7 +89,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Provide ?season=&round= or ?latest=1' }, { status: 400 })
     }
 
-    // ── Fetch predictions (unchanged from original) ────────────────────────────
+    // ── Fetch predictions ──────────────────────────────────────────────────────
     const predictions = await sql`
       SELECT p.driver_code, p.team,
              p.predicted_position, p.win_probability, p.podium_probability,
@@ -119,17 +120,28 @@ export async function GET(request: Request) {
       LIMIT 1
     `
 
-    // ── Championship projection (new) ──────────────────────────────────────────
+    // ── Championship projection ────────────────────────────────────────────────
+    // Include both race (R) and sprint (S) points.
+    // If sprint results aren't ingested yet, IN ('R','S') still works —
+    // it just sums whatever exists and picks up sprint points automatically
+    // once they're loaded.
     const standings = await sql`
       SELECT r.driver_code, r.team, SUM(r.points)::numeric AS actual_points
-      FROM results r JOIN sessions s ON s.id = r.session_id
-      WHERE s.season = ${targetSeason} AND s.session_type = 'R'
-      GROUP BY r.driver_code, r.team ORDER BY actual_points DESC
+      FROM results r
+      JOIN sessions s ON s.id = r.session_id
+      WHERE s.season = ${targetSeason}
+        AND s.session_type IN ('R', 'S')
+      GROUP BY r.driver_code, r.team
+      ORDER BY actual_points DESC
     `
+
+    // nDone = number of race rounds completed (not sprint sessions —
+    // we don't want to double-count rounds that have both R and S)
     const nDoneRow = await sql`
       SELECT COUNT(DISTINCT round)::int AS n FROM sessions
       WHERE season = ${targetSeason} AND session_type = 'R' AND date <= NOW()
     `
+
     const nDone      = nDoneRow[0]?.n ?? 0
     const nRemaining = Math.max(0, RACES_PER_SEASON - nDone)
 

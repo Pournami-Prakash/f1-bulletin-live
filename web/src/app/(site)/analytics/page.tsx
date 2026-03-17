@@ -44,6 +44,41 @@ function msToTime(ms: number | null): string {
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).toUpperCase()
 }
+// ── DNF helper ────────────────────────────────────────────────────────────────
+// Handles both raw FastF1 strings (+1 Lap, Engine, Accident...)
+// AND ETL-normalised strings your DB may store (Lapped, Retired, etc.)
+const CLASSIFIED_STATUSES = new Set([
+  'Finished', 'Lapped',           // ETL-normalised
+  '+1 Lap', '+2 Laps', '+3 Laps', // raw FastF1 lapped
+  '+4 Laps', '+5 Laps', '+6 Laps',
+])
+function isDnfStatus(status: string): boolean {
+  if (!status) return false
+  if (CLASSIFIED_STATUSES.has(status)) return false
+  if (/^\+\d/.test(status)) return false   // any lapped variant
+  if (status === 'Did Not Start') return false // DNS shown separately
+  return true
+}
+function getStatusLabel(status: string): string {
+  if (!status) return 'UNKNOWN'
+  if (CLASSIFIED_STATUSES.has(status) || /^\+\d/.test(status)) return 'FINISHED'
+  if (status === 'Did Not Start') return 'DNS'
+  if (status === 'Disqualified')  return 'DSQ'
+  return 'DNF'
+}
+// Human-readable retirement reason for the sub-label
+function dnfReason(status: string): string {
+  const map: Record<string, string> = {
+    'Retired': 'RETIRED', 'Accident': 'ACCIDENT', 'Collision': 'COLLISION',
+    'Engine': 'ENGINE', 'Gearbox': 'GEARBOX', 'Hydraulics': 'HYDRAULICS',
+    'Brakes': 'BRAKES', 'Electrical': 'ELECTRICAL', 'Suspension': 'SUSPENSION',
+    'Transmission': 'TRANSMISSION', 'Power Unit': 'POWER UNIT',
+    'Turbocharger': 'TURBO', 'Overheating': 'OVERHEATING',
+    'Mechanical': 'MECHANICAL', 'Spun off': 'SPUN OFF',
+    'Collision damage': 'COLLISION', 'Did Not Finish': 'DNF',
+  }
+  return map[status] ?? status.toUpperCase().slice(0, 12)
+}
 // ── Micro atoms ────────────────────────────────────────────────────────────────
 const mono = 'var(--font-mono)'
 const bebas = 'var(--font-bebas)'
@@ -141,10 +176,14 @@ function Overview({ data }: { data: RaceData }) {
     const g = r.grid_position ?? 0, f = r.finish_position ?? 0
     return (!g || !f) ? null : g - f
   }
-  const winner      = results[0]
+  const winner      = results.find(r => r.finish_position === 1) ?? results[0]
   const flDriver    = fastestLap?.driver_code
-  const finishers   = results.filter(r => r.status === 'Finished').length
-  const dnfs        = results.length - finishers
+  // Use the shared helpers for consistent DNF counting
+  const statusCounts = results.reduce((acc, r) => {
+    const label = getStatusLabel(r.status)
+    acc[label] = (acc[label] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
   const winnerColor = dc(winner?.driver_code ?? '', results, 0)
   const visible     = showAll ? results : results.slice(0, 10)
   function flowColor(grid: number, finish: number): string {
@@ -163,7 +202,8 @@ function Overview({ data }: { data: RaceData }) {
     if (!svg) return
     while (svg.firstChild) svg.removeChild(svg.firstChild)
     const W = 720, H = 340, FL = 68, FR = W - 68, TP = 20, BP = 12
-    const N  = results.length
+    const validResults = results.filter(r => (r.grid_position ?? 0) > 0 && (r.finish_position ?? 0) > 0)
+    const N  = validResults.length || results.length
     const RH = (H - TP - BP) / N
     const NH = Math.max(RH * 0.52, 7)
     const ep = Math.min(progress, 1) < 0.5
@@ -307,10 +347,16 @@ function Overview({ data }: { data: RaceData }) {
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-                {[
-                  { label: `${finishers} FINISH`, sub: `${dnfs} DNF`, color: '#4ADE80' },
-                  { label: flDriver ?? '—', sub: `FL ${msToTime(fastestLap?.fastest_lap_ms ?? null)}`, color: '#A78BFA' },
-                ].map(k => (
+                {[{
+                  label: `${statusCounts['FINISHED'] ?? 0} FINISHED`,
+                  sub: `DNF ${statusCounts['DNF'] ?? 0} · DNS ${statusCounts['DNS'] ?? 0}${statusCounts['DSQ'] ? ` · DSQ ${statusCounts['DSQ']}` : ''}`,
+                  color: '#4ADE80'
+                },
+                {
+                  label: flDriver ?? '—',
+                  sub: `FL ${msToTime(fastestLap?.fastest_lap_ms ?? null)}`,
+                  color: '#A78BFA'
+                }].map(k => (
                   <div key={k.label} style={{ padding: '3px 10px', borderRadius: 3, border: `1px solid ${k.color}30`, background: `${k.color}0a` }}>
                     <span style={{ fontSize: 9, color: k.color, fontFamily: mono, letterSpacing: '.08em' }}>{k.label}</span>
                     <span style={{ fontSize: 8, color: 'rgba(255,255,255,.3)', fontFamily: mono, marginLeft: 6 }}>{k.sub}</span>
@@ -358,7 +404,12 @@ function Overview({ data }: { data: RaceData }) {
           {[
             { label: 'RACE WINNER',   value: winner?.driver_code ?? '—',      sub: winner?.team ?? '',                          color: winnerColor },
             { label: 'FASTEST LAP',   value: flDriver ?? '—',                  sub: msToTime(fastestLap?.fastest_lap_ms ?? null), color: '#A78BFA'  },
-            { label: 'FINISHERS',     value: String(finishers),                sub: `${dnfs} DNF`,                               color: '#4ADE80'  },
+            {
+              label: 'RACE STATUS',
+              value: `${statusCounts['FINISHED'] ?? 0}`,
+              sub: `DNF ${statusCounts['DNF'] ?? 0} · DNS ${statusCounts['DNS'] ?? 0}${statusCounts['DSQ'] ? ` · DSQ ${statusCounts['DSQ']}` : ''}`,
+              color: '#4ADE80'
+            },
             { label: 'POINTS LEADER', value: results[0]?.driver_code ?? '—',  sub: `${results[0]?.points ?? 0} pts`,            color: '#F59E0B'  },
           ].map(k => (
             <div key={k.label} style={{ padding: '12px 16px', background: 'rgba(0,0,0,.3)', borderBottom: `2px solid ${k.color}30` }}>
@@ -378,7 +429,8 @@ function Overview({ data }: { data: RaceData }) {
             const color    = dc(r.driver_code, results, i)
             const pos      = r.finish_position ?? i + 1
             const isTop3   = pos <= 3
-            const isDnf    = r.status !== 'Finished'
+            // Fixed: lapped cars are NOT DNFs
+            const isDnf    = isDnfStatus(r.status)
             const isFl     = flDriver === r.driver_code
             const d        = getDelta(r)
             const si       = stintMap[r.driver_code]
@@ -405,9 +457,16 @@ function Overview({ data }: { data: RaceData }) {
                   </span>
                 </div>
                 <span style={{ fontSize: 9, color: 'rgba(255,255,255,.3)', fontFamily: mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team}</span>
-                <span style={{ fontSize: 10, color: r.points > 0 ? '#F59E0B' : 'rgba(255,255,255,.18)', fontFamily: mono }}>
-                  {r.points > 0 ? r.points : isDnf ? '—' : '—'}
-                </span>
+                <div>
+                  <span style={{ fontSize: 10, color: r.points > 0 ? '#F59E0B' : isDnf ? '#E10600' : 'rgba(255,255,255,.18)', fontFamily: mono }}>
+                    {r.points > 0 ? r.points : isDnf ? 'DNF' : '—'}
+                  </span>
+                  {isDnf && r.status && (
+                    <div style={{ fontSize: 7, color: 'rgba(255,255,255,.28)', fontFamily: mono, marginTop: 1 }} title={r.status}>
+                      {dnfReason(r.status)}
+                    </div>
+                  )}
+                </div>
                 <div>
                   {si?.finalCompound ? (
                     <div style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:16, height:16, borderRadius:'50%', background: COMPOUND[si.finalCompound] ?? '#333', border: si.finalCompound === 'HARD' ? '1px solid rgba(255,255,255,.3)' : 'none' }}>
@@ -793,13 +852,10 @@ function TabSectors({ data, drivers }: { data: RaceData; drivers: string[] }) {
     </div>
   )
 }
-// ── Replay tab ────────────────────────────────────────────────────────────────
-// Data: 32 frames/lap/driver = position sampled by time (not distance)
-// All drivers are close together at any frame — the "replay" shows relative gaps
-// So we show: track outline + relative positions + lap-by-lap events sidebar
+// ── Replay tab ─────────────────────────────────────────────────────────────────
 function TabReplay({ sessionId, results }: { sessionId: number; results: Result[] }) {
   type FramePt = { driver: string; x: number; y: number }
-  type FrameMap = Map<number, Map<number, FramePt[]>>  // lap → frame → drivers
+  type FrameMap = Map<number, Map<number, FramePt[]>>
 
   const [frameMap, setFrameMap]   = useState<FrameMap>(new Map())
   const [trackPts, setTrackPts]   = useState<{x:number;y:number}[]>([])
@@ -813,7 +869,6 @@ function TabReplay({ sessionId, results }: { sessionId: number; results: Result[
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed]     = useState(1)
   const [selectedDriver, setSelectedDriver] = useState<string|null>(null)
-  // Lap events derived from laps data
   const [lapEvents, setLapEvents] = useState<{lap:number; events:string[]}[]>([])
 
   const rafRef  = useRef<number>(0)
@@ -824,7 +879,6 @@ function TabReplay({ sessionId, results }: { sessionId: number; results: Result[
   const FRAMES_PER_LAP = 64
   const MS_PER_TICK = 180
 
-  // Pre-seed colors
   useEffect(() => {
     const cols: Record<string,string> = {}
     const list: string[] = []
@@ -845,7 +899,6 @@ function TabReplay({ sessionId, results }: { sessionId: number; results: Result[
         const b  = { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) }
         setBounds(b)
         if (data.outline?.length) setTrackPts(data.outline)
-        // Build frameMap
         const map: FrameMap = new Map()
         for (const r of data.frames) {
           const l = r.lap_number, f = r.frame
@@ -871,13 +924,9 @@ function TabReplay({ sessionId, results }: { sessionId: number; results: Result[
       }).catch(() => setLoaded(true))
   }, [sessionId])
 
-  // Derive lap events from results/laps data (positions changes, key moments)
   useEffect(() => {
     if (!results.length) return
     const events: {lap:number; events:string[]}[] = []
-    // Pit stops approximated from stints — not available here, so use position changes
-    // We'll generate events from result data for key laps
-    const dnfs = results.filter(r => r.status !== 'Finished')
     for (let l = 1; l <= totalLaps; l++) {
       const evs: string[] = []
       if (l === 1) evs.push(`Race start — ${results[0]?.driver_code} leads from P${results[0]?.grid_position}`)
@@ -890,14 +939,12 @@ function TabReplay({ sessionId, results }: { sessionId: number; results: Result[
     setLapEvents(events)
   }, [results, totalLaps])
 
-  // Auto-scroll events sidebar to current lap
   useEffect(() => {
     if (!eventsRef.current) return
     const el = eventsRef.current.querySelector(`[data-lap="${lap}"]`) as HTMLElement
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [lap])
 
-  // Playback
   const advance = useCallback(() => {
     setFrame(f => {
       const nf = f + 1
@@ -948,8 +995,6 @@ function TabReplay({ sessionId, results }: { sessionId: number; results: Result[
     : ''
   const selResult = selectedDriver ? results.find(r=>r.driver_code===selectedDriver) : null
   const selColor  = selectedDriver ? (driverColors[selectedDriver]??'#888') : '#888'
-
-  // Build position order for current frame (by x position as proxy — or use results order)
   const posOrder = [...current].sort((a,b) => {
     const ra = results.findIndex(r=>r.driver_code===a.driver)
     const rb = results.findIndex(r=>r.driver_code===b.driver)
@@ -957,197 +1002,141 @@ function TabReplay({ sessionId, results }: { sessionId: number; results: Result[
   })
 
   return (
-    <div style={{ display:'grid', gap:0 }}>
-      {/* Header */}
-      <div style={{ padding:'10px 18px 8px', display:'flex', alignItems:'center', gap:12 }}>
-        <div style={{ fontFamily:bebas, fontSize:16, letterSpacing:'.06em', color:'rgba(255,255,255,.7)' }}>CIRCUIT REPLAY</div>
-        <div style={{ fontSize:8, color:'rgba(255,255,255,.2)', fontFamily:mono }}>
-          {totalLaps} LAPS · {driverList.length} DRIVERS
-        </div>
+    <div>
+      <div style={{ padding:'10px 16px', display:'flex', alignItems:'center', gap:10, borderBottom:'1px solid rgba(255,255,255,.06)' }}>
+        <div style={{ width:3, height:14, background:'#E10600', borderRadius:2 }} />
+        <span style={{ fontFamily:bebas, fontSize:16, letterSpacing:'.06em', color:'rgba(255,255,255,.85)' }}>CIRCUIT REPLAY</span>
+        <span style={{ fontSize:8, color:'rgba(255,255,255,.2)', fontFamily:mono }}>{totalLaps} LAPS · {driverList.length} DRIVERS</span>
         <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
-          {[['SPACE','play'],['← →','frame'],['↑ ↓','speed'],['R','restart']].map(([k,v])=>(
+          {[['SPACE','play'],['←→','step'],['↑↓','speed'],['R','reset']].map(([k,v])=>(
             <div key={k} style={{display:'flex',alignItems:'center',gap:3}}>
-              <span style={{fontSize:7,fontFamily:mono,color:'rgba(255,255,255,.45)',background:'rgba(255,255,255,.07)',padding:'1px 4px',borderRadius:2,border:'1px solid rgba(255,255,255,.1)'}}>{k}</span>
-              <span style={{fontSize:7,color:'rgba(255,255,255,.2)',fontFamily:mono}}>{v}</span>
+              <kbd style={{fontSize:7,fontFamily:mono,color:'rgba(255,255,255,.5)',background:'rgba(255,255,255,.06)',padding:'1px 5px',borderRadius:3,border:'1px solid rgba(255,255,255,.1)'}}>{k}</kbd>
+              <span style={{fontSize:7,color:'rgba(255,255,255,.18)',fontFamily:mono}}>{v}</span>
             </div>
           ))}
         </div>
       </div>
-      <Rule />
-
-      {/* Three-column layout: track | live order | race log */}
-      <div style={{ display:'grid', gridTemplateColumns:'420px 140px 1fr', minHeight:440 }}>
-
-        {/* ── Track canvas ── */}
-        <div style={{ padding:'12px 8px 12px 18px', borderRight:'1px solid rgba(255,255,255,.05)' }}>
-          <div style={{ border:'1px solid rgba(255,255,255,.07)', borderRadius:6, overflow:'hidden', background:'#020202', position:'relative', aspectRatio:'1/1' }}>
-            {/* LAP HUD */}
-            <div style={{ position:'absolute', top:8, left:8, zIndex:2, background:'rgba(0,0,0,.8)', border:'1px solid rgba(255,255,255,.1)', borderRadius:4, padding:'4px 8px' }}>
-              <div style={{ fontSize:7, color:'rgba(255,255,255,.3)', fontFamily:mono, letterSpacing:'.1em' }}>LAP</div>
-              <div style={{ fontFamily:bebas, fontSize:20, color:'#fff', lineHeight:1 }}>{lap}<span style={{fontSize:10,color:'rgba(255,255,255,.25)',marginLeft:3}}>/ {totalLaps}</span></div>
-              <div style={{ fontSize:7, color:'rgba(255,255,255,.2)', fontFamily:mono }}>{lapPct}%</div>
+      <div style={{ display:'grid', gridTemplateColumns:'minmax(0,1.4fr) minmax(0,1fr)', minHeight:560 }}>
+        <div style={{ padding:'16px', borderRight:'1px solid rgba(255,255,255,.06)', display:'flex', flexDirection:'column', gap:10 }}>
+          <div style={{ position:'relative', background:'#050708', border:'1px solid rgba(255,255,255,.07)', borderRadius:8, overflow:'hidden', width:'100%', aspectRatio:'1/1', maxHeight:'55vh' }}>
+            <div style={{ position:'absolute', top:10, left:10, zIndex:2, background:'rgba(0,0,0,.82)', border:'1px solid rgba(255,255,255,.09)', borderRadius:5, padding:'5px 10px', lineHeight:1 }}>
+              <div style={{ fontSize:6, color:'rgba(255,255,255,.3)', fontFamily:mono, letterSpacing:'.1em' }}>LAP</div>
+              <div style={{ fontFamily:bebas, fontSize:26, color:'#fff', lineHeight:1.05 }}>
+                {lap}<span style={{fontSize:11,color:'rgba(255,255,255,.28)',marginLeft:3}}>/{totalLaps}</span>
+              </div>
+              <div style={{ height:2, background:'rgba(255,255,255,.06)', borderRadius:1, marginTop:4, overflow:'hidden' }}>
+                <div style={{ height:'100%', width:`${racePct}%`, background:'#E10600', borderRadius:1, transition:'width .08s' }} />
+              </div>
+              <div style={{ fontSize:6, color:'rgba(255,255,255,.2)', fontFamily:mono, marginTop:2 }}>{racePct}% RACE</div>
             </div>
-            {/* Speed badge */}
             {speed !== 1 && (
-              <div style={{ position:'absolute', top:8, right:8, zIndex:2, background:'rgba(245,158,11,.15)', border:'1px solid rgba(245,158,11,.3)', borderRadius:3, padding:'2px 6px' }}>
-                <span style={{ fontSize:8, color:'#F59E0B', fontFamily:mono }}>{speed}×</span>
+              <div style={{ position:'absolute', top:10, right:10, zIndex:2, background:'rgba(245,158,11,.12)', border:'1px solid rgba(245,158,11,.25)', borderRadius:3, padding:'2px 7px' }}>
+                <span style={{ fontSize:9, color:'#F59E0B', fontFamily:mono }}>{speed}×</span>
+              </div>
+            )}
+            {selectedDriver && selResult && (
+              <div style={{ position:'absolute', bottom:10, left:10, zIndex:2, background:'rgba(0,0,0,.82)', border:`1px solid ${selColor}28`, borderRadius:4, padding:'5px 9px' }}>
+                <div style={{ fontFamily:bebas, fontSize:14, color:selColor, letterSpacing:'.06em', lineHeight:1 }}>{selectedDriver}</div>
+                <div style={{ fontSize:6, color:'rgba(255,255,255,.28)', fontFamily:mono, marginTop:2 }}>
+                  {isDnfStatus(selResult.status) ? 'DNF' : `P${selResult.finish_position} · ${selResult.points > 0 ? selResult.points+'pts' : '—'}`}
+                </div>
               </div>
             )}
             <svg viewBox={`0 0 ${W} ${H}`} style={{ width:'100%', height:'100%', display:'block' }}>
               {trackPath && <>
-                <path d={trackPath} fill="none" stroke="rgba(255,255,255,.03)" strokeWidth={22} strokeLinecap="round" strokeLinejoin="round"/>
-                <path d={trackPath} fill="none" stroke="rgba(255,255,255,.07)" strokeWidth={9}  strokeLinecap="round" strokeLinejoin="round"/>
-                <path d={trackPath} fill="none" stroke="rgba(255,255,255,.18)" strokeWidth={2}  strokeLinecap="round" strokeLinejoin="round"/>
+                <path d={trackPath} fill="none" stroke="rgba(255,255,255,.035)" strokeWidth={22} strokeLinecap="round" strokeLinejoin="round"/>
+                <path d={trackPath} fill="none" stroke="rgba(255,255,255,.08)"  strokeWidth={11} strokeLinecap="round" strokeLinejoin="round"/>
+                <path d={trackPath} fill="none" stroke="rgba(255,255,255,.22)"  strokeWidth={2}  strokeLinecap="round" strokeLinejoin="round"/>
               </>}
-              {/* Trails */}
-              {driverList.map(driver => {
-                const col = driverColors[driver]??'#888'
-                return trail.map((tf,ti) => {
-                  const pt = frameMap.get(lap)?.get(tf)?.find(p=>p.driver===driver)
-                  if (!pt) return null
-                  return <circle key={`${driver}-${ti}`} cx={sxf(pt.x)} cy={syf(pt.y)} r={2} fill={col} opacity={(1-ti/trail.length)*0.2}/>
-                })
-              })}
-              {/* Drivers */}
+              {driverList.map(driver => trail.map((tf,ti) => {
+                const pt = frameMap.get(lap)?.get(tf)?.find(p=>p.driver===driver)
+                if (!pt) return null
+                return <circle key={`${driver}-${ti}`} cx={sxf(pt.x)} cy={syf(pt.y)} r={2.5} fill={driverColors[driver]??'#888'} opacity={(1-ti/trail.length)*0.2}/>
+              }))}
               {current.map(p => {
-                const cx=sxf(p.x), cy=syf(p.y)
-                const col=driverColors[p.driver]??'#888'
+                const cx=sxf(p.x), cy=syf(p.y), col=driverColors[p.driver]??'#888'
                 const isSel=selectedDriver===p.driver
                 const posIdx=results.findIndex(r=>r.driver_code===p.driver)
                 return (
                   <g key={p.driver} style={{cursor:'pointer'}} onClick={()=>setSelectedDriver(d=>d===p.driver?null:p.driver)}>
-                    {isSel&&<circle cx={cx} cy={cy} r={11} fill={col} opacity={.15}/>}
+                    {isSel && <circle cx={cx} cy={cy} r={11} fill={col} opacity={.12}/>}
                     <circle cx={cx} cy={cy} r={isSel?6:4} fill={col}/>
-                    <circle cx={cx} cy={cy} r={isSel?6:4} fill="none" stroke="rgba(0,0,0,.5)" strokeWidth={.8}/>
-                    {(isSel||posIdx<3) && <text x={cx} y={cy-(isSel?11:8)} fontSize={isSel?8:6.5} fill={col} textAnchor="middle" fontFamily={mono} fontWeight="600">{p.driver}</text>}
+                    {(isSel||posIdx<3) && <>
+                      <rect x={cx-13} y={cy-20} width={26} height={9} rx={2} fill="rgba(0,0,0,.75)"/>
+                      <text x={cx} y={cy-13} fontSize={7} fill={col} textAnchor="middle" fontFamily={mono} fontWeight="700">{p.driver}</text>
+                    </>}
                   </g>
                 )
               })}
             </svg>
           </div>
-          {/* Mini controls below track */}
-          <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:8 }}>
+          <div style={{ display:'flex', gap:6, alignItems:'center' }}>
             <button onClick={()=>{setLap(1);setFrame(0);setPlaying(false)}}
-              style={{background:'transparent',border:'1px solid rgba(255,255,255,.1)',borderRadius:3,color:'rgba(255,255,255,.4)',padding:'4px 8px',cursor:'pointer',fontFamily:mono,fontSize:9}}>⏮</button>
+              style={{background:'rgba(255,255,255,.04)',border:'1px solid rgba(255,255,255,.1)',borderRadius:5,color:'rgba(255,255,255,.4)',padding:'6px 10px',cursor:'pointer',fontFamily:mono,fontSize:10}}>⏮</button>
             <button onClick={()=>setPlaying(p=>!p)}
-              style={{background:playing?'rgba(225,6,0,.1)':'rgba(74,222,128,.08)',border:`1px solid ${playing?'rgba(225,6,0,.3)':'rgba(74,222,128,.2)'}`,borderRadius:3,color:playing?'#E10600':'#4ADE80',padding:'4px 12px',cursor:'pointer',fontFamily:mono,fontSize:9,letterSpacing:'.08em'}}>
-              {playing?'⏸ PAUSE':'▶ PLAY'}
+              style={{flex:1,background:playing?'rgba(225,6,0,.1)':'rgba(74,222,128,.07)',border:`1px solid ${playing?'rgba(225,6,0,.28)':'rgba(74,222,128,.18)'}`,borderRadius:5,color:playing?'#E10600':'#4ADE80',padding:'6px 0',cursor:'pointer',fontFamily:mono,fontSize:10,letterSpacing:'.06em'}}>
+              {playing?'⏸  PAUSE':'▶  PLAY'}
             </button>
             <button onClick={()=>setSpeed(s=>SPEEDS[(SPEEDS.indexOf(s)+1)%SPEEDS.length])}
-              style={{background:speed!==1?'rgba(245,158,11,.1)':'transparent',border:`1px solid ${speed!==1?'rgba(245,158,11,.3)':'rgba(255,255,255,.1)'}`,borderRadius:3,color:speed!==1?'#F59E0B':'rgba(255,255,255,.3)',padding:'4px 8px',cursor:'pointer',fontFamily:mono,fontSize:9}}>{speed}×</button>
-            {/* Scrubber */}
-            <div style={{flex:1,height:3,position:'relative'}}>
-              <div style={{position:'absolute',inset:0,background:'rgba(255,255,255,.07)',borderRadius:2}}/>
-              <div style={{position:'absolute',top:0,left:0,bottom:0,width:`${racePct}%`,background:'#E10600',borderRadius:2}}/>
-              {/* Lap markers */}
-              {Array.from({length:totalLaps-1},(_,i)=>(
-                <div key={i} style={{position:'absolute',top:-1,bottom:-1,left:`${((i+1)/totalLaps)*100}%`,width:1,background:'rgba(255,255,255,.12)'}}/>
-              ))}
-              <input type="range" min={0} max={totalLaps*FRAMES_PER_LAP-1}
-                value={(lap-1)*FRAMES_PER_LAP+frame}
-                onChange={e=>{setPlaying(false);const v=parseInt(e.target.value);setLap(Math.floor(v/FRAMES_PER_LAP)+1);setFrame(v%FRAMES_PER_LAP)}}
-                style={{position:'absolute',inset:0,opacity:0,cursor:'pointer',width:'100%',height:'100%',margin:0}}/>
-            </div>
+              style={{background:'rgba(255,255,255,.04)',border:'1px solid rgba(255,255,255,.1)',borderRadius:5,color:speed!==1?'#F59E0B':'rgba(255,255,255,.35)',padding:'6px 10px',cursor:'pointer',fontFamily:mono,fontSize:10,minWidth:38}}>{speed}×</button>
+          </div>
+          <div style={{height:6, position:'relative', borderRadius:3, overflow:'hidden', cursor:'pointer'}}>
+            <div style={{position:'absolute',inset:0,background:'rgba(255,255,255,.06)'}}/>
+            <div style={{position:'absolute',top:0,left:0,bottom:0,width:`${racePct}%`,background:'#E10600'}}/>
+            {Array.from({length:totalLaps-1},(_,i)=>(
+              <div key={i} style={{position:'absolute',inset:'0',left:`${((i+1)/totalLaps)*100}%`,width:1,background:'rgba(255,255,255,.12)'}}/>
+            ))}
+            <input type="range" min={0} max={totalLaps*FRAMES_PER_LAP-1}
+              value={(lap-1)*FRAMES_PER_LAP+frame}
+              onChange={e=>{setPlaying(false);const v=parseInt(e.target.value);setLap(Math.floor(v/FRAMES_PER_LAP)+1);setFrame(v%FRAMES_PER_LAP)}}
+              style={{position:'absolute',inset:0,opacity:0,cursor:'pointer',width:'100%',height:'100%',margin:0}}/>
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between', marginTop:-4 }}>
+            <span style={{ fontSize:7, color:'rgba(255,255,255,.15)', fontFamily:mono }}>L1</span>
+            <span style={{ fontSize:7, color:'rgba(255,255,255,.28)', fontFamily:mono }}>L{lap} · {lapPct}%</span>
+            <span style={{ fontSize:7, color:'rgba(255,255,255,.15)', fontFamily:mono }}>L{totalLaps}</span>
+          </div>
+          <div style={{ marginTop:4, padding:'10px 12px', border:'1px solid rgba(255,255,255,.06)', borderRadius:6, background:'rgba(255,255,255,.02)' }}>
+            <span style={{ fontSize:8, color:'rgba(255,255,255,.2)', fontFamily:'var(--font-mono)', letterSpacing:'.12em' }}>WORK IN PROGRESS</span>
           </div>
         </div>
-
-        {/* ── Live order column ── */}
-        <div style={{ borderRight:'1px solid rgba(255,255,255,.05)', display:'flex', flexDirection:'column' }}>
-          <div style={{ padding:'8px 10px 4px', borderBottom:'1px solid rgba(255,255,255,.05)' }}>
-            <div style={{ fontSize:8, color:'rgba(255,255,255,.25)', fontFamily:mono, letterSpacing:'.12em' }}>ORDER</div>
+        <div style={{ display:'flex', flexDirection:'column' }}>
+          <div style={{ padding:'10px 16px 6px', borderBottom:'1px solid rgba(255,255,255,.06)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <span style={{ fontSize:8, color:'rgba(255,255,255,.3)', fontFamily:mono, letterSpacing:'.14em' }}>RESULT</span>
+            <span style={{ fontSize:7, color:'rgba(255,255,255,.15)', fontFamily:mono, letterSpacing:'.08em' }}>CLICK TO TRACK</span>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'28px 4px 1fr 36px 36px', padding:'4px 16px', gap:8, borderBottom:'1px solid rgba(255,255,255,.04)' }}>
+            {['P','','DRIVER','PTS','GRD'].map((h,i)=>(
+              <div key={i} style={{ fontSize:7, color:'rgba(255,255,255,.18)', fontFamily:mono, letterSpacing:'.08em', textAlign: i>=3 ? 'right' : 'left' }}>{h}</div>
+            ))}
           </div>
           <div style={{ flex:1, overflowY:'auto' }}>
-            {results.slice(0,22).map((r,i)=>{
-              const col=driverColors[r.driver_code]??'#888'
-              const isDnf=r.status!=='Finished'
-              const isSel=selectedDriver===r.driver_code
+            {results.map((r,i)=>{
+              const col   = driverColors[r.driver_code]??'#888'
+              // Fixed: lapped cars are NOT DNFs
+              const isDnf = isDnfStatus(r.status)
+              const isSel = selectedDriver===r.driver_code
+              const medal = i===0?'#F59E0B':i===1?'#C0C0C0':i===2?'#CD7F32':'rgba(255,255,255,.2)'
               return (
-                <div key={r.driver_code}
-                  onClick={()=>setSelectedDriver(d=>d===r.driver_code?null:r.driver_code)}
-                  style={{display:'grid',gridTemplateColumns:'18px 1fr',padding:'5px 10px',alignItems:'center',gap:4,cursor:'pointer',background:isSel?`${col}15`:'transparent',borderLeft:isSel?`2px solid ${col}`:'2px solid transparent',opacity:isDnf?0.38:1}}>
-                  <span style={{fontSize:i<3?11:9,fontFamily:bebas,color:i===0?'#F59E0B':i===1?'#C0C0C0':i===2?'#CD7F32':'rgba(255,255,255,.22)',lineHeight:1}}>{i+1}</span>
-                  <span style={{fontSize:10,fontFamily:bebas,color:col,letterSpacing:'.04em',lineHeight:1}}>{r.driver_code}</span>
+                <div key={r.driver_code} onClick={()=>setSelectedDriver(d=>d===r.driver_code?null:r.driver_code)}
+                  style={{ display:'grid', gridTemplateColumns:'28px 4px 1fr 36px 36px', padding:'6px 16px', alignItems:'center', gap:8, cursor:'pointer', borderBottom:'1px solid rgba(255,255,255,.025)', background:isSel?`${col}10`:'transparent', borderLeft:isSel?`2px solid ${col}`:'2px solid transparent', opacity:isDnf?.45:1, transition:'background .1s' }}>
+                  <span style={{fontSize:i<3?13:10,fontFamily:bebas,color:medal,lineHeight:1,textAlign:'right'}}>{i+1}</span>
+                  <div style={{height:16,background:col,borderRadius:1,opacity:.85}}/>
+                  <div>
+                    <div style={{fontSize:13,fontFamily:bebas,color:isSel?col:'rgba(255,255,255,.85)',letterSpacing:'.04em',lineHeight:1}}>{r.driver_code}</div>
+                    <div style={{fontSize:7,color:'rgba(255,255,255,.25)',fontFamily:mono,marginTop:1}}>{r.team?.split(' ').slice(0,2).join(' ')}</div>
+                  </div>
+                  <div style={{textAlign:'right'}}>
+                    <div style={{fontSize:10,fontFamily:mono,color:r.points>0?'#F59E0B':'rgba(255,255,255,.18)',fontWeight:r.points>0?700:400}}>{r.points||'—'}</div>
+                  </div>
+                  <div style={{textAlign:'right'}}>
+                    <div style={{fontSize:9,fontFamily:mono,color: isDnf?'#E10600':'rgba(255,255,255,.25)'}}>{isDnf?'DNF':`P${r.grid_position}`}</div>
+                  </div>
                 </div>
               )
             })}
           </div>
-          {/* Selected driver info */}
-          {selectedDriver && selResult && (
-            <div style={{borderTop:'1px solid rgba(255,255,255,.05)',padding:'8px 10px'}}>
-              <div style={{fontFamily:bebas,fontSize:12,color:selColor,letterSpacing:'.06em',marginBottom:3}}>{selectedDriver}</div>
-              <div style={{fontSize:7,color:'rgba(255,255,255,.25)',fontFamily:mono,marginBottom:5,lineHeight:1.4}}>{selResult.team}</div>
-              {[
-                {label:'FINISH', value:`P${selResult.finish_position}`},
-                {label:'GRID',   value:`P${selResult.grid_position}`},
-                {label:'PTS',    value:selResult.points>0?String(selResult.points):'—'},
-                {label:'STATUS', value:selResult.status==='Finished'?'FIN':'DNF'},
-              ].map(row=>(
-                <div key={row.label} style={{display:'flex',justifyContent:'space-between',fontSize:8,fontFamily:mono,padding:'1px 0'}}>
-                  <span style={{color:'rgba(255,255,255,.3)'}}>{row.label}</span>
-                  <span style={{color:row.label==='STATUS'&&selResult.status!=='Finished'?'#E10600':'rgba(255,255,255,.75)'}}>{row.value}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
-
-        {/* ── Race log column ── */}
-        <div style={{ display:'flex', flexDirection:'column' }}>
-          <div style={{ padding:'8px 12px 4px', borderBottom:'1px solid rgba(255,255,255,.05)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-            <div style={{ fontSize:8, color:'rgba(255,255,255,.25)', fontFamily:mono, letterSpacing:'.12em' }}>RACE LOG</div>
-            <div style={{ fontSize:7, color:'rgba(255,255,255,.15)', fontFamily:mono }}>LAP {lap} OF {totalLaps}</div>
-          </div>
-          <div ref={eventsRef} style={{ flex:1, overflowY:'auto', padding:'8px 0' }}>
-            {/* Results-derived lap-by-lap table */}
-            {/* First: key events */}
-            {lapEvents.length > 0 && (
-              <div style={{ padding:'0 12px 8px' }}>
-                {lapEvents.map(({lap:l, events:evs})=>(
-                  <div key={l} data-lap={l}
-                    style={{ padding:'4px 8px', marginBottom:3, borderRadius:3,
-                      background: l===lap ? 'rgba(225,6,0,.08)' : 'transparent',
-                      borderLeft: `2px solid ${l===lap?'#E10600':'rgba(255,255,255,.08)'}`,
-                      transition:'all .15s'
-                    }}>
-                    <div style={{ fontSize:8, color: l===lap?'#E10600':'rgba(255,255,255,.25)', fontFamily:mono, marginBottom:2 }}>L{l}</div>
-                    {evs.map((ev,i)=>(
-                      <div key={i} style={{ fontSize:9, color: l===lap?'rgba(255,255,255,.8)':'rgba(255,255,255,.35)', fontFamily:mono, lineHeight:1.5 }}>{ev}</div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-            <Rule />
-            {/* Results table — final classification */}
-            <div style={{ padding:'8px 12px 4px' }}>
-              <div style={{ fontSize:7, color:'rgba(255,255,255,.2)', fontFamily:mono, letterSpacing:'.12em', marginBottom:6 }}>FINAL CLASSIFICATION</div>
-              <div style={{ display:'grid', gridTemplateColumns:'18px 36px 1fr 28px 28px', gap:0, marginBottom:4 }}>
-                {['P','GRD','DRIVER','PTS','STS'].map(h=>(
-                  <div key={h} style={{ fontSize:7, color:'rgba(255,255,255,.2)', fontFamily:mono, padding:'2px 0' }}>{h}</div>
-                ))}
-              </div>
-              {results.map((r,i)=>{
-                const col=driverColors[r.driver_code]??'#888'
-                const isDnf=r.status!=='Finished'
-                return (
-                  <div key={r.driver_code}
-                    onClick={()=>setSelectedDriver(d=>d===r.driver_code?null:r.driver_code)}
-                    style={{ display:'grid', gridTemplateColumns:'18px 36px 1fr 28px 28px', alignItems:'center', padding:'3px 0', cursor:'pointer', borderBottom:'1px solid rgba(255,255,255,.02)', opacity:isDnf?0.45:1, background:selectedDriver===r.driver_code?`${col}10`:'transparent' }}>
-                    <span style={{ fontSize:i<3?10:8, fontFamily:bebas, color:i===0?'#F59E0B':i===1?'#C0C0C0':i===2?'#CD7F32':'rgba(255,255,255,.2)' }}>{i+1}</span>
-                    <span style={{ fontSize:8, color:'rgba(255,255,255,.25)', fontFamily:mono }}>P{r.grid_position}</span>
-                    <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                      <div style={{ width:2, height:10, borderRadius:1, background:col, flexShrink:0 }}/>
-                      <span style={{ fontSize:9, fontFamily:bebas, color:col, letterSpacing:'.04em' }}>{r.driver_code}</span>
-                    </div>
-                    <span style={{ fontSize:8, color:r.points>0?'#F59E0B':'rgba(255,255,255,.2)', fontFamily:mono }}>{r.points||'—'}</span>
-                    <span style={{ fontSize:7, color:isDnf?'#E10600':'rgba(255,255,255,.3)', fontFamily:mono }}>{isDnf?'DNF':'FIN'}</span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-
       </div>
     </div>
   )
@@ -1163,7 +1152,7 @@ function Empty({ msg = 'NO DATA' }: { msg?: string }) {
 // ── MAIN PAGE ──────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
   const [sessions, setSessions]     = useState<Session[]>([])
-  const [season, setSeason]         = useState(2025)
+  const [season, setSeason]         = useState(2026)
   const [selId, setSelId]           = useState<number | null>(null)
   const [activeTab, setActiveTab]   = useState<Tab>('LAP_PACE')
   const [selDrivers, setSelDrivers] = useState<string[]>([])
@@ -1188,18 +1177,23 @@ export default function AnalyticsPage() {
       })
       .finally(() => setLoading(false))
   }, [selId, tabParam])
+  useEffect(() => {
+    if (!sessions.length) return
+    const latest = sessions
+      .filter(s => Number(s.season) === season)
+      .sort((a, b) => Number(b.round) - Number(a.round))[0]
+    if (latest) setSelId(latest.id)
+  }, [sessions, season])
   const allDrivers  = raceData?.results.map(r => r.driver_code) ?? []
   const needDrivers = !['STRATEGY', 'REPLAY'].includes(activeTab)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <Header />
-      <Ticker />
-      <main style={{ width: '100%', maxWidth: 1320, margin: '0 auto', padding: 'calc(var(--header-h) + 36px + 36px) 20px 80px', display: 'grid', gap: 24 }}>
-        {/* ── MASTHEAD ── */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+      <main style={{ width: '100%', maxWidth: 1320, margin: '0 auto', padding: 'calc(var(--header-h) + 36px) 20px 80px', display: 'grid', gap: 24 }}>
+      <div style={{ textAlign: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
             <div style={{ width: 20, height: 1, background: '#E10600' }} />
-            <span style={{ fontSize: 9, letterSpacing: '.18em', color: 'rgba(255,255,255,.3)', fontFamily: mono }}>RACE ANALYTICS · FASTF1 · NEON POSTGRES</span>
+            <span style={{ fontSize: 9, letterSpacing: '.18em', color: 'rgba(255,255,255,.3)', fontFamily: mono }}>RACE ANALYTICS · FASTF1</span>
           </div>
           <div style={{ fontFamily: bebas, fontSize: 'clamp(44px,6vw,80px)', letterSpacing: '.02em', lineHeight: .92 }}>
             {selSess
@@ -1211,7 +1205,7 @@ export default function AnalyticsPage() {
             }
           </div>
           {selSess && (
-            <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+            <div style={{ display: 'flex', gap: 12, marginTop: 6, justifyContent: 'center'  }}>
               {[`ROUND ${selSess.round}`, selSess.circuit.toUpperCase(),
                 new Date(selSess.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()
               ].map((t, i) => (
@@ -1220,7 +1214,6 @@ export default function AnalyticsPage() {
             </div>
           )}
         </div>
-        {/* ── RACE SELECTOR ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: 4 }}>
             {seasons.map(s => (
@@ -1253,7 +1246,6 @@ export default function AnalyticsPage() {
             </div>
           )}
         </div>
-        {/* ── CONTENT ── */}
         {!selId ? (
           <div style={{ border: '1px solid rgba(255,255,255,.06)', borderRadius: 10, padding: '80px 0', textAlign: 'center', background: 'rgba(0,0,0,.2)' }}>
             <div style={{ fontFamily: bebas, fontSize: 22, color: 'rgba(255,255,255,.06)', letterSpacing: '.3em' }}>SELECT A RACE ABOVE</div>
@@ -1267,7 +1259,7 @@ export default function AnalyticsPage() {
             <div style={{ border: '1px solid rgba(255,255,255,.07)', borderRadius: 10, overflow: 'hidden' }}>
               <div style={{ padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,.06)', background: 'rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => setShowOverview(p => !p)}>
                 <div style={{ width: 2, height: 14, borderRadius: 1, background: '#E10600' }} />
-                <span style={{ fontFamily: mono, fontSize: 9, letterSpacing: '.16em', color: 'rgba(255,255,255,.5)' }}>RACE OVERVIEW</span>
+                <span style={{ fontFamily: mono, fontSize: 15, letterSpacing: '.16em', color: 'rgba(255,255,255,.5)' }}>RACE OVERVIEW</span>
                 <span style={{ fontSize: 9, color: 'rgba(255,255,255,.15)', fontFamily: mono }}>{raceData.session?.gp_name} · {raceData.session?.season}</span>
                 <span style={{ fontSize: 9, color: 'rgba(255,255,255,.2)', fontFamily: mono, marginLeft: 'auto' }}>{showOverview ? '↑ COLLAPSE' : '↓ EXPAND'}</span>
               </div>

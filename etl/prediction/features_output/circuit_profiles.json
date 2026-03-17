@@ -1,31 +1,4 @@
 {
-  "Silverstone": {
-    "sc_probability": 0.8,
-    "avg_pit_stops": 1.39,
-    "tyre_deg_soft_ms_per_lap": -573.4,
-    "overtaking_index": 0.362,
-    "circuit_type": "permanent",
-    "arw_effectiveness": 0.308,
-    "pit_lane_delta_sec": 21.0
-  },
-  "Miami": {
-    "sc_probability": 0.667,
-    "avg_pit_stops": 1.18,
-    "tyre_deg_soft_ms_per_lap": -786.8,
-    "overtaking_index": 0.348,
-    "circuit_type": "street_hybrid",
-    "arw_effectiveness": 0.296,
-    "pit_lane_delta_sec": 21.0
-  },
-  "Budapest": {
-    "sc_probability": 0.4,
-    "avg_pit_stops": 1.41,
-    "tyre_deg_soft_ms_per_lap": -704.2,
-    "overtaking_index": 0.412,
-    "circuit_type": "permanent",
-    "arw_effectiveness": 0.35,
-    "pit_lane_delta_sec": 20.0
-  },
   "Miami Gardens": {
     "sc_probability": 1.0,
     "avg_pit_stops": 1.65,
@@ -35,22 +8,22 @@
     "arw_effectiveness": 0.212,
     "pit_lane_delta_sec": 21.0
   },
-  "Istanbul": {
-    "sc_probability": 0.0,
-    "avg_pit_stops": 0.1,
-    "tyre_deg_soft_ms_per_lap": 80.0,
-    "overtaking_index": 0.39,
+  "Yas Island": {
+    "sc_probability": 0.4,
+    "avg_pit_stops": 1.23,
+    "tyre_deg_soft_ms_per_lap": -752.8,
+    "overtaking_index": 0.291,
     "circuit_type": "permanent",
-    "arw_effectiveness": 0.332,
+    "arw_effectiveness": 0.247,
     "pit_lane_delta_sec": 21.0
   },
-  "Portim\u00e3o": {
-    "sc_probability": 1.0,
-    "avg_pit_stops": 1.1,
-    "tyre_deg_soft_ms_per_lap": -324.6,
-    "overtaking_index": 0.24,
+  "Imola": {
+    "sc_probability": 0.667,
+    "avg_pit_stops": 1.37,
+    "tyre_deg_soft_ms_per_lap": -661.4,
+    "overtaking_index": 0.335,
     "circuit_type": "permanent",
-    "arw_effectiveness": 0.204,
+    "arw_effectiveness": 0.285,
     "pit_lane_delta_sec": 21.0
   },
   "Spielberg": {
@@ -62,19 +35,64 @@
     "arw_effectiveness": 0.268,
     "pit_lane_delta_sec": 21.0
   },
-  "Baku": {
-    "sc_probability": 1.0,
-    "avg_pit_stops": 1.18,
-    "tyre_deg_soft_ms_per_lap": -1925.8,
-    "overtaking_index": 0.364,
-    "circuit_type": "street",
-    "arw_effectiveness": 0.309,
-    "pit_lane_delta_sec": 18.0
+  "Suzuka": {
+    "sc_probability": 0.5,
+    "avg_pit_stops": 1.4,
+    "tyre_deg_soft_ms_per_lap": -369.3,
+    "overtaking_index": 0.215,
+    "circuit_type": "permanent",
+    "arw_effectiveness": 0.183,
+    "pit_lane_delta_sec": 21.0
+  },
+  "Monte Carlo": {
+    "sc_probability": 0.0,
+    "avg_pit_stops": 0.95,
+    "tyre_deg_soft_ms_per_lap": -265.6,
+    "overtaking_index": 0.35,
+    "circuit_type": "permanent",
+    "arw_effectiveness": 0.297,
+    "pit_lane_delta_sec": 21.0
   },
   "Sakhir": {
     "sc_probability": 0.667,
     "avg_pit_stops": 1.8,
     "tyre_deg_soft_ms_per_lap": -347.1,
+    "overtaking_index": 0.362,
+    "circuit_type": "permanent",
+    "arw_effectiveness": 0.308,
+    "pit_lane_delta_sec": 21.0
+  },
+  "Portim\u00e3o": {
+    "sc_probability": 1.0,
+    "avg_pit_stops": 1.1,
+    "tyre_deg_soft_ms_per_lap": -324.6,
+    "overtaking_index": 0.24,
+    "circuit_type": "permanent",
+    "arw_effectiveness": 0.204,
+    "pit_lane_delta_sec": 21.0
+  },
+  "Monaco": {
+    "sc_probability": 0.75,
+    "avg_pit_stops": 1.62,
+    "tyre_deg_soft_ms_per_lap": -22.3,
+    "overtaking_index": 0.21,
+    "circuit_type": "street",
+    "arw_effectiveness": 0.178,
+    "pit_lane_delta_sec": 19.0
+  },
+  "Budapest": {
+    "sc_probability": 0.4,
+    "avg_pit_stops": 1.41,
+    "tyre_deg_soft_ms_per_lap": -704.2,
+    "overtaking_index": 0.412,
+    "circuit_type": "permanent",
+    "arw_effectiveness": 0.35,
+    "pit_lane_delta_sec": 20.0
+  },
+  "Silverstone": {
+    "sc_probability": 0.8,
+    "avg_pit_stops": 1.39,
+    "tyre_deg_soft_ms_per_lap": -573.4,
     "overtaking_index": 0.362,
     "circuit_type": "permanent",
     "arw_effectiveness": 0.308,
@@ -89,33 +107,6 @@
     "arw_effectiveness": 0.402,
     "pit_lane_delta_sec": 17.0
   },
-  "Austin": {
-    "sc_probability": 0.8,
-    "avg_pit_stops": 1.16,
-    "tyre_deg_soft_ms_per_lap": -820.2,
-    "overtaking_index": 0.4,
-    "circuit_type": "permanent",
-    "arw_effectiveness": 0.34,
-    "pit_lane_delta_sec": 21.0
-  },
-  "Monaco": {
-    "sc_probability": 0.75,
-    "avg_pit_stops": 1.62,
-    "tyre_deg_soft_ms_per_lap": -22.3,
-    "overtaking_index": 0.21,
-    "circuit_type": "street",
-    "arw_effectiveness": 0.178,
-    "pit_lane_delta_sec": 19.0
-  },
-  "Imola": {
-    "sc_probability": 0.667,
-    "avg_pit_stops": 1.37,
-    "tyre_deg_soft_ms_per_lap": -661.4,
-    "overtaking_index": 0.335,
-    "circuit_type": "permanent",
-    "arw_effectiveness": 0.285,
-    "pit_lane_delta_sec": 21.0
-  },
   "S\u00e3o Paulo": {
     "sc_probability": 1.0,
     "avg_pit_stops": 1.24,
@@ -123,114 +114,6 @@
     "overtaking_index": 0.412,
     "circuit_type": "permanent",
     "arw_effectiveness": 0.35,
-    "pit_lane_delta_sec": 21.0
-  },
-  "Shanghai": {
-    "sc_probability": 0.5,
-    "avg_pit_stops": 1.11,
-    "tyre_deg_soft_ms_per_lap": 25.7,
-    "overtaking_index": 0.354,
-    "circuit_type": "permanent",
-    "arw_effectiveness": 0.301,
-    "pit_lane_delta_sec": 23.5
-  },
-  "Yas Island": {
-    "sc_probability": 0.4,
-    "avg_pit_stops": 1.23,
-    "tyre_deg_soft_ms_per_lap": -752.8,
-    "overtaking_index": 0.291,
-    "circuit_type": "permanent",
-    "arw_effectiveness": 0.247,
-    "pit_lane_delta_sec": 21.0
-  },
-  "Zandvoort": {
-    "sc_probability": 0.6,
-    "avg_pit_stops": 1.98,
-    "tyre_deg_soft_ms_per_lap": -314.4,
-    "overtaking_index": 0.387,
-    "circuit_type": "permanent",
-    "arw_effectiveness": 0.329,
-    "pit_lane_delta_sec": 19.0
-  },
-  "Melbourne": {
-    "sc_probability": 0.667,
-    "avg_pit_stops": 1.42,
-    "tyre_deg_soft_ms_per_lap": -219.1,
-    "overtaking_index": 0.431,
-    "circuit_type": "street_hybrid",
-    "arw_effectiveness": 0.367,
-    "pit_lane_delta_sec": 23.0
-  },
-  "Jeddah": {
-    "sc_probability": 1.0,
-    "avg_pit_stops": 1.1,
-    "tyre_deg_soft_ms_per_lap": -1355.8,
-    "overtaking_index": 0.299,
-    "circuit_type": "street",
-    "arw_effectiveness": 0.254,
-    "pit_lane_delta_sec": 22.0
-  },
-  "Monza": {
-    "sc_probability": 0.4,
-    "avg_pit_stops": 1.09,
-    "tyre_deg_soft_ms_per_lap": -433.2,
-    "overtaking_index": 0.381,
-    "circuit_type": "permanent",
-    "arw_effectiveness": 0.324,
-    "pit_lane_delta_sec": 21.0
-  },
-  "Monte Carlo": {
-    "sc_probability": 0.0,
-    "avg_pit_stops": 0.95,
-    "tyre_deg_soft_ms_per_lap": -265.6,
-    "overtaking_index": 0.35,
-    "circuit_type": "permanent",
-    "arw_effectiveness": 0.297,
-    "pit_lane_delta_sec": 21.0
-  },
-  "Suzuka": {
-    "sc_probability": 0.5,
-    "avg_pit_stops": 1.4,
-    "tyre_deg_soft_ms_per_lap": -369.3,
-    "overtaking_index": 0.215,
-    "circuit_type": "permanent",
-    "arw_effectiveness": 0.183,
-    "pit_lane_delta_sec": 21.0
-  },
-  "Spa-Francorchamps": {
-    "sc_probability": 0.4,
-    "avg_pit_stops": 1.08,
-    "tyre_deg_soft_ms_per_lap": -691.0,
-    "overtaking_index": 0.347,
-    "circuit_type": "permanent",
-    "arw_effectiveness": 0.295,
-    "pit_lane_delta_sec": 21.0
-  },
-  "Lusail": {
-    "sc_probability": 1.0,
-    "avg_pit_stops": 1.31,
-    "tyre_deg_soft_ms_per_lap": -415.2,
-    "overtaking_index": 0.367,
-    "circuit_type": "permanent",
-    "arw_effectiveness": 0.312,
-    "pit_lane_delta_sec": 21.0
-  },
-  "Sochi": {
-    "sc_probability": 0.0,
-    "avg_pit_stops": 1.95,
-    "tyre_deg_soft_ms_per_lap": 80.0,
-    "overtaking_index": 0.43,
-    "circuit_type": "permanent",
-    "arw_effectiveness": 0.365,
-    "pit_lane_delta_sec": 21.0
-  },
-  "Barcelona": {
-    "sc_probability": 0.4,
-    "avg_pit_stops": 1.85,
-    "tyre_deg_soft_ms_per_lap": -439.1,
-    "overtaking_index": 0.281,
-    "circuit_type": "permanent",
-    "arw_effectiveness": 0.239,
     "pit_lane_delta_sec": 21.0
   },
   "Le Castellet": {
@@ -242,14 +125,68 @@
     "arw_effectiveness": 0.293,
     "pit_lane_delta_sec": 21.0
   },
-  "Marina Bay": {
-    "sc_probability": 0.5,
-    "avg_pit_stops": 1.12,
-    "tyre_deg_soft_ms_per_lap": -613.1,
-    "overtaking_index": 0.349,
+  "Jeddah": {
+    "sc_probability": 1.0,
+    "avg_pit_stops": 1.1,
+    "tyre_deg_soft_ms_per_lap": -1355.8,
+    "overtaking_index": 0.299,
+    "circuit_type": "street",
+    "arw_effectiveness": 0.254,
+    "pit_lane_delta_sec": 22.0
+  },
+  "Istanbul": {
+    "sc_probability": 0.0,
+    "avg_pit_stops": 0.1,
+    "tyre_deg_soft_ms_per_lap": 80.0,
+    "overtaking_index": 0.39,
     "circuit_type": "permanent",
-    "arw_effectiveness": 0.297,
-    "pit_lane_delta_sec": 24.0
+    "arw_effectiveness": 0.332,
+    "pit_lane_delta_sec": 21.0
+  },
+  "Austin": {
+    "sc_probability": 0.8,
+    "avg_pit_stops": 1.16,
+    "tyre_deg_soft_ms_per_lap": -820.2,
+    "overtaking_index": 0.4,
+    "circuit_type": "permanent",
+    "arw_effectiveness": 0.34,
+    "pit_lane_delta_sec": 21.0
+  },
+  "Baku": {
+    "sc_probability": 1.0,
+    "avg_pit_stops": 1.18,
+    "tyre_deg_soft_ms_per_lap": -1925.8,
+    "overtaking_index": 0.364,
+    "circuit_type": "street",
+    "arw_effectiveness": 0.309,
+    "pit_lane_delta_sec": 18.0
+  },
+  "Lusail": {
+    "sc_probability": 1.0,
+    "avg_pit_stops": 1.31,
+    "tyre_deg_soft_ms_per_lap": -415.2,
+    "overtaking_index": 0.367,
+    "circuit_type": "permanent",
+    "arw_effectiveness": 0.312,
+    "pit_lane_delta_sec": 21.0
+  },
+  "Melbourne": {
+    "sc_probability": 0.667,
+    "avg_pit_stops": 1.42,
+    "tyre_deg_soft_ms_per_lap": -219.1,
+    "overtaking_index": 0.431,
+    "circuit_type": "street_hybrid",
+    "arw_effectiveness": 0.367,
+    "pit_lane_delta_sec": 23.0
+  },
+  "Monza": {
+    "sc_probability": 0.4,
+    "avg_pit_stops": 1.09,
+    "tyre_deg_soft_ms_per_lap": -433.2,
+    "overtaking_index": 0.381,
+    "circuit_type": "permanent",
+    "arw_effectiveness": 0.324,
+    "pit_lane_delta_sec": 21.0
   },
   "Mexico City": {
     "sc_probability": 1.0,
@@ -267,6 +204,69 @@
     "overtaking_index": 0.395,
     "circuit_type": "permanent",
     "arw_effectiveness": 0.336,
+    "pit_lane_delta_sec": 21.0
+  },
+  "Zandvoort": {
+    "sc_probability": 0.6,
+    "avg_pit_stops": 1.98,
+    "tyre_deg_soft_ms_per_lap": -314.4,
+    "overtaking_index": 0.387,
+    "circuit_type": "permanent",
+    "arw_effectiveness": 0.329,
+    "pit_lane_delta_sec": 19.0
+  },
+  "Marina Bay": {
+    "sc_probability": 0.5,
+    "avg_pit_stops": 1.12,
+    "tyre_deg_soft_ms_per_lap": -613.1,
+    "overtaking_index": 0.349,
+    "circuit_type": "permanent",
+    "arw_effectiveness": 0.297,
+    "pit_lane_delta_sec": 24.0
+  },
+  "Spa-Francorchamps": {
+    "sc_probability": 0.4,
+    "avg_pit_stops": 1.08,
+    "tyre_deg_soft_ms_per_lap": -691.0,
+    "overtaking_index": 0.347,
+    "circuit_type": "permanent",
+    "arw_effectiveness": 0.295,
+    "pit_lane_delta_sec": 21.0
+  },
+  "Barcelona": {
+    "sc_probability": 0.4,
+    "avg_pit_stops": 1.85,
+    "tyre_deg_soft_ms_per_lap": -439.1,
+    "overtaking_index": 0.281,
+    "circuit_type": "permanent",
+    "arw_effectiveness": 0.239,
+    "pit_lane_delta_sec": 21.0
+  },
+  "Miami": {
+    "sc_probability": 0.667,
+    "avg_pit_stops": 1.18,
+    "tyre_deg_soft_ms_per_lap": -786.8,
+    "overtaking_index": 0.348,
+    "circuit_type": "street_hybrid",
+    "arw_effectiveness": 0.296,
+    "pit_lane_delta_sec": 21.0
+  },
+  "Shanghai": {
+    "sc_probability": 0.5,
+    "avg_pit_stops": 1.11,
+    "tyre_deg_soft_ms_per_lap": 25.7,
+    "overtaking_index": 0.354,
+    "circuit_type": "permanent",
+    "arw_effectiveness": 0.301,
+    "pit_lane_delta_sec": 23.5
+  },
+  "Sochi": {
+    "sc_probability": 0.0,
+    "avg_pit_stops": 1.95,
+    "tyre_deg_soft_ms_per_lap": 80.0,
+    "overtaking_index": 0.43,
+    "circuit_type": "permanent",
+    "arw_effectiveness": 0.365,
     "pit_lane_delta_sec": 21.0
   }
 }

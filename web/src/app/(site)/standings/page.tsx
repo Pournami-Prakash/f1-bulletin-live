@@ -1,15 +1,11 @@
 'use client'
-
 import { useEffect, useState } from 'react'
 import Header from '@/components/Header'
-import Ticker from '@/components/Ticker'
 import Footer from '@/components/Footer'
 import BgCanvas from '@/components/BgCanvas'
 import type { DriverStanding, ConstructorStanding } from '@/types/f1'
 import { DriverPodium, ConstructorPodium } from '@/components/Podium'
 import Link from 'next/link'
-
-// ── Team colours ──────────────────────────────────────────────────────────────
 
 const TEAM_COLORS: Record<string, string> = {
   red_bull:     '#3671C6',
@@ -23,95 +19,78 @@ const TEAM_COLORS: Record<string, string> = {
   sauber:       '#52E252',
   rb:           '#6692FF',
 }
-
 function teamColor(constructorId: string): string {
   return TEAM_COLORS[constructorId] ?? '#888888'
 }
-
 const SEASONS = ['2026', '2025', '2024', '2023', '2022', '2021', '2020']
 
-// ── Table ─────────────────────────────────────────────────────────────────────
-
 function DriverRow({ s, idx }: { s: DriverStanding; idx: number }) {
+  const [hovered, setHovered] = useState(false)
   const constructor = s.Constructors?.[0]
   const color = teamColor(constructor?.constructorId ?? '')
   const isTop3 = idx < 3
-
   const posColors: Record<number, string> = { 0: '#F59E0B', 1: '#9CA3AF', 2: '#CD7F32' }
-
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '2.5rem 2rem 1fr 1fr 4.5rem 3.5rem',
-      alignItems: 'center',
-      gap: 12,
-      padding: '9px 16px',
-      borderBottom: '1px solid var(--b1)',
-      background: isTop3 ? 'rgba(255,255,255,.015)' : 'transparent',
-      transition: 'background var(--tr)',
-    }}>
-      {/* Position */}
-      <span style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: 11,
-        fontWeight: 700,
-        color: posColors[idx] ?? 'var(--t3)',
-      }}>
-        P{s.position}
-      </span>
-
-      {/* Team color bar */}
+    <Link
+      href={`/drivers/${s.Driver.driverId}`}
+      style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <div style={{
-        width: 3, height: 28, borderRadius: 2,
-        background: color, opacity: 0.8,
-      }} />
-
-      {/* Driver */}
-      <div>
-        <div style={{
-          color: 'var(--t1)', fontSize: 13,
-          fontWeight: 500, letterSpacing: '.03em',
-        }}>
-        <Link href={`/drivers/${s.Driver.driverId}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-        {s.Driver.givenName.charAt(0)}. <strong>{s.Driver.familyName.toUpperCase()}</strong>
-        </Link>
-        </div>
-        <div style={{
-          color: 'var(--t3)', fontSize: 9,
-          fontFamily: 'var(--font-mono)', letterSpacing: '.14em',
-        }}>
-          {s.Driver.code}
-        </div>
-      </div>
-
-      {/* Team */}
-      <div style={{
-        fontSize: 11, fontFamily: 'var(--font-mono)',
-        color: `${color}99`,
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        display: 'grid',
+        gridTemplateColumns: '2.5rem 2rem 1fr 1fr 4.5rem 3.5rem 1.5rem',
+        alignItems: 'center',
+        gap: 12,
+        padding: '9px 16px',
+        borderBottom: '1px solid var(--b1)',
+        background: hovered
+          ? `${color}10`
+          : isTop3 ? 'rgba(255,255,255,.015)' : 'transparent',
+        transition: 'background .15s',
+        cursor: 'pointer',
       }}>
-        {constructor?.name ?? '—'}
-      </div>
-
-      {/* Points */}
-      <div style={{ textAlign: 'right' }}>
         <span style={{
-          fontFamily: 'var(--font-mono)', fontSize: 13,
-          fontWeight: 700, color: 'var(--t1)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11, fontWeight: 700,
+          color: posColors[idx] ?? 'var(--t3)',
         }}>
-          {s.points}
+          P{s.position}
         </span>
-        <span style={{ color: 'var(--t3)', fontSize: 9, marginLeft: 3 }}>pts</span>
+        <div style={{ width: 3, height: 28, borderRadius: 2, background: color, opacity: 0.8 }} />
+        <div>
+          <div style={{ color: 'var(--t1)', fontSize: 13, fontWeight: 500, letterSpacing: '.03em' }}>
+            {s.Driver.givenName.charAt(0)}. <strong>{s.Driver.familyName.toUpperCase()}</strong>
+          </div>
+          <div style={{ color: 'var(--t3)', fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '.14em' }}>
+            {s.Driver.code}
+          </div>
+        </div>
+        <div style={{
+          fontSize: 11, fontFamily: 'var(--font-mono)',
+          color: `${color}99`,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {constructor?.name ?? '—'}
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
+            {s.points}
+          </span>
+          <span style={{ color: 'var(--t3)', fontSize: 9, marginLeft: 3 }}>pts</span>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--t2)' }}>{s.wins}</span>
+          <span style={{ color: 'var(--t3)', fontSize: 9, marginLeft: 3 }}>W</span>
+        </div>
+        <span style={{
+          fontSize: 10, color: hovered ? color : 'var(--t3)',
+          opacity: hovered ? 1 : 0.3,
+          transition: 'all .15s',
+          fontFamily: 'var(--font-mono)',
+        }}>↗</span>
       </div>
-
-      {/* Wins */}
-      <div style={{ textAlign: 'right' }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--t2)' }}>
-          {s.wins}
-        </span>
-        <span style={{ color: 'var(--t3)', fontSize: 9, marginLeft: 3 }}>W</span>
-      </div>
-    </div>
+    </Link>
   )
 }
 
@@ -119,7 +98,6 @@ function ConstructorRow({ s, idx }: { s: ConstructorStanding; idx: number }) {
   const color = teamColor(s.Constructor.constructorId)
   const isTop3 = idx < 3
   const posColors: Record<number, string> = { 0: '#F59E0B', 1: '#9CA3AF', 2: '#CD7F32' }
-
   return (
     <div style={{
       display: 'grid',
@@ -130,38 +108,24 @@ function ConstructorRow({ s, idx }: { s: ConstructorStanding; idx: number }) {
       borderBottom: '1px solid var(--b1)',
       background: isTop3 ? 'rgba(255,255,255,.015)' : 'transparent',
     }}>
-      <span style={{
-        fontFamily: 'var(--font-mono)', fontSize: 11,
-        fontWeight: 700, color: posColors[idx] ?? 'var(--t3)',
-      }}>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: posColors[idx] ?? 'var(--t3)' }}>
         P{s.position}
       </span>
-
       <div style={{ width: 3, height: 28, borderRadius: 2, background: color, opacity: 0.8 }} />
-
       <div>
-        <div style={{
-          fontSize: 13, fontWeight: 700,
-          letterSpacing: '.06em', textTransform: 'uppercase', color,
-        }}>
+        <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color }}>
           {s.Constructor.name}
         </div>
         <div style={{ color: 'var(--t3)', fontSize: 9, fontFamily: 'var(--font-mono)' }}>
           {s.Constructor.nationality}
         </div>
       </div>
-
       <div style={{ textAlign: 'right' }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>
-          {s.points}
-        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>{s.points}</span>
         <span style={{ color: 'var(--t3)', fontSize: 9, marginLeft: 3 }}>pts</span>
       </div>
-
       <div style={{ textAlign: 'right' }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--t2)' }}>
-          {s.wins}
-        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--t2)' }}>{s.wins}</span>
         <span style={{ color: 'var(--t3)', fontSize: 9, marginLeft: 3 }}>W</span>
       </div>
     </div>
@@ -170,20 +134,13 @@ function ConstructorRow({ s, idx }: { s: ConstructorStanding; idx: number }) {
 
 function TableHeader({ tab }: { tab: 'drivers' | 'constructors' }) {
   const cols = tab === 'drivers'
-    ? '2.5rem 2rem 1fr 1fr 4.5rem 3.5rem'
+    ? '2.5rem 2rem 1fr 1fr 4.5rem 3.5rem 1.5rem'
     : '2.5rem 2rem 1fr 4.5rem 3.5rem'
   const labels = tab === 'drivers'
-    ? ['POS', '', 'DRIVER', 'TEAM', 'PTS', 'W']
+    ? ['POS', '', 'DRIVER', 'TEAM', 'PTS', 'W', '']
     : ['POS', '', 'CONSTRUCTOR', 'PTS', 'W']
-
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: cols,
-      gap: 12,
-      padding: '8px 16px 10px',
-      borderBottom: '1px solid var(--b2)',
-    }}>
+    <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 12, padding: '8px 16px 10px', borderBottom: '1px solid var(--b2)' }}>
       {labels.map((l, i) => (
         <span key={i} style={{
           fontSize: 9, fontFamily: 'var(--font-mono)',
@@ -197,8 +154,6 @@ function TableHeader({ tab }: { tab: 'drivers' | 'constructors' }) {
   )
 }
 
-// ── Gap indicator between P3 and rest ────────────────────────────────────────
-
 function GapDivider({ label }: { label: string }) {
   return (
     <div style={{
@@ -208,18 +163,11 @@ function GapDivider({ label }: { label: string }) {
       background: 'rgba(255,255,255,.01)',
     }}>
       <div style={{ flex: 1, height: 1, background: 'var(--b1)' }} />
-      <span style={{
-        fontSize: 8, fontFamily: 'var(--font-mono)',
-        letterSpacing: '.18em', color: 'var(--t3)',
-      }}>
-        {label}
-      </span>
+      <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', letterSpacing: '.18em', color: 'var(--t3)' }}>{label}</span>
       <div style={{ flex: 1, height: 1, background: 'var(--b1)' }} />
     </div>
   )
 }
-
-// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function StandingsPage() {
   const [tab, setTab]       = useState<'drivers' | 'constructors'>('drivers')
@@ -234,7 +182,6 @@ export default function StandingsPage() {
     let mounted = true
     setLoading(true)
     setError(null)
-
     Promise.all([
       fetch(`/api/standings?season=${season}&type=drivers`).then(r => r.json()),
       fetch(`/api/standings?season=${season}&type=constructors`).then(r => r.json()),
@@ -248,7 +195,6 @@ export default function StandingsPage() {
       })
       .catch(() => { if (mounted) setError('Failed to load standings.') })
       .finally(() => { if (mounted) setLoading(false) })
-
     return () => { mounted = false }
   }, [season])
 
@@ -261,182 +207,136 @@ export default function StandingsPage() {
       <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
         <BgCanvas />
       </div>
-
-      <div style={{
-        display: 'flex', flexDirection: 'column',
-        minHeight: '100vh', position: 'relative', zIndex: 1,
-      }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'relative', zIndex: 1 }}>
         <Header />
-        <Ticker />
-
         <main style={{
-          width: '100%',
-          maxWidth: 1100,
-          margin: '0 auto',
-          padding: 'calc(var(--header-h) + 36px + 36px) 24px 80px',
+          width: '100%', maxWidth: 1100, margin: '0 auto',
+          padding: 'calc(var(--header-h) + 36px) 24px 80px',
         }}>
-
           {/* ── Page hero ── */}
-          <div style={{
-            position: 'relative',
-            marginBottom: 40,
-            paddingBottom: 32,
-            borderBottom: '1px solid var(--b1)',
-            overflow: 'hidden',
-          }}>
-            {/* Leader color glow behind hero */}
+          <div style={{ position: 'relative', marginBottom: 40, paddingBottom: 0 }}>
             {!loading && (
               <div style={{
-                position: 'absolute',
-                top: -60, right: -60,
-                width: 400, height: 300,
-                borderRadius: '50%',
+                position: 'absolute', top: -60, right: -60,
+                width: 400, height: 300, borderRadius: '50%',
                 background: `radial-gradient(circle, ${leaderColor}18, transparent 70%)`,
                 pointerEvents: 'none',
               }} />
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 20 }}>
-              <div>
-                <div className="eyebrow">
-                  <div className="line" />
-                  <span>Championship · {resolvedSeason} Season</span>
-                </div>
-                <div style={{
-                  fontFamily: 'var(--font-bebas)',
-                  fontSize: 'clamp(52px, 8vw, 96px)',
-                  lineHeight: 0.9,
-                  letterSpacing: '.02em',
-                  marginTop: 8,
-                }}>
-                  STANDINGS
-                </div>
-                <p style={{ color: 'var(--t3)', fontSize: 11, marginTop: 10, fontFamily: 'var(--font-mono)', letterSpacing: '.08em' }}>
-                  JOLPICA F1 API · UPDATES AFTER EACH RACE
-                </p>
+            {/* centered title + season selector below */}
+            <div style={{ textAlign: 'center' }}>
+              <div className="eyebrow" style={{ justifyContent: 'center' }}>
+                <div className="line" />
+                <span>Championship · {resolvedSeason} Season</span>
               </div>
+              <div style={{ fontFamily: 'var(--font-bebas)', fontSize: 'clamp(52px, 8vw, 96px)', lineHeight: 0.9, letterSpacing: '.02em', marginTop: 8 }}>
+                STANDINGS
+              </div>
+              <p style={{ color: 'var(--t3)', fontSize: 11, marginTop: 10, fontFamily: 'var(--font-mono)', letterSpacing: '.08em' }}>
+                JOLPICA F1 API · UPDATES AFTER EACH RACE
+              </p>
 
-              {/* Season selector */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-                <span style={{ fontSize: 8, letterSpacing: '.22em', color: 'var(--t3)', fontFamily: 'var(--font-mono)' }}>SEASON</span>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  {SEASONS.map(s => (
-                    <button
-                      key={s}
-                      onClick={() => setSeason(s)}
-                      style={{
-                        padding: '4px 10px',
-                        fontSize: 10, fontFamily: 'var(--font-mono)',
-                        letterSpacing: '.08em',
-                        border: `1px solid ${season === s ? 'rgba(225,6,0,.6)' : 'var(--b1)'}`,
-                        color: season === s ? 'var(--red)' : 'var(--t3)',
-                        background: season === s ? 'rgba(225,6,0,.1)' : 'transparent',
-                        borderRadius: 4, cursor: 'pointer',
-                        transition: 'all var(--tr)',
-                      }}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
+              {/* season selector centered below heading */}
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', marginTop: 16 }}>
+                <span style={{ fontSize: 8, letterSpacing: '.22em', color: 'var(--t3)', fontFamily: 'var(--font-mono)', marginRight: 4 }}>SEASON</span>
+                {SEASONS.map(s => (
+                  <button key={s} onClick={() => setSeason(s)} style={{
+                    padding: '4px 10px', fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '.08em',
+                    border: `1px solid ${season === s ? 'rgba(225,6,0,.6)' : 'var(--b1)'}`,
+                    color: season === s ? 'var(--red)' : 'var(--t3)',
+                    background: season === s ? 'rgba(225,6,0,.1)' : 'transparent',
+                    borderRadius: 4, cursor: 'pointer', transition: 'all var(--tr)',
+                  }}>
+                    {s}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Tab row */}
-            <div style={{
-              display: 'flex', gap: 0, marginTop: 28,
-              borderBottom: '1px solid var(--b1)',
-            }}>
+            {/* tab bar */}
+            <div style={{ display: 'flex', gap: 0, marginTop: 28, borderBottom: '1px solid var(--b1)' }}>
               {(['drivers', 'constructors'] as const).map(t => (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  style={{
-                    padding: '8px 20px',
-                    fontSize: 10, fontFamily: 'var(--font-mono)',
-                    letterSpacing: '.16em', textTransform: 'uppercase',
-                    background: 'transparent', border: 'none',
-                    borderBottom: `2px solid ${tab === t ? 'var(--red)' : 'transparent'}`,
-                    color: tab === t ? 'var(--t1)' : 'var(--t3)',
-                    cursor: 'pointer', transition: 'all var(--tr)',
-                    marginBottom: -1,
-                  }}
-                >
+                <button key={t} onClick={() => setTab(t)} style={{
+                  padding: '8px 20px', fontSize: 10, fontFamily: 'var(--font-mono)',
+                  letterSpacing: '.16em', textTransform: 'uppercase',
+                  background: 'transparent', border: 'none',
+                  borderBottom: `2px solid ${tab === t ? 'var(--red)' : 'transparent'}`,
+                  color: tab === t ? 'var(--t1)' : 'var(--t3)',
+                  cursor: 'pointer', transition: 'all var(--tr)', marginBottom: -1,
+                }}>
                   {t}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* ── Loading ── */}
           {loading && (
             <div style={{ padding: '80px 0', textAlign: 'center' }}>
-              <div style={{
-                fontFamily: 'var(--font-mono)', fontSize: 10,
-                letterSpacing: '.22em', color: 'var(--t3)',
-              }}
-                className="skeleton"
-              >
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.22em', color: 'var(--t3)' }} className="skeleton">
                 LOADING STANDINGS...
               </div>
             </div>
           )}
-
-          {/* ── Error ── */}
           {error && (
-            <div style={{ padding: '80px 0', textAlign: 'center', color: 'var(--red)', fontSize: 12 }}>
-              {error}
-            </div>
+            <div style={{ padding: '80px 0', textAlign: 'center', color: 'var(--red)', fontSize: 12 }}>{error}</div>
           )}
 
-          {/* ── Content ── */}
           {!loading && !error && (
             <div style={{ display: 'grid', gap: 32 }}>
-
-              {/* Podium */}
               {tab === 'drivers'
                 ? <DriverPodium standings={driverStandings} />
                 : <ConstructorPodium standings={constructorStandings} />
-                }
-
-              {/* Full standings table */}
+              }
               <div>
                 <div style={{
-                  fontSize: 9, fontFamily: 'var(--font-mono)',
-                  letterSpacing: '.22em', color: 'var(--t3)',
-                  marginBottom: 14, textTransform: 'uppercase',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  marginBottom: 14,
                 }}>
-                  · Full Championship Standings
+                  <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '.22em', color: 'var(--t3)', textTransform: 'uppercase' }}>
+                    · Full Championship Standings
+                  </div>
+                  {tab === 'drivers' && (
+                    <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '.12em', color: 'var(--t3)' }}>
+                      ↗ CLICK DRIVER FOR STATS &amp; NEWS
+                    </div>
+                  )}
                 </div>
-
-                <div style={{
-                  border: '1px solid var(--b1)',
-                  borderRadius: 14,
-                  overflow: 'hidden',
-                  background: 'rgba(0,0,0,.24)',
-                }}>
+                <div style={{ border: '1px solid var(--b1)', borderRadius: 14, overflow: 'hidden', background: 'rgba(0,0,0,.24)' }}>
                   <TableHeader tab={tab} />
-
                   {tab === 'drivers'
                     ? driverStandings.map((s, i) => (
                         <div key={s.Driver.driverId}>
-                            {i === 3 && <GapDivider label="POINTS GAP INCREASES" />}
-                            <DriverRow s={s} idx={i} />
+                          {i === 3 && <GapDivider label="POINTS GAP INCREASES" />}
+                          <DriverRow s={s} idx={i} />
                         </div>
-                        ))
+                      ))
                     : constructorStandings.map((s, i) => (
                         <div key={s.Constructor.constructorId}>
-                            {i === 3 && <GapDivider label="POINTS GAP INCREASES" />}
-                            <ConstructorRow s={s} idx={i} />
+                          {i === 3 && <GapDivider label="POINTS GAP INCREASES" />}
+                          <ConstructorRow s={s} idx={i} />
                         </div>
-                        ))
-                    }
+                      ))
+                  }
                 </div>
               </div>
             </div>
           )}
         </main>
 
+        {/* F1 Attribution */}
+        <div style={{
+          borderTop: '1px solid var(--b1)',
+          padding: '16px 24px',
+          maxWidth: 1100, margin: '0 auto',
+          display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
+        }}>
+          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', letterSpacing: '.1em', color: 'var(--t3)', lineHeight: 1.6 }}>
+            Driver images © Formula 1. Formula 1, F1 and related marks are trademarks of Formula One Licensing BV.
+            Used for portfolio demonstration purposes only. Not affiliated with or endorsed by Formula 1.
+            Race data via <a href="https://jolpi.ca" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--t2)', textDecoration: 'none' }}>Jolpica F1 API</a>.
+          </span>
+        </div>
         <Footer />
       </div>
     </>

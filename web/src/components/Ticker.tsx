@@ -152,7 +152,7 @@ export default function Ticker({ items }: Props) {
               alignItems: 'center',
               whiteSpace: 'nowrap',
               width: 'max-content',
-              animation: 'ticker-scroll 45s linear infinite',
+              animation: 'ticker-scroll 120s linear infinite',
               willChange: 'transform',
             }}
           >
