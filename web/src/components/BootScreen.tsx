@@ -394,9 +394,9 @@ export default function BootScreen({ onEnter }: Props) {
         {/* ══ REVEAL ══ */}
         {stage === 'reveal' && CURRENT && (
           <>
-            <button className="tb" style={{ background: dark ? '#282828' : '#ddd' }} onClick={() => setDark(d => !d)}>
+            {/* <button className="tb" style={{ background: dark ? '#282828' : '#ddd' }} onClick={() => setDark(d => !d)}>
               <div className="tk" style={{ transform: dark ? 'none' : 'translateX(20px)', background: dark ? '#fff' : '#111' }} />
-            </button>
+            </button> */}
             <div className="sc" ref={scrollRef} style={{ color: fg }}>
               {/* Parallax */}
               <div className="par">
