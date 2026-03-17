@@ -104,13 +104,6 @@ const ALL_CIRCUITS: CircuitEntry[] = [
 const SLOT_W = 130
 const SLOT_H = 80
 const BARCODE = [3,1,2,1,4,1,1,2,3,1,2,1,1,4,2,1,3,1,1,2,4,1,1,3,2,1,1,2,3,1,4,1,1,2,1,3,2,1,3,1,1,2]
-const CARDS = [
-  { label: 'BREAKING', title: 'Hamilton fastest in FP2',   sub: 'Ferrari SF-26 · 1:17.443',       tag: 'P0', clr: '#e10600' },
-  { label: 'DRIVER',   title: 'Verstappen tyre strategy',  sub: 'Red Bull Racing · Lap 34',        tag: 'P1', clr: '#ff6b00' },
-  { label: 'TEAM',     title: 'McLaren double points run', sub: 'Norris + Piastri · Pos 2–3',      tag: 'P1', clr: '#ff6b00' },
-  { label: 'STEWARDS', title: 'FIA investigation closed',  sub: 'Incident T9 · No further action', tag: 'P2', clr: '#f5c400' },
-  { label: 'LIVE',     title: 'Safety car lap 22',         sub: 'Albert Park · Turn 6 incident',   tag: 'P0', clr: '#e10600' },
-]
 const CN = [...ALL_CIRCUITS.map(c => c.name), ...ALL_CIRCUITS.map(c => c.name)]
 const DN = ['VERSTAPPEN','HAMILTON','NORRIS','LECLERC','PIASTRI','RUSSELL','SAINZ','ALONSO','ALBON','STROLL','GASLY','OCON','HULKENBERG','BEARMAN','TSUNODA','LAWSON','PEREZ','COLAPINTO','BOTTAS','ANTONELLI']
 const MD = [...DN, ...DN]
@@ -206,75 +199,11 @@ function CircuitLayout({ c }: { c: CircuitEntry }) {
     </div>
   )
 }
-function CardStack({ dark }: { dark: boolean }) {
-  const [a, setA] = useState(0)
-  const [flip, setFlip] = useState(false)
-  useEffect(() => {
-    const t = setInterval(() => { setFlip(true); setTimeout(() => { setA(x => (x + 1) % CARDS.length); setFlip(false) }, 280) }, 2600)
-    return () => clearInterval(t)
-  }, [])
-  return (
-    <div style={{ position: 'relative', height: 180, perspective: 800 }}>
-      {CARDS.map((c, i) => {
-        const off = (i - a + CARDS.length) % CARDS.length
-        let tf = 'translateZ(-90px)', op = 0, zi = 0
-        if (off === 0) { tf = flip ? 'translateZ(0) translateY(-24px) rotateX(8deg)' : 'translateZ(0)'; op = flip ? 0 : 1; zi = 30 }
-        if (off === 1) { tf = flip ? 'translateZ(0)' : 'translateZ(-32px) translateY(9px) scale(.94)'; op = .55; zi = 20 }
-        if (off === 2) { tf = 'translateZ(-64px) translateY(18px) scale(.88)'; op = .25; zi = 10 }
-        return (
-          <div key={i} style={{ position: 'absolute', inset: 0, transition: 'transform .28s cubic-bezier(.16,1,.3,1),opacity .25s', transform: tf, opacity: op, zIndex: zi, transformOrigin: 'top center' }}>
-            <div style={{ height: '100%', background: dark ? '#141414' : '#fff', borderWidth: 1, borderStyle: 'solid', borderColor: dark ? '#2a2a2a' : '#eee', borderRadius: 7, padding: '13px 15px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 8, fontWeight: 800, letterSpacing: '.2em', color: '#e10600' }}>{c.label}</span>
-                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 8, fontWeight: 800, background: c.clr, color: '#fff', padding: '2px 5px', borderRadius: 2 }}>{c.tag}</span>
-              </div>
-              <div>
-                <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 900, fontSize: 19, lineHeight: 1.05, color: dark ? '#fff' : '#000', marginBottom: 3 }}>{c.title}</div>
-                <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, color: dark ? '#555' : '#aaa' }}>{c.sub}</div>
-              </div>
-              <div style={{ display: 'flex', gap: 4 }}>
-                {CARDS.map((_, j) => <div key={j} style={{ height: 2, flex: j === a ? 2 : 1, background: j === a ? '#e10600' : dark ? '#282828' : '#eee', borderRadius: 1, transition: 'flex .28s' }} />)}
-              </div>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-function Folder({ label, items, dark }: { label: string; items: string[]; dark: boolean }) {
-  const [open, setOpen] = useState(false)
-  const bd = dark ? '#222' : '#e0e0e0'
-  return (
-    <div style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setOpen(o => !o)}>
-      <div style={{ width: 68, height: 13, background: dark ? '#1a1a1a' : '#e8e8e8', borderRadius: '4px 8px 0 0', borderWidth: 1, borderStyle: 'solid', borderColor: bd, borderBottomWidth: 0, paddingLeft: 7, display: 'flex', alignItems: 'center' }}>
-        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 7, color: '#e10600', fontWeight: 800, letterSpacing: '.1em' }}>F1B</span>
-      </div>
-      <div style={{ background: dark ? '#111' : '#f5f5f5', borderWidth: 1, borderStyle: 'solid', borderColor: bd, borderRadius: '0 5px 5px 5px', overflow: 'hidden', maxHeight: open ? 360 : 44, transition: 'max-height .38s cubic-bezier(.16,1,.3,1)' }}>
-        <div style={{ padding: '11px 15px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: open ? 1 : 0, borderBottomStyle: 'solid' as const, borderBottomColor: bd }}>
-          <span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, fontSize: 13, color: dark ? '#fff' : '#000', letterSpacing: '.04em' }}>{label}</span>
-          <span style={{ fontSize: 10, color: '#e10600', fontWeight: 900, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .3s', display: 'inline-block' }}>▾</span>
-        </div>
-        <div style={{ padding: '3px 15px 12px' }}>
-          {items.map((item, i) => (
-            <div key={i} style={{ padding: '7px 0', borderBottomWidth: i < items.length - 1 ? 1 : 0, borderBottomStyle: 'solid' as const, borderBottomColor: dark ? '#1c1c1c' : '#ebebeb', display: 'flex', alignItems: 'center', gap: 9 }}>
-              <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#e10600', flexShrink: 0, display: 'block' }} />
-              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: dark ? '#999' : '#555' }}>{item}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
 // ── Calendar card ─────────────────────────────────────────────────────────────
 function CalendarCard({ c, rd, dark, bd, card, dim, fg, isCurrent }: {
   c: CircuitEntry; rd: RaceRound | undefined; dark: boolean
   bd: string; card: string; dim: string; fg: string; isCurrent: boolean
 }) {
-  const lapRecordYear = rd?.lap_record_year
-    ? `'${String(rd.lap_record_year).slice(2)}`
-    : ''
   return (
     <div
       className="cc"
@@ -293,18 +222,12 @@ function CalendarCard({ c, rd, dark, bd, card, dim, fg, isCurrent }: {
           {isCurrent && <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 7, color: '#e10600', animation: 'blink 1.2s infinite' }}>● NOW</span>}
           {!isCurrent && rd?.is_sprint_weekend && <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 7, color: '#ff6b00', letterSpacing: '.1em' }}>SPRINT</span>}
         </div>
-        {/* Circuit name — clamped to 2 lines to keep card height consistent */}
         <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, fontSize: 13, color: fg, marginBottom: 1, lineHeight: 1.15, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: '2.3em' }}>{c.name}</div>
         <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 7, color: dim, marginBottom: 6 }}>{c.country}</div>
         <div style={{ borderTopWidth: 1, borderTopStyle: 'solid' as const, borderTopColor: dark ? '#1c1c1c' : '#e8e8e8', paddingTop: 6 }}>
           <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 7, color: dim, letterSpacing: '.08em', marginBottom: 2 }}>
             {rd ? formatDate(rd.race_date) : c.dates}
           </div>
-          {/* {rd?.lap_record && (
-            <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 7, color: dim, marginBottom: 2 }}>
-              ◎ {rd.lap_record} · {rd.lap_record_holder}{lapRecordYear ? ` ${lapRecordYear}` : ''}
-            </div>
-          )} */}
           <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 7, color: isCurrent ? '#e10600' : fg, fontWeight: isCurrent ? 800 : 400 }}>
             {rd
               ? `${rd.race_laps ?? '–'} LAPS · ${rd.circuit_length_km ?? '–'} KM`
@@ -326,26 +249,18 @@ export default function BootScreen({ onEnter }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const bgRef     = useRef<HTMLDivElement>(null)
 
-  // ── Live data ──────────────────────────────────────────────────────────────
   const { calendar, ready } = useCalendar()
-
-  // Sync ready into a ref so the lights effect can poll it without
-  // needing ready in its dep array (which caused infinite re-renders)
   const readyRef = useRef(false)
   useEffect(() => { readyRef.current = ready }, [ready])
 
-  // Memoize CURRENT so raceUTC is a stable Date reference — prevents
-  // useCountdown's [targetMs] dep from changing every render
   const CURRENT = useMemo(() => buildCurrentRound(calendar), [calendar])
 
-  // Stable ms timestamp for countdown — only changes when raceUTC changes
   const raceTargetMs = useMemo(
     () => CURRENT?.raceUTC.getTime() ?? (Date.now() + 86400000),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [CURRENT?.raceUTC.getTime()]
   )
 
-  // ── Lights sequence — waits for data before going out ─────────────────────
   useEffect(() => {
     if (stage !== 'lights') return
     let n = 0
@@ -422,8 +337,6 @@ export default function BootScreen({ onEnter }: Props) {
         .divl{height:1px;margin:0 clamp(18px,5vw,60px)}
         .tb{position:fixed;top:16px;right:16px;z-index:300;width:42px;height:22px;border-radius:11px;border:none;cursor:pointer;display:flex;align-items:center;padding:3px;transition:background .3s}
         .tk{width:16px;height:16px;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.5);transition:transform .3s cubic-bezier(.16,1,.3,1)}
-        .g2{display:grid;grid-template-columns:1fr 1fr;gap:40px}
-        @media(max-width:680px){.g2{grid-template-columns:1fr!important}.stub-c{display:none!important}.sess-g{grid-template-columns:1fr 1fr!important}}
         .tg{display:grid;grid-template-columns:1fr 210px;position:relative;overflow:hidden}
         .tg::after{content:'';position:absolute;left:calc(100% - 211px);top:0;bottom:0;width:1px;background:repeating-linear-gradient(180deg,rgba(140,140,140,.16) 0,rgba(140,140,140,.16) 5px,transparent 5px,transparent 11px)}
         .sess-g{display:grid;gap:1px}
@@ -440,12 +353,13 @@ export default function BootScreen({ onEnter }: Props) {
         .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#e10600;margin-right:5px;vertical-align:middle;animation:blink 1.2s ease-in-out infinite}
         @keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.2;transform:scale(.6)}}
         @keyframes fadeup{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-        .sh{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;animation:bob 2s ease-in-out infinite;pointer-events:none}
+        .sh{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;animation:bob 2s ease-in-out infinite;pointer-events:none}
         @keyframes bob{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(6px)}}
         .par{position:sticky;top:0;height:100vh;overflow:hidden;z-index:0;margin-bottom:-100vh;pointer-events:none}
         .par-i{position:absolute;inset:-15%;will-change:transform;display:flex;flex-direction:column;justify-content:center}
         .pr{display:flex;gap:44px;white-space:nowrap;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-style:italic;letter-spacing:-.02em;line-height:1.2;user-select:none}
         @keyframes trackDraw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+        @media(max-width:680px){.stub-c{display:none!important}.sess-g{grid-template-columns:1fr 1fr!important}.tg{grid-template-columns:1fr!important}}
       `}</style>
       <div id="BR" className={exiting ? 'x' : ''} style={{ background: stage === 'lights' ? '#000' : bg, transition: 'background .4s,opacity .6s,filter .6s' }}>
         {/* ══ LIGHTS ══ */}
@@ -494,6 +408,7 @@ export default function BootScreen({ onEnter }: Props) {
                   ))}
                 </div>
               </div>
+
               {/* ── HERO PASS ── */}
               <div className="hero-shell">
                 <div className="pass-wrap">
@@ -542,9 +457,19 @@ export default function BootScreen({ onEnter }: Props) {
                           </div>
                         ))}
                       </div>
-                      <button className="btn" style={{ width: '100%', background: '#fff', color: '#000', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px' }} onClick={go}>
-                        <span>INITIALIZE UPLINK</span>
-                        <span style={{ background: '#e10600', color: '#fff', padding: '3px 12px', fontSize: 16 }}>→</span>
+                      {/* CTA button — made more prominent */}
+                      <button
+                        className="btn"
+                        style={{ width: '100%', background: '#e10600', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 20px', fontSize: 16, animation: 'pulse-btn 2s ease-in-out infinite' }}
+                        onClick={go}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#ff1a0e')}
+                        onMouseLeave={e => (e.currentTarget.style.background = '#e10600')}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="dot" style={{ marginRight: 0 }} />
+                          INITIALIZE UPLINK — ENTER TERMINAL
+                        </span>
+                        <span style={{ background: '#fff', color: '#e10600', padding: '4px 14px', fontSize: 18, fontWeight: 900 }}>→</span>
                       </button>
                     </div>
                     {/* Stub column */}
@@ -568,32 +493,17 @@ export default function BootScreen({ onEnter }: Props) {
                     </div>
                   </div>
                 </div>
-                <div className="sh">
-                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 8, color: dim, letterSpacing: '.18em' }}>SCROLL</div>
+
+                {/* Scroll hint */}
+                <div className="sh" style={{ gap: 6 }}>
+                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 8, color: '#e10600', letterSpacing: '.18em', animation: 'blink 1.5s infinite' }}>↑ CLICK BUTTON ABOVE TO ENTER</div>
+                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 8, color: dim, letterSpacing: '.14em' }}>OR SCROLL TO EXPLORE</div>
                   <div style={{ fontSize: 11, color: dim }}>↓</div>
                 </div>
               </div>
+
               <div className="divl" style={{ background: bd }} />
-              {/* ── CARDS + FOLDERS ── */}
-              <div className="sec">
-                <div className="g2">
-                  <Reveal>
-                    <div className="tag">LIVE INTELLIGENCE</div>
-                    <div className="stitle" style={{ color: fg }}>LATEST<br /><span style={{ WebkitTextStroke: `1px ${dark ? '#333' : '#ccc'}`, WebkitTextFillColor: 'transparent' }}>STORIES</span></div>
-                    <CardStack dark={dark} />
-                  </Reveal>
-                  <Reveal delay={80}>
-                    <div className="tag">INTEL BRIEFINGS</div>
-                    <div className="stitle" style={{ color: fg }}>OPEN<br /><span style={{ WebkitTextStroke: `1px ${dark ? '#333' : '#ccc'}`, WebkitTextFillColor: 'transparent' }}>FOLDERS</span></div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                      <Folder label="RACE BRIEFING"    items={['Hamilton P1 after FP2', 'Verstappen floor concern', 'McLaren strategy debrief 18:00']} dark={dark} />
-                      <Folder label="DRIVER SENTIMENT" items={['Norris +0.42 sentiment spike', 'Leclerc controversy index: 8.1', 'Alonso media coverage: HIGH']} dark={dark} />
-                      <Folder label="TEAM ANALYSIS"    items={['Red Bull tyre deg anomaly', 'Ferrari PU mode data', 'Mercedes floor upgrade effect']} dark={dark} />
-                    </div>
-                  </Reveal>
-                </div>
-              </div>
-              <div className="divl" style={{ background: bd }} />
+
               {/* ── CALENDAR ── */}
               <div className="sec">
                 <Reveal>
@@ -625,6 +535,7 @@ export default function BootScreen({ onEnter }: Props) {
                   ))}
                 </Reveal>
               </div>
+
               {/* ── FINAL CTA ── */}
               <div className="sec" style={{ paddingBottom: 72 }}>
                 <Reveal>
