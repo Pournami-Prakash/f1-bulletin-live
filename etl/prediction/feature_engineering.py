@@ -32,21 +32,13 @@ OUT = Path("features_output")
 OUT.mkdir(exist_ok=True)
 
 # ── Config ────────────────────────────────────────────────────
-# 2026 regulation adjustment weights
-REG_BREAK_DISCOUNT  = 0.4   # how much to trust pre-2026 constructor data
-ELO_K_FACTOR        = 40    # higher than normal (32) due to 2026 uncertainty
+REG_BREAK_DISCOUNT  = 0.4
+ELO_K_FACTOR        = 40
 ELO_BASE            = 1500
-ELO_NEW_DRIVER      = 1400  # Cadillac and genuinely new drivers
+ELO_NEW_DRIVER      = 1400
+SPRINT_ELO_K_SCALE  = 0.17   # sprint = ~17% of race distance → lower Elo signal
 
-# Season weights — how much to trust each year's data for 2026 prediction
-# Lower weight = used as weak prior only
-# Rationale: 2022 introduced ground effect (current era), 2026 is new era again
 SEASON_WEIGHTS = {
-    # Only seasons actually loaded in DB (2021 onwards)
-    # 2021: last pre-ground-effect season — useful for circuit/driver priors
-    # 2022-2024: same regulation era, increasingly trusted
-    # 2025: direct prior, highest historical weight
-    # 2026: target season, full weight
     2021: 0.20,
     2022: 0.50,
     2023: 0.75,
@@ -58,7 +50,6 @@ SEASON_WEIGHTS = {
 def season_weight(season: int) -> float:
     return SEASON_WEIGHTS.get(season, 0.50)
 
-# Known 2026 PU manufacturer assignments
 PU_MANUFACTURERS = {
     'Red Bull Racing': 'Ford',
     'Racing Bulls':    'Ford',
@@ -73,46 +64,43 @@ PU_MANUFACTURERS = {
     'Cadillac':        'General Motors',
 }
 
-# PU strength priors for 2026 (unknown = 0, known strong = 1)
 PU_PRIOR = {
     'Ferrari':        0.65,
     'Mercedes':       0.70,
     'Honda':          0.60,
-    'Ford':           0.50,   # unknown
+    'Ford':           0.50,
     'Renault':        0.45,
-    'Audi':           0.40,   # brand new
-    'General Motors': 0.35,   # brand new
+    'Audi':           0.40,
+    'General Motors': 0.35,
 }
 
-# Circuit type classification
 CIRCUIT_TYPES = {
-    'Melbourne':         'street_hybrid',
-    'Shanghai':          'permanent',
-    'Suzuka':            'permanent',
-    'Sakhir':            'permanent',
-    'Jeddah':            'street',
-    'Miami':             'street_hybrid',
-    'Imola':             'permanent',
-    'Monaco':            'street',
-    'Barcelona':         'permanent',
-    'Montreal':          'street_hybrid',
-    'Spielberg':         'permanent',
-    'Silverstone':       'permanent',
-    'Spa':               'permanent',
-    'Budapest':          'permanent',
-    'Zandvoort':         'permanent',
-    'Monza':             'permanent',
-    'Baku':              'street',
-    'Singapore':         'street',
-    'Austin':            'permanent',
-    'Mexico City':       'permanent',
-    'São Paulo':         'permanent',
-    'Las Vegas':         'street',
-    'Lusail':            'permanent',
-    'Yas Island':        'permanent',
+    'Melbourne':   'street_hybrid',
+    'Shanghai':    'permanent',
+    'Suzuka':      'permanent',
+    'Sakhir':      'permanent',
+    'Jeddah':      'street',
+    'Miami':       'street_hybrid',
+    'Imola':       'permanent',
+    'Monaco':      'street',
+    'Barcelona':   'permanent',
+    'Montreal':    'street_hybrid',
+    'Spielberg':   'permanent',
+    'Silverstone': 'permanent',
+    'Spa':         'permanent',
+    'Budapest':    'permanent',
+    'Zandvoort':   'permanent',
+    'Monza':       'permanent',
+    'Baku':        'street',
+    'Singapore':   'street',
+    'Austin':      'permanent',
+    'Mexico City': 'permanent',
+    'São Paulo':   'permanent',
+    'Las Vegas':   'street',
+    'Lusail':      'permanent',
+    'Yas Island':  'permanent',
 }
 
-# Track-specific pit lane delta (seconds) — kept in sync with predict.py
 PIT_LANE_DELTA = {
     'Monaco': 19.0, 'Singapore': 24.0, 'Marina Bay': 24.0,
     'Baku': 18.0,   'Jeddah': 22.0,    'Las Vegas': 17.0,
@@ -120,7 +108,6 @@ PIT_LANE_DELTA = {
     'Budapest': 20.0,  'default': 21.0,
 }
 
-# Pit crew speed by team (seconds avg stop — lower = faster)
 PIT_CREW_SPEED = {
     'Red Bull Racing': 2.0, 'Mercedes': 2.2, 'Ferrari': 2.3,
     'McLaren': 2.2, 'Aston Martin': 2.6, 'Alpine': 2.8,
@@ -128,11 +115,10 @@ PIT_CREW_SPEED = {
     'Haas F1 Team': 2.8, 'Cadillac': 3.2, 'default': 2.7,
 }
 
-# SC probability defaults by circuit type (used when track_status data is absent)
 SC_PROB_DEFAULTS = {
-    'street':         0.72,   # street circuits historically ~72% chance of SC
-    'street_hybrid':  0.55,   # mixed
-    'permanent':      0.38,   # permanent circuits lower
+    'street':        0.72,
+    'street_hybrid': 0.55,
+    'permanent':     0.38,
 }
 
 # ── DB helpers ────────────────────────────────────────────────
@@ -163,7 +149,24 @@ results = query("""
       AND r.finish_position IS NOT NULL
     ORDER BY s.season, s.round, r.finish_position
 """)
-step(f"Results: {len(results)} rows")
+step(f"Race results: {len(results)} rows")
+
+# Sprint results — loaded separately, used for:
+#   - rolling_points (driver form includes sprint points)
+#   - sprint Elo updates (lower K factor)
+#   - sprint_points_last3 feature
+# Gracefully empty if sprint data not yet ingested.
+sprint_results = query("""
+    SELECT r.driver_code, r.team, r.grid_position, r.finish_position,
+           r.points, r.status,
+           s.season, s.round, s.gp_name, s.circuit, s.date
+    FROM results r
+    JOIN sessions s ON s.id = r.session_id
+    WHERE s.session_type = 'S'
+      AND r.finish_position IS NOT NULL
+    ORDER BY s.season, s.round, r.finish_position
+""")
+step(f"Sprint results: {len(sprint_results)} rows{' (none ingested yet — will degrade gracefully)' if len(sprint_results) == 0 else ''}")
 
 laps = query("""
     SELECT l.driver_code, l.lap_number, l.lap_time_ms,
@@ -223,50 +226,46 @@ step(f"Track status: {len(track_status)} rows")
 # ─────────────────────────────────────────────────────────────
 section("STEP 2: Cleaning data")
 
-# Clean laps: remove outliers (>20% above race median = SC laps, in-laps)
 lap_medians = laps.groupby(['season','round'])['lap_time_ms'].transform('median')
-laps_clean = laps[laps['lap_time_ms'] <= lap_medians * 1.2].copy()
-removed = len(laps) - len(laps_clean)
+laps_clean  = laps[laps['lap_time_ms'] <= lap_medians * 1.2].copy()
+removed     = len(laps) - len(laps_clean)
 step(f"Removed {removed} outlier laps ({removed/len(laps)*100:.1f}%)")
 
-# Clean results: handle "Lapped" as valid finish, "Retired" as DNF
-results['is_dnf'] = results['status'].isin(['Retired', 'Disqualified', 'Did not start'])
+results['is_dnf']    = results['status'].isin(['Retired', 'Disqualified', 'Did not start'])
 results['is_lapped'] = results['status'] == 'Lapped'
 step(f"DNF rate: {results['is_dnf'].mean()*100:.1f}%")
 
-# Fill missing grid positions with finish position (assume started from where finished if no data)
 results['grid_position'] = results['grid_position'].fillna(results['finish_position'])
 
-# Normalise team names (minor variations in FastF1)
 team_map = {
     'Red Bull Racing': 'Red Bull Racing',
-    'Kick Sauber': 'Kick Sauber',
-    'Haas F1 Team': 'Haas F1 Team',
-    'Racing Bulls': 'Racing Bulls',
+    'Kick Sauber':     'Kick Sauber',
+    'Haas F1 Team':    'Haas F1 Team',
+    'Racing Bulls':    'Racing Bulls',
 }
 results['team_clean'] = results['team'].map(team_map).fillna(results['team'])
+
+if not sprint_results.empty:
+    sprint_results['is_dnf'] = sprint_results['status'].isin(['Retired', 'Disqualified', 'Did not start'])
+    step(f"Sprint DNF rate: {sprint_results['is_dnf'].mean()*100:.1f}%")
 
 # ─────────────────────────────────────────────────────────────
 # STEP 3: Driver Elo ratings
 # ─────────────────────────────────────────────────────────────
 section("STEP 3: Computing Driver Elo ratings")
 
-# Initialise from 2025 performance (rough seed before updating)
-# We'll compute dynamically by replaying all races
-elo = {}
-elo_history = []  # track evolution
+elo         = {}
+elo_history = []
+circuit_elo = {}
 
 def expected_score(ra: float, rb: float) -> float:
     return 1 / (1 + 10 ** ((rb - ra) / 400))
 
 def update_elo(driver: str, finish_pos: int, n_drivers: int) -> float:
-    """Compute Elo score for a finish position."""
-    # Score = fraction of drivers beaten
     return 1 - (finish_pos - 1) / (n_drivers - 1)
 
-# Replay all races — global Elo + circuit-specific Elo
+# ── Race Elo ──────────────────────────────────────────────────
 race_results = results.sort_values(['season','round','finish_position'])
-circuit_elo  = {}   # {(driver, circuit): rating}
 
 for (season, round_), race in race_results.groupby(['season','round']):
     valid = race.dropna(subset=['finish_position'])
@@ -274,7 +273,7 @@ for (season, round_), race in race_results.groupby(['season','round']):
         continue
 
     circuit = race['circuit'].iloc[0] if 'circuit' in race.columns else 'Unknown'
-    n = len(valid)
+    n       = len(valid)
     drivers_in_race = valid['driver_code'].tolist()
 
     for d in drivers_in_race:
@@ -285,43 +284,85 @@ for (season, round_), race in race_results.groupby(['season','round']):
 
     field_avg_elo   = np.mean([elo[d] for d in drivers_in_race])
     circuit_avg_elo = np.mean([circuit_elo[(d, circuit)] for d in drivers_in_race])
-    k         = ELO_K_FACTOR * season_weight(season)
-    k_circuit = k * 0.5   # circuit Elo updates slower — patterns are stable
+    k               = ELO_K_FACTOR * season_weight(season)
+    k_circuit       = k * 0.5
 
     new_elos         = {}
     new_circuit_elos = {}
 
     for _, row in valid.iterrows():
-        driver = row['driver_code']
-        actual_score     = update_elo(driver, int(row['finish_position']), n)
-        exp_global       = expected_score(elo[driver], field_avg_elo)
-        exp_circuit      = expected_score(circuit_elo[(driver, circuit)], circuit_avg_elo)
+        driver       = row['driver_code']
+        actual_score = update_elo(driver, int(row['finish_position']), n)
+        exp_global   = expected_score(elo[driver], field_avg_elo)
+        exp_circuit  = expected_score(circuit_elo[(driver, circuit)], circuit_avg_elo)
+
         new_elos[driver] = elo[driver] + k * (actual_score - exp_global)
         new_circuit_elos[(driver, circuit)] = (
             circuit_elo[(driver, circuit)] + k_circuit * (actual_score - exp_circuit)
         )
         elo_history.append({
             'season': season, 'round': round_,
-            'driver_code': driver,
-            'circuit': circuit,
-            'elo_before': elo[driver],
-            'elo_after': new_elos[driver],
+            'driver_code': driver, 'circuit': circuit,
+            'elo_before':         elo[driver],
+            'elo_after':          new_elos[driver],
             'circuit_elo_before': circuit_elo[(driver, circuit)],
-            'circuit_elo_after': new_circuit_elos[(driver, circuit)],
-            'finish_position': row['finish_position'],
+            'circuit_elo_after':  new_circuit_elos[(driver, circuit)],
+            'finish_position':    row['finish_position'],
+            'session_type':       'R',
         })
 
     elo.update(new_elos)
     circuit_elo.update(new_circuit_elos)
 
-circuit_elo_export = {f"{d}|{c}": round(v, 1) for (d,c), v in circuit_elo.items()}
+# ── Sprint Elo update (lower K — sprint = ~17% of race distance) ──────────
+if not sprint_results.empty:
+    sprint_sorted = sprint_results.sort_values(['season', 'round', 'finish_position'])
+    n_sprint_races = 0
 
+    for (season, round_), race in sprint_sorted.groupby(['season', 'round']):
+        valid = race.dropna(subset=['finish_position'])
+        if valid.empty:
+            continue
+
+        n               = len(valid)
+        drivers_in_race = valid['driver_code'].tolist()
+
+        for d in drivers_in_race:
+            if d not in elo:
+                elo[d] = ELO_NEW_DRIVER
+
+        field_avg_elo = np.mean([elo[d] for d in drivers_in_race])
+        k_sprint      = ELO_K_FACTOR * season_weight(season) * SPRINT_ELO_K_SCALE
+
+        new_elos = {}
+        for _, row in valid.iterrows():
+            driver       = row['driver_code']
+            actual_score = update_elo(driver, int(row['finish_position']), n)
+            exp_global   = expected_score(elo[driver], field_avg_elo)
+            new_elos[driver] = elo[driver] + k_sprint * (actual_score - exp_global)
+            elo_history.append({
+                'season': season, 'round': round_,
+                'driver_code': driver, 'circuit': race['circuit'].iloc[0] if 'circuit' in race.columns else 'Unknown',
+                'elo_before':         elo[driver],
+                'elo_after':          new_elos[driver],
+                'circuit_elo_before': np.nan,
+                'circuit_elo_after':  np.nan,
+                'finish_position':    row['finish_position'],
+                'session_type':       'S',
+            })
+
+        elo.update(new_elos)
+        n_sprint_races += 1
+
+    step(f"Sprint Elo updated for {n_sprint_races} sprint races (K scale={SPRINT_ELO_K_SCALE})")
+else:
+    step("Sprint Elo skipped — no sprint data yet")
+
+circuit_elo_export = {f"{d}|{c}": round(v, 1) for (d,c), v in circuit_elo.items()}
 step(f"Elo computed for {len(elo)} drivers")
 
-# Print top 10
-elo_sorted = sorted(elo.items(), key=lambda x: x[1], reverse=True)
 print("\n  Top 10 drivers by Elo:")
-for i, (driver, rating) in enumerate(elo_sorted[:10]):
+for i, (driver, rating) in enumerate(sorted(elo.items(), key=lambda x: x[1], reverse=True)[:10]):
     print(f"    {i+1:2d}. {driver:6s}  {rating:.0f}")
 
 elo_df = pd.DataFrame(elo_history)
@@ -338,18 +379,12 @@ step(f"Saved elo_ratings.json + circuit_elo.json ({len(circuit_elo_export)} entr
 section("STEP 4: Constructor strength (blended 2025/2026)")
 
 def compute_constructor_strength(results_df: pd.DataFrame, season_2026: int) -> dict:
-    """
-    Returns dict: team -> weighted_avg_finish
-    Lower = stronger (avg finish position).
-    Blends all available seasons using SEASON_WEIGHTS.
-    2026 data grows in influence each race.
-    """
     strength = {}
     available_seasons = sorted(results_df['season'].unique())
 
     for team in results_df['team'].unique():
-        weighted_sum   = 0.0
-        total_weight   = 0.0
+        weighted_sum = 0.0
+        total_weight = 0.0
 
         for s in available_seasons:
             d = results_df[(results_df['team']==team) & (results_df['season']==s)]
@@ -360,26 +395,19 @@ def compute_constructor_strength(results_df: pd.DataFrame, season_2026: int) -> 
             n          = len(d)
             base_w     = season_weight(s)
 
-            # 2026: weight grows with each race (more data = more trust)
             if s == 2026:
                 n_2026_races = results_df[results_df['season']==2026]['round'].nunique()
                 base_w = min(n_2026_races / 10.0, 0.9)
 
-            # Apply regulation break discount for pre-2022 data
             if s < 2022:
                 base_w *= (1 - REG_BREAK_DISCOUNT)
 
-            # Scale by number of races (more races = more reliable)
-            race_scale = min(n / 20.0, 1.0)
-            w = base_w * race_scale
+            race_scale    = min(n / 20.0, 1.0)
+            w             = base_w * race_scale
+            weighted_sum += avg_finish * w
+            total_weight += w
 
-            weighted_sum  += avg_finish * w
-            total_weight  += w
-
-        if total_weight > 0:
-            strength[team] = round(weighted_sum / total_weight, 3)
-        else:
-            strength[team] = 10.5  # neutral prior
+        strength[team] = round(weighted_sum / total_weight, 3) if total_weight > 0 else 10.5
 
     return strength
 
@@ -399,37 +427,31 @@ step(f"Saved constructor_strength.json")
 # ─────────────────────────────────────────────────────────────
 section("STEP 5: Circuit profiles")
 
-# SC probability per circuit
 sc_events = track_status[track_status['status_type'].isin(['SC','VSC'])]
 races_per_circuit = results.groupby(['season','round','circuit']).size().reset_index(name='n')
-sc_count = sc_events.groupby(['season','round','circuit']).size().reset_index(name='sc_count')
-sc_by_circuit = races_per_circuit.merge(sc_count, on=['season','round','circuit'], how='left')
+sc_count          = sc_events.groupby(['season','round','circuit']).size().reset_index(name='sc_count')
+sc_by_circuit     = races_per_circuit.merge(sc_count, on=['season','round','circuit'], how='left')
 sc_by_circuit['had_sc'] = sc_by_circuit['sc_count'].notna()
 
 sc_prob_by_circuit_raw = sc_by_circuit.groupby('circuit')['had_sc'].mean().to_dict()
 
-# If track_status data is sparse (extras-only not run yet),
-# fall back to circuit-type defaults rather than 0.35 for everything
 total_sc_events = len(track_status)
 if total_sc_events < 10:
-    step(f"  ⚠ Only {total_sc_events} track status rows — using circuit-type SC defaults")
-    sc_prob_by_circuit = {}   # will use defaults per circuit type below
+    step(f"⚠ Only {total_sc_events} track status rows — using circuit-type SC defaults")
+    sc_prob_by_circuit = {}
 else:
     sc_prob_by_circuit = sc_prob_by_circuit_raw
 
-# Avg pit stops per circuit
 avg_pits = stints.groupby(['season','round']).apply(
     lambda x: x.groupby('driver_code')['compound'].count().mean() - 1
 ).reset_index(name='avg_pits')
 avg_pits_circuit = avg_pits.merge(
-    results[['season','round','circuit']].drop_duplicates(),
-    on=['season','round']
+    results[['season','round','circuit']].drop_duplicates(), on=['season','round']
 )
 avg_pits_by_circuit = avg_pits_circuit.groupby('circuit')['avg_pits'].mean().to_dict()
 
-# Tyre deg per circuit — quadratic fit captures non-linear cliff effect
-tyre_deg    = {}   # linear slope (backward compat for circuit profiles)
-tyre_deg_gp = {}   # quadratic coefficients per circuit+compound
+tyre_deg    = {}
+tyre_deg_gp = {}
 
 for circuit in results['circuit'].unique():
     rounds       = results[results['circuit']==circuit][['season','round']].drop_duplicates()
@@ -444,10 +466,10 @@ for circuit in results['circuit'].unique():
         y = comp_laps['lap_time_ms'].values
         if len(x) > 3:
             try:
-                coeffs = np.polyfit(x, y, 2)   # quadratic: a*x^2 + b*x + c
+                coeffs = np.polyfit(x, y, 2)
                 tyre_deg_gp[circuit][compound] = {
-                    'quad':   round(float(coeffs[0]), 5),   # acceleration term
-                    'linear': round(float(coeffs[1]), 3),   # base deg rate ms/lap
+                    'quad':   round(float(coeffs[0]), 5),
+                    'linear': round(float(coeffs[1]), 3),
                     'n_laps': len(comp_laps),
                 }
                 if compound == 'SOFT':
@@ -456,11 +478,6 @@ for circuit in results['circuit'].unique():
                 if compound == 'SOFT':
                     tyre_deg[circuit] = 80.0
 
-# Circuit overtaking index (positions changed / total positions available)
-# Note: this is a circuit-level aggregate across ALL historical races
-# It's computed once and treated as a stable circuit characteristic.
-# Minor leakage since each row's own positions_changed contributes ~1/N to the index
-# (acceptable for a circuit-level prior — impact per row is negligible)
 overtaking = results.copy()
 overtaking['positions_changed'] = abs(overtaking['grid_position'] - overtaking['finish_position'])
 overtaking_by_circuit = overtaking.groupby('circuit').apply(
@@ -468,22 +485,23 @@ overtaking_by_circuit = overtaking.groupby('circuit').apply(
 ).to_dict()
 
 circuit_profiles = {}
-all_circuits = set(list(sc_prob_by_circuit.keys()) +
-                   list(avg_pits_by_circuit.keys()) +
-                   list(overtaking_by_circuit.keys()))
+all_circuits = set(
+    list(sc_prob_by_circuit.keys()) +
+    list(avg_pits_by_circuit.keys()) +
+    list(overtaking_by_circuit.keys())
+)
 
 with open(OUT / 'tyre_deg_gp.json', 'w') as f:
     json.dump(tyre_deg_gp, f, indent=2)
 step(f"Saved tyre_deg_gp.json for {len(tyre_deg_gp)} circuits")
 
 for circuit in all_circuits:
-    ctype = CIRCUIT_TYPES.get(circuit, 'permanent')
-    # SC probability: use actual data if available, else circuit-type default
-    if circuit in sc_prob_by_circuit:
-        sc_prob = round(sc_prob_by_circuit[circuit], 3)
-    else:
-        sc_prob = SC_PROB_DEFAULTS.get(ctype, 0.40)
-
+    ctype   = CIRCUIT_TYPES.get(circuit, 'permanent')
+    sc_prob = (
+        round(sc_prob_by_circuit[circuit], 3)
+        if circuit in sc_prob_by_circuit
+        else SC_PROB_DEFAULTS.get(ctype, 0.40)
+    )
     circuit_profiles[circuit] = {
         'sc_probability':           sc_prob,
         'avg_pit_stops':            round(avg_pits_by_circuit.get(circuit, 2.0), 2),
@@ -496,7 +514,6 @@ for circuit in all_circuits:
 
 print(f"\n  Circuit profiles computed for {len(circuit_profiles)} circuits")
 if circuit_profiles:
-    # Show top 3 highest SC probability
     top_sc = sorted(circuit_profiles.items(), key=lambda x: x[1]['sc_probability'], reverse=True)[:3]
     print("  Highest SC probability circuits:")
     for c, p in top_sc:
@@ -506,17 +523,15 @@ with open(OUT / 'circuit_profiles.json', 'w') as f:
     json.dump(circuit_profiles, f, indent=2)
 step(f"Saved circuit_profiles.json")
 
-# ── DNF Survival Analysis (Weibull) ──────────────────────────────────────────
-# Models lap-by-lap DNF probability — shape < 1 = survive lap 1 gets safer
+# ── DNF Survival Analysis ─────────────────────────────────────
 dnf_survival = {}
 for driver in results['driver_code'].unique():
     d_res    = results[results['driver_code'] == driver]
     n_races  = len(d_res)
     n_dnf    = int(d_res['is_dnf'].sum())
     dnf_rate = n_dnf / max(n_races, 1)
-    # Weibull: shape=0.8 (F1 hazard decreasing after lap 1 chaos)
-    shape = 0.8
-    scale = 58 / ((-np.log(max(1 - dnf_rate, 0.01))) ** (1/shape))
+    shape    = 0.8
+    scale    = 58 / ((-np.log(max(1 - dnf_rate, 0.01))) ** (1/shape))
     dnf_survival[driver] = {
         'dnf_rate': round(dnf_rate, 4),
         'shape':    round(shape, 3),
@@ -526,7 +541,7 @@ for driver in results['driver_code'].unique():
 
 with open(OUT / 'dnf_survival.json', 'w') as f:
     json.dump(dnf_survival, f, indent=2)
-top_dnf = sorted(dnf_survival.items(), key=lambda x: x[1]['dnf_rate'], reverse=True)[:5]
+top_dnf     = sorted(dnf_survival.items(), key=lambda x: x[1]['dnf_rate'], reverse=True)[:5]
 top_dnf_str = ', '.join(f'{d}({v["dnf_rate"]*100:.0f}%)' for d, v in top_dnf)
 step(f"Saved dnf_survival.json — top risk: {top_dnf_str}")
 
@@ -538,40 +553,44 @@ section("STEP 6: Building feature matrix")
 features_rows = []
 
 for (season, round_), race in results.groupby(['season','round']):
-    circuit = race['circuit'].iloc[0]
-    gp_name = race['gp_name'].iloc[0]
-    cp      = circuit_profiles.get(circuit, {})
+    circuit  = race['circuit'].iloc[0]
+    gp_name  = race['gp_name'].iloc[0]
+    cp       = circuit_profiles.get(circuit, {})
     circuit_type = cp.get('circuit_type', 'permanent')
 
-    # Weather for this race (avg across race)
-    wx = weather[(weather['season']==season) & (weather['round']==round_)]
+    wx             = weather[(weather['season']==season) & (weather['round']==round_)]
     avg_air_temp   = wx['air_temp'].mean()   if not wx.empty else np.nan
     avg_track_temp = wx['track_temp'].mean() if not wx.empty else np.nan
     had_rain       = wx['rainfall'].any()    if not wx.empty else False
 
-    # Qualifying for this race
-    q = quali[(quali['season']==season) & (quali['round']==round_)]
-
-    # Lap data for this race
+    q         = quali[(quali['season']==season) & (quali['round']==round_)]
     race_laps = laps_clean[(laps_clean['season']==season) & (laps_clean['round']==round_)]
 
-    # Rolling window: last 3 races before this one
+    # Previous race results (no leakage — strictly before this round)
     prev = results[
         ((results['season'] < season) |
          ((results['season'] == season) & (results['round'] < round_)))
     ]
 
+    # Previous sprint results (strictly before this round)
+    if not sprint_results.empty:
+        sprint_prev = sprint_results[
+            ((sprint_results['season'] < season) |
+             ((sprint_results['season'] == season) & (sprint_results['round'] < round_)))
+        ]
+    else:
+        sprint_prev = pd.DataFrame(columns=sprint_results.columns)
+
     for _, row in race.iterrows():
         driver = row['driver_code']
         team   = row['team']
 
-        # ── Driver features ───────────────────────────────────
-        # Use Elo rating AT TIME OF RACE (before the race result is known)
-        # elo_history has elo_before = Elo going into that race
+        # ── Elo (at time of race — before result) ─────────────
         race_elo_row = elo_df[
             (elo_df['driver_code'] == driver) &
             (elo_df['season'] == season) &
-            (elo_df['round'] == round_)
+            (elo_df['round'] == round_) &
+            (elo_df['session_type'] == 'R')
         ]
         if not race_elo_row.empty:
             elo_rating         = float(race_elo_row.iloc[0]['elo_before'])
@@ -579,53 +598,67 @@ for (season, round_), race in results.groupby(['season','round']):
         else:
             elo_rating         = elo.get(driver, ELO_NEW_DRIVER)
             circuit_elo_rating = circuit_elo.get((driver, circuit), ELO_NEW_DRIVER)
-        # Blended Elo: 70% global + 30% circuit-specific
+
         blended_elo = 0.70 * elo_rating + 0.30 * circuit_elo_rating
 
-        # Rolling form: avg finish last 3 races
-        driver_prev = prev[prev['driver_code']==driver].sort_values(['season','round']).tail(3)
-        rolling_avg_finish  = driver_prev['finish_position'].mean() if len(driver_prev) > 0 else 10.5
-        rolling_dnf_rate    = driver_prev['is_dnf'].mean()          if len(driver_prev) > 0 else 0.12
-        rolling_points      = driver_prev['points'].sum()           if len(driver_prev) > 0 else 0.0
+        # ── Rolling form (race results) ───────────────────────
+        driver_prev          = prev[prev['driver_code']==driver].sort_values(['season','round']).tail(3)
+        rolling_avg_finish   = driver_prev['finish_position'].mean() if len(driver_prev) > 0 else 10.5
+        rolling_dnf_rate     = driver_prev['is_dnf'].mean()          if len(driver_prev) > 0 else 0.12
+        race_points_last3    = driver_prev['points'].sum()           if len(driver_prev) > 0 else 0.0
 
-        # Circuit affinity: driver's historical finish at this circuit
-        driver_circuit_hist = prev[
-            (prev['driver_code']==driver) & (prev['circuit']==circuit)
-        ]
-        circuit_affinity = driver_circuit_hist['finish_position'].mean() if not driver_circuit_hist.empty else rolling_avg_finish
+        # ── Sprint points (last 3 rounds that had a sprint) ───
+        driver_sprint_prev   = sprint_prev[sprint_prev['driver_code']==driver].sort_values(['season','round']).tail(3)
+        sprint_points_last3  = driver_sprint_prev['points'].sum() if not driver_sprint_prev.empty else 0.0
 
-        # ── Team features ─────────────────────────────────────
-        # Use team strength computed from races BEFORE this one (no leakage)
+        # Combined rolling points = race + sprint
+        rolling_points       = race_points_last3 + sprint_points_last3
+
+        # ── Circuit affinity ──────────────────────────────────
+        driver_circuit_hist  = prev[(prev['driver_code']==driver) & (prev['circuit']==circuit)]
+        circuit_affinity     = driver_circuit_hist['finish_position'].mean() if not driver_circuit_hist.empty else rolling_avg_finish
+
+        # ── Team strength ─────────────────────────────────────
         team_prev = prev[prev['team']==team]
         if not team_prev.empty:
-            # Weighted avg: recent races count more
-            team_finishes = team_prev.sort_values(['season','round']).tail(10)['finish_position']
+            team_finishes      = team_prev.sort_values(['season','round']).tail(10)['finish_position']
             team_strength_live = float(team_finishes.mean()) if not team_finishes.empty else 10.5
         else:
-            # No prior data — fall back to global constructor prior
             team_strength_live = constructor_strength.get(team, 10.5)
-        team_strength   = team_strength_live
+
         pu_manufacturer = PU_MANUFACTURERS.get(team, 'Unknown')
         pu_strength     = PU_PRIOR.get(pu_manufacturer, 0.5)
 
-        # ── Qualifying features ───────────────────────────────
+        # ── Qualifying ────────────────────────────────────────
         q_row = q[q['driver_code']==driver]
         if not q_row.empty:
-            qr           = q_row.iloc[0]
-            grid_position    = qr['grid_position']   if pd.notna(qr['grid_position']) else row['grid_position']
-            gap_to_pole_ms   = qr['gap_to_pole_ms']  if pd.notna(qr['gap_to_pole_ms']) else np.nan
-            quali_compound   = qr['tyre_compound']   if pd.notna(qr.get('tyre_compound')) else 'SOFT'
-            best_quali_ms    = qr['best_ms']         if pd.notna(qr.get('best_ms')) else np.nan
+            qr             = q_row.iloc[0]
+            grid_position  = qr['grid_position']  if pd.notna(qr['grid_position'])  else row['grid_position']
+            gap_to_pole_ms = qr['gap_to_pole_ms'] if pd.notna(qr['gap_to_pole_ms']) else np.nan
+            quali_compound = qr['tyre_compound']  if pd.notna(qr.get('tyre_compound')) else 'SOFT'
+            best_quali_ms  = qr['best_ms']        if pd.notna(qr.get('best_ms'))      else np.nan
         else:
             grid_position  = row['grid_position']
             gap_to_pole_ms = np.nan
             quali_compound = 'SOFT'
             best_quali_ms  = np.nan
 
-        # ── Race lap features (for model evaluation) ──────────
-        driver_laps = race_laps[race_laps['driver_code']==driver]
-        median_lap_ms = driver_laps['lap_time_ms'].median() if not driver_laps.empty else np.nan
-        lap_consistency = driver_laps['lap_time_ms'].std()  if len(driver_laps) > 3 else np.nan
+        # Q1→Q3 and Q2→Q3 improvement (ms) — negative = got faster (better)
+        # Drivers who consistently improve from Q1→Q3 show real pace extraction
+        if not q_row.empty:
+            q1ms     = float(qr['q1_ms']) if pd.notna(qr.get('q1_ms')) else None
+            q2ms     = float(qr['q2_ms']) if pd.notna(qr.get('q2_ms')) else None
+            q3ms     = float(qr['q3_ms']) if pd.notna(qr.get('q3_ms')) else None
+            q1_to_q3 = (q3ms - q1ms) if q1ms and q3ms else np.nan
+            q2_to_q3 = (q3ms - q2ms) if q2ms and q3ms else np.nan
+        else:
+            q1_to_q3 = np.nan
+            q2_to_q3 = np.nan
+
+        # ── Race lap features ─────────────────────────────────
+        driver_laps     = race_laps[race_laps['driver_code']==driver]
+        median_lap_ms   = driver_laps['lap_time_ms'].median() if not driver_laps.empty else np.nan
+        lap_consistency = driver_laps['lap_time_ms'].std()    if len(driver_laps) > 3  else np.nan
 
         # ── Tyre strategy ─────────────────────────────────────
         race_stints = stints[
@@ -637,86 +670,84 @@ for (season, round_), race in results.groupby(['season','round']):
         used_soft = (race_stints['compound']=='SOFT').any() if not race_stints.empty else False
 
         # ── Circuit features ──────────────────────────────────
-        ctype              = cp.get('circuit_type', 'permanent')
-        sc_probability     = cp.get('sc_probability', SC_PROB_DEFAULTS.get(ctype, 0.40))
-        avg_pit_stops      = cp.get('avg_pit_stops', 2.0)
-        overtaking_index   = cp.get('overtaking_index', 0.3)
-        arw_effectiveness  = cp.get('arw_effectiveness', 0.255)
-        tyre_deg_rate      = cp.get('tyre_deg_soft_ms_per_lap', 80.0)
-        pit_lane_delta     = cp.get('pit_lane_delta_sec', PIT_LANE_DELTA.get(circuit, PIT_LANE_DELTA['default']))
-        pit_crew_speed     = PIT_CREW_SPEED.get(team, PIT_CREW_SPEED['default'])
+        ctype             = cp.get('circuit_type', 'permanent')
+        sc_probability    = cp.get('sc_probability', SC_PROB_DEFAULTS.get(ctype, 0.40))
+        avg_pit_stops     = cp.get('avg_pit_stops', 2.0)
+        overtaking_index  = cp.get('overtaking_index', 0.3)
+        arw_effectiveness = cp.get('arw_effectiveness', 0.255)
+        tyre_deg_rate     = cp.get('tyre_deg_soft_ms_per_lap', 80.0)
+        pit_lane_delta    = cp.get('pit_lane_delta_sec', PIT_LANE_DELTA.get(circuit, PIT_LANE_DELTA['default']))
+        pit_crew_speed    = PIT_CREW_SPEED.get(team, PIT_CREW_SPEED['default'])
 
-        # Lap 1 incident risk by grid band
         grid_pos_int = int(grid_position) if pd.notna(grid_position) else 10
-        lap1_risk = (
-            0.01 if grid_pos_int <= 3 else
+        lap1_risk    = (
+            0.01 if grid_pos_int <= 3  else
             0.03 if grid_pos_int <= 10 else
             0.06
         )
 
-        # ── ERS circuit adjustment (2026) ─────────────────────
-        # Low-speed circuits benefit more from 350kW MGU-K
         ers_circuit_factor = {
-            'street':         0.75,
-            'street_hybrid':  0.60,
-            'permanent':      0.45,
+            'street':        0.75,
+            'street_hybrid': 0.60,
+            'permanent':     0.45,
         }.get(circuit_type, 0.50)
 
-        # Effective PU strength adjusted for circuit type
         pu_strength_adjusted = pu_strength * (1 - ers_circuit_factor * 0.15)
 
         features_rows.append({
             # Identifiers
-            'season':            season,
-            'round':             round_,
-            'gp_name':           gp_name,
-            'circuit':           circuit,
-            'driver_code':       driver,
-            'team':              team,
+            'season':          season,
+            'round':           round_,
+            'gp_name':         gp_name,
+            'circuit':         circuit,
+            'driver_code':     driver,
+            'team':            team,
             # Target
-            'finish_position':   row['finish_position'],
-            'is_dnf':            int(row['is_dnf']),
-            'points':            row['points'],
+            'finish_position': row['finish_position'],
+            'is_dnf':          int(row['is_dnf']),
+            'points':          row['points'],
             # Driver features
-            'elo_rating':            round(blended_elo, 1),
-            'circuit_elo_rating':    round(circuit_elo_rating, 1),
-            'rolling_avg_finish':    round(rolling_avg_finish, 2),
-            'rolling_dnf_rate':      round(rolling_dnf_rate, 3),
-            'rolling_points_last3':  round(rolling_points, 1),
-            'circuit_affinity':      round(circuit_affinity, 2),
+            'elo_rating':              round(blended_elo, 1),
+            'circuit_elo_rating':      round(circuit_elo_rating, 1),
+            'rolling_avg_finish':      round(rolling_avg_finish, 2),
+            'rolling_dnf_rate':        round(rolling_dnf_rate, 3),
+            'rolling_points_last3':    round(rolling_points, 1),       # race + sprint
+            'sprint_points_last3':     round(sprint_points_last3, 1),  # sprint only
+            'circuit_affinity':        round(circuit_affinity, 2),
             # Team features
-            'team_strength':         round(team_strength, 3),
-            'pu_manufacturer':       pu_manufacturer,
-            'pu_strength':           round(pu_strength, 3),
-            'pu_strength_adjusted':  round(pu_strength_adjusted, 3),
+            'team_strength':           round(team_strength_live, 3),
+            'pu_manufacturer':         pu_manufacturer,
+            'pu_strength':             round(pu_strength, 3),
+            'pu_strength_adjusted':    round(pu_strength_adjusted, 3),
             # Qualifying features
-            'grid_position':         grid_position,
-            'gap_to_pole_ms':        round(gap_to_pole_ms, 0) if pd.notna(gap_to_pole_ms) else np.nan,
-            'gap_to_pole_sec':       round(gap_to_pole_ms/1000, 3) if pd.notna(gap_to_pole_ms) else np.nan,
-            'quali_compound':        quali_compound,
-            # Race execution features (available after race, used for training)
-            'median_lap_ms':         round(median_lap_ms, 0) if pd.notna(median_lap_ms) else np.nan,
-            'lap_consistency_ms':    round(lap_consistency, 0) if pd.notna(lap_consistency) else np.nan,
-            'n_pits':                n_pits,
-            'used_soft':             int(used_soft),
+            'grid_position':           grid_position,
+            'gap_to_pole_ms':          round(gap_to_pole_ms, 0) if pd.notna(gap_to_pole_ms) else np.nan,
+            'gap_to_pole_sec':         round(gap_to_pole_ms/1000, 3) if pd.notna(gap_to_pole_ms) else np.nan,
+            'quali_compound':          quali_compound,
+            'q1_to_q3_ms':             round(q1_to_q3, 0) if pd.notna(q1_to_q3) else np.nan,
+            'q2_to_q3_ms':             round(q2_to_q3, 0) if pd.notna(q2_to_q3) else np.nan,
+            # Race execution (available after race, used for training)
+            'median_lap_ms':           round(median_lap_ms, 0) if pd.notna(median_lap_ms) else np.nan,
+            'lap_consistency_ms':      round(lap_consistency, 0) if pd.notna(lap_consistency) else np.nan,
+            'n_pits':                  n_pits,
+            'used_soft':               int(used_soft),
             # Circuit features
-            'circuit_type':          circuit_type,
-            'sc_probability':        sc_probability,
-            'avg_pit_stops_circuit': avg_pit_stops,
-            'overtaking_index':      overtaking_index,
-            'arw_effectiveness':     arw_effectiveness,
-            'tyre_deg_rate':         tyre_deg_rate,
-            'ers_circuit_factor':    ers_circuit_factor,
-            # New simulation features
-            'pit_lane_delta_sec':    pit_lane_delta,
-            'pit_crew_speed':        pit_crew_speed,
-            'lap1_risk':             lap1_risk,
-            # Season weight (how much to trust this row for 2026 prediction)
-            'season_weight':         season_weight(season),
-            # Weather features
-            'air_temp':              round(avg_air_temp, 1)   if pd.notna(avg_air_temp)   else np.nan,
-            'track_temp':            round(avg_track_temp, 1) if pd.notna(avg_track_temp) else np.nan,
-            'had_rain':              int(had_rain),
+            'circuit_type':            circuit_type,
+            'sc_probability':          sc_probability,
+            'avg_pit_stops_circuit':   avg_pit_stops,
+            'overtaking_index':        overtaking_index,
+            'arw_effectiveness':       arw_effectiveness,
+            'tyre_deg_rate':           tyre_deg_rate,
+            'ers_circuit_factor':      ers_circuit_factor,
+            'pit_lane_delta_sec':      pit_lane_delta,
+            'pit_crew_speed':          pit_crew_speed,
+            'lap1_risk':               lap1_risk,
+            # Season weight
+            'season_weight':           season_weight(season),
+            # Weather
+            'air_temp':                round(avg_air_temp, 1)   if pd.notna(avg_air_temp)   else np.nan,
+            'track_temp':              round(avg_track_temp, 1) if pd.notna(avg_track_temp) else np.nan,
+            'had_rain':                int(had_rain),
         })
 
 features = pd.DataFrame(features_rows)
@@ -734,18 +765,23 @@ for col in features.columns:
     if null_counts[col] > 0:
         print(f"    {col:35s}  {null_counts[col]:4d}  ({null_pcts[col]:.1f}%)")
 
-print("\n  Feature correlations with finish_position:")
 numeric_features = [
     'elo_rating', 'grid_position', 'gap_to_pole_sec',
     'rolling_avg_finish', 'team_strength', 'pu_strength_adjusted',
-    'circuit_affinity', 'rolling_dnf_rate',
+    'circuit_affinity', 'rolling_dnf_rate', 'sprint_points_last3',
+    'q1_to_q3_ms', 'q2_to_q3_ms',
 ]
+print("\n  Feature correlations with finish_position:")
 target = 'finish_position'
 for col in numeric_features:
     d = features.dropna(subset=[col, target])
     if len(d) > 10:
         r = d[[col, target]].corr().iloc[0, 1]
-        bar = '█' * int(abs(r) * 20)
+        if pd.isna(r):
+            pct_valid = d[col].notna().mean() * 100
+            print(f"    {col:35s}  NaN ({pct_valid:.0f}% non-null — insufficient variance)")
+            continue
+        bar       = '█' * int(abs(r) * 20)
         direction = '+' if r > 0 else '-'
         print(f"    {col:35s}  {direction}{abs(r):.4f}  {bar}")
 
@@ -753,21 +789,20 @@ print("\n  Feature statistics:")
 print(features[numeric_features].describe().round(2).to_string())
 
 # ─────────────────────────────────────────────────────────────
-# STEP 8: Train/test split info
+# STEP 8: Train/test split
 # ─────────────────────────────────────────────────────────────
 section("STEP 8: Train / Test split")
 
-# Train: 2025 data
-# Test:  2026 data (all of it — it's too small to hold back)
-train = features[features['season'] != 2026]   # all historical seasons
+train = features[features['season'] != 2026]
 test  = features[features['season'] == 2026]
 
 print(f"\n  Train ({train['season'].min()}-{train['season'].max()}): {len(train)} rows  ({train['round'].nunique()} races)")
 print(f"  Test  (2026): {len(test)} rows  ({test['round'].nunique()} races)")
 print(f"\n  ⚠️  Only {test['round'].nunique()} 2026 races — test set is tiny.")
 print(f"  Model will improve significantly as 2026 data accumulates.")
-print(f"\n  Train features available (non-null >80%):")
+
 train_coverage = (train[numeric_features].notna().mean() * 100).round(1)
+print(f"\n  Train features available (non-null >80%):")
 for f, pct in train_coverage.items():
     status = '✓' if pct >= 80 else '⚠'
     print(f"    {status} {f:35s}  {pct:.0f}%")
@@ -787,33 +822,34 @@ train.to_parquet(OUT / 'train.parquet', index=False)
 test.to_parquet(OUT / 'test.parquet', index=False)
 step(f"Saved train.parquet + test.parquet")
 
-# Feature list for model
 prediction_features = [
-    # Pre-race features only (what we know BEFORE the race)
     'elo_rating', 'grid_position', 'gap_to_pole_sec',
     'rolling_avg_finish', 'rolling_dnf_rate',
+    'rolling_points_last3',    # now includes sprint
+    'sprint_points_last3',     # sprint-only signal
     'team_strength', 'pu_strength_adjusted',
     'circuit_affinity', 'sc_probability',
     'overtaking_index', 'arw_effectiveness',
     'tyre_deg_rate', 'ers_circuit_factor',
-    # Weather — available from forecast
     'track_temp', 'had_rain',
-    # Simulation features
     'pit_lane_delta_sec', 'pit_crew_speed', 'lap1_risk',
+    'q1_to_q3_ms', 'q2_to_q3_ms',   # Q-session improvement signals
 ]
 
 available_train_seasons = sorted(features[features['season']!=2026]['season'].unique().tolist())
 feature_meta = {
     'prediction_features': prediction_features,
-    'target': 'finish_position',
-    'train_seasons': available_train_seasons,
-    'test_seasons': [2026],
-    'total_rows': len(features),
-    'train_rows': len(train),
-    'test_rows': len(test),
-    'reg_break_discount': REG_BREAK_DISCOUNT,
-    'elo_k_factor': ELO_K_FACTOR,
-    'season_weights': SEASON_WEIGHTS,
+    'target':              'finish_position',
+    'train_seasons':       available_train_seasons,
+    'test_seasons':        [2026],
+    'total_rows':          len(features),
+    'train_rows':          len(train),
+    'test_rows':           len(test),
+    'reg_break_discount':  REG_BREAK_DISCOUNT,
+    'elo_k_factor':        ELO_K_FACTOR,
+    'sprint_elo_k_scale':  SPRINT_ELO_K_SCALE,
+    'season_weights':      SEASON_WEIGHTS,
+    'sprint_races_found':  len(sprint_results['round'].unique()) if not sprint_results.empty else 0,
 }
 with open(OUT / 'feature_meta.json', 'w') as f:
     json.dump(feature_meta, f, indent=2)
