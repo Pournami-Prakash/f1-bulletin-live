@@ -404,7 +404,7 @@ export default function HomePage() {
       )}
 
       <div suppressHydrationWarning style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'relative', zIndex: 3 }}>
-        <Header /><Ticker />
+        <Header onReset={() => { sessionStorage.removeItem('f1b_booted'); setBooted(false) }} /><Ticker />
 
         {/* ═══════════════ HERO ═══════════════ */}
         <div ref={heroRef} style={{ position: 'relative', minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
