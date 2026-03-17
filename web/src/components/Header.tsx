@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-export default function Header() {
+export default function Header({ onReset }: { onReset?: () => void }) {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
   const pathname = usePathname()
 
@@ -25,13 +25,12 @@ export default function Header() {
   // }
 
   const navItems = [
-    { href: '/',          label: 'HOME' },
-    { href: '/intelligence',  label: 'INTELLIGENCE' },
-    { href: '/analytics', label: 'ANALYTICS' },
-    { href: '/predictions',  label: 'PREDICTION' },
-    { href: '/standings', label: 'STANDINGS' },
-    { href: '/guide',     label: 'GUIDE' },
-    
+    { href: '/',             label: 'HOME'         },
+    { href: '/intelligence', label: 'INTELLIGENCE' },
+    { href: '/analytics',    label: 'ANALYTICS'    },
+    { href: '/predictions',  label: 'PREDICTION'   },
+    { href: '/standings',    label: 'STANDINGS'    },
+    { href: '/guide',        label: 'GUIDE'        },
   ]
 
   return (
@@ -46,7 +45,7 @@ export default function Header() {
       transition: 'background var(--tr)',
     }}>
       {/* Logo */}
-      <Link href="/" style={{
+      <Link href="/" onClick={onReset} style={{
         fontFamily: 'var(--font-bebas)',
         fontSize: 22, letterSpacing: '.14em',
         color: 'var(--t1)', textDecoration: 'none',
