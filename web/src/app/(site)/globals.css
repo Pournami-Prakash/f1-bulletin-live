@@ -207,14 +207,6 @@ body {
   100% { background-position: -200% 0; }
 }
 
-/* ── RESPONSIVE ── */
-@media (max-width: 768px) {
-  :root { --gutter: 16px; }
-}
-
-/* ── RESPONSIVE ── */
-/* Add these rules at the bottom of your globals.css, replacing the existing @media block */
-
 /* ── TABLET (max 1024px) ── */
 @media (max-width: 1024px) {
   :root {
@@ -232,6 +224,15 @@ body {
 @media (max-width: 768px) {
   :root { --gutter: 16px; }
 
+  /* ── Header: center logo + live pill + hamburger ── */
+  header {
+    justify-content: center !important;
+    gap: 12px !important;
+  }
+  .f1-hamburger {
+    margin-left: 0 !important;
+  }
+
   /* ── Global page padding ── */
   main {
     padding-left: var(--gutter) !important;
@@ -244,7 +245,7 @@ body {
     font-size: clamp(28px, 7vw, 40px) !important;
   }
 
-  /* ── Ticker: hide on very small screens ── */
+  /* ── Ticker: hide on mobile ── */
   .ticker { display: none; }
 
   /* ── Eyebrow ── */
@@ -312,7 +313,6 @@ body {
   }
 
   /* ── Overflow protection ── */
-  /* REMOVED: * { max-width: 100% } — this breaks layouts */
   body { overflow-x: hidden; }
   img { max-width: 100%; }
 
