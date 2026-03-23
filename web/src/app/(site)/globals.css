@@ -251,83 +251,60 @@ body {
   .eyebrow span { font-size: 9px; letter-spacing: .1em; }
 
   /* ── Analytics page ── */
-  /* Race card timeline — horizontal scroll */
   .race-timeline {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     padding-bottom: 8px;
   }
-
-  /* Tab bar — scrollable */
   .tab-bar {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     white-space: nowrap;
   }
-
-  /* Driver selector chips — wrap */
   .driver-chips {
     flex-wrap: wrap !important;
     gap: 4px !important;
   }
-
-  /* SVG charts — allow horizontal scroll */
   .chart-scroll {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
 
   /* ── Standings page ── */
-  /* Hide team column on mobile standings table */
   .standings-team-col { display: none !important; }
-
-  /* Season selector — wrap tightly */
   .season-btns {
     justify-content: center !important;
     flex-wrap: wrap !important;
   }
 
   /* ── Predictions page ── */
-  /* Podium — already handled by pred-podium-order class */
-
-  /* Confidence card — full width on mobile */
   .confidence-card {
     width: 100% !important;
     min-width: unset !important;
   }
-
-  /* Model notes grid — single column */
   .model-notes-grid {
     grid-template-columns: 1fr !important;
   }
-
-  /* Championship strip — single column */
   .pred-champ-strip {
     flex-direction: column !important;
   }
 
   /* ── Shared card grids ── */
-  /* Any 4-column stat grid → 2x2 */
   .stat-grid-4 {
     grid-template-columns: repeat(2, 1fr) !important;
   }
-
-  /* Any 3-column grid → single column */
   .stat-grid-3 {
     grid-template-columns: 1fr !important;
   }
 
-  /* ── Tables: hide less important columns ── */
+  /* ── Tables ── */
   .hide-mobile { display: none !important; }
 
-  /* ── Typography overrides for inline bebas headings ── */
-  /* Targets clamp headings on analytics/predictions/standings */
+  /* ── Typography overrides ── */
   [style*="clamp(44px"] { font-size: clamp(36px, 8vw, 60px) !important; }
   [style*="clamp(38px"] { font-size: clamp(32px, 8vw, 56px) !important; }
   [style*="clamp(52px"] { font-size: clamp(40px, 9vw, 70px) !important; }
 
-  /* ── Inline flex rows that need to stack ── */
-  /* Space-between header rows with season/confidence cards */
   .hero-row {
     flex-direction: column !important;
     align-items: center !important;
@@ -335,9 +312,9 @@ body {
   }
 
   /* ── Overflow protection ── */
+  /* REMOVED: * { max-width: 100% } — this breaks layouts */
   body { overflow-x: hidden; }
-  * { max-width: 100%; }
-  img, svg { max-width: 100%; }
+  img { max-width: 100%; }
 
   /* ── Scrollable data tables ── */
   .table-scroll {
@@ -351,20 +328,16 @@ body {
 @media (max-width: 480px) {
   :root { --gutter: 12px; }
 
-  /* Bebas headings — tighten further */
   [style*="clamp(44px"] { font-size: 32px !important; }
   [style*="clamp(38px"] { font-size: 28px !important; }
   [style*="clamp(52px"] { font-size: 36px !important; }
 
-  /* Ticker hidden */
   .ticker { display: none; }
 
-  /* Accuracy card — 2x2 grid */
   .accuracy-grid {
     grid-template-columns: repeat(2, 1fr) !important;
   }
 
-  /* Podium cards stack fully */
   .pred-podium-order {
     flex-direction: column !important;
     gap: 12px !important;
@@ -374,8 +347,5 @@ body {
     width: 100% !important;
   }
 
-  /* Full field table — mobile row already handled by pred-row-mobile class */
-
-  /* Championship table — hide projected pace column */
   .champ-pace-col { display: none !important; }
 }
