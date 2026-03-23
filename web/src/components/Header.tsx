@@ -37,14 +37,12 @@ export default function Header({ onReset }: { onReset?: () => void }) {
     <>
       <style>{`
         .f1-nav { display: flex; gap: 0; margin-left: 8px; }
-        .f1-hamburger { display: none; margin-left: auto; background: transparent; border: 1px solid var(--b1); width: 36px; height: 36px; border-radius: 8px; cursor: pointer; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 8px 9px; flex-shrink: 0; }
-        .f1-mobile-overlay { display: none; }
-        .f1-mobile-menu { display: none; }
+        .f1-hamburger { display: none; }
+        .f1-dropdown { display: none; }
         @media (max-width: 768px) {
           .f1-nav { display: none !important; }
           .f1-hamburger { display: flex !important; }
-          .f1-mobile-overlay { display: block !important; }
-          .f1-mobile-menu { display: flex !important; }
+          .f1-dropdown { display: block !important; }
         }
       `}</style>
 
@@ -102,130 +100,106 @@ export default function Header({ onReset }: { onReset?: () => void }) {
           })}
         </nav>
 
-        {/* Hamburger — mobile only via CSS */}
-        <button
+        {/* Hamburger + dropdown — mobile only */}
+        <div
           className="f1-hamburger"
-          onClick={() => setMenuOpen(o => !o)}
-          aria-label="Toggle menu"
-        >
-          <span style={{
-            display: 'block', width: '100%', height: 1.5,
-            background: 'var(--t1)', transition: 'all .2s',
-            transform: menuOpen ? 'rotate(45deg) translate(0px, 6.5px)' : 'none',
-          }} />
-          <span style={{
-            display: 'block', width: '100%', height: 1.5,
-            background: menuOpen ? 'transparent' : 'var(--t1)',
-            transition: 'all .2s',
-          }} />
-          <span style={{
-            display: 'block', width: '60%', height: 1.5,
-            background: 'var(--t1)', transition: 'all .2s',
-            alignSelf: 'flex-start',
-            transform: menuOpen ? 'rotate(-45deg) translate(1px, -6.5px)' : 'none',
-          }} />
-        </button>
-      </header>
-
-      {/* Backdrop — mobile only via CSS */}
-      {menuOpen && (
-        <div
-          className="f1-mobile-overlay"
-          onClick={() => setMenuOpen(false)}
           style={{
-            position: 'fixed', inset: 0, zIndex: 98,
-            background: 'rgba(0,0,0,.7)',
-            backdropFilter: 'blur(4px)',
-          }}
-        />
-      )}
-
-      {/* Mobile menu — centered vertically in viewport */}
-      {menuOpen && (
-        <div
-          className="f1-mobile-menu"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 99,
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            pointerEvents: 'none',
+            marginLeft: 'auto',
+            position: 'relative',
+            flexShrink: 0,
           }}
         >
-          <div style={{
-            width: '80%',
-            maxWidth: 320,
-            background: 'rgba(12,12,12,.98)',
-            border: '1px solid var(--b1)',
-            borderRadius: 16,
-            overflow: 'hidden',
-            pointerEvents: 'auto',
-            boxShadow: '0 24px 64px rgba(0,0,0,.6)',
-          }}>
-            {/* Header */}
-            <div style={{
-              padding: '14px 20px',
-              borderBottom: '1px solid var(--b1)',
-              display: 'flex', alignItems: 'center',
-              justifyContent: 'space-between',
-            }}>
-              <span style={{
-                fontSize: 8, letterSpacing: '.2em',
-                color: 'var(--t3)', fontFamily: 'var(--font-mono)',
-              }}>
-                NAVIGATION
-              </span>
-              <button
-                onClick={() => setMenuOpen(false)}
-                style={{
-                  background: 'transparent', border: 'none',
-                  color: 'var(--t3)', cursor: 'pointer',
-                  fontSize: 18, lineHeight: 1, padding: 0,
-                }}
-              >
-                ×
-              </button>
-            </div>
+          <button
+            onClick={() => setMenuOpen(o => !o)}
+            aria-label="Toggle menu"
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--b1)',
+              width: 36, height: 36,
+              borderRadius: 8,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'column',
+              gap: 5,
+              padding: '8px 9px',
+            }}
+          >
+            <span style={{
+              display: 'block', width: '100%', height: 1.5,
+              background: 'var(--t1)', transition: 'all .2s',
+              transform: menuOpen ? 'rotate(45deg) translate(0px, 6.5px)' : 'none',
+            }} />
+            <span style={{
+              display: 'block', width: '100%', height: 1.5,
+              background: menuOpen ? 'transparent' : 'var(--t1)',
+              transition: 'all .2s',
+            }} />
+            <span style={{
+              display: 'block', width: '60%', height: 1.5,
+              background: 'var(--t1)', transition: 'all .2s',
+              alignSelf: 'flex-start',
+              transform: menuOpen ? 'rotate(-45deg) translate(1px, -6.5px)' : 'none',
+            }} />
+          </button>
 
-            {/* Nav items */}
-            {navItems.map((item, i) => {
-              const active = pathname === item.href
-              return (
-                <Link key={item.href} href={item.href} style={{
-                  display: 'flex', alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '15px 20px',
-                  borderBottom: i < navItems.length - 1
-                    ? '1px solid rgba(255,255,255,.05)' : 'none',
-                  fontSize: 13, letterSpacing: '.14em',
-                  color: active ? 'var(--t1)' : 'var(--t2)',
-                  textDecoration: 'none',
-                  background: active ? 'rgba(220,0,0,.06)' : 'transparent',
-                  fontFamily: 'var(--font-mono)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* Dropdown — anchored below hamburger */}
+          {menuOpen && (
+            <div
+              className="f1-dropdown"
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 8px)',
+                right: 0,
+                width: 200,
+                background: 'rgba(10,10,10,.98)',
+                border: '1px solid var(--b1)',
+                borderRadius: 10,
+                overflow: 'hidden',
+                boxShadow: '0 16px 40px rgba(0,0,0,.6)',
+              }}
+            >
+              {navItems.map((item, i) => {
+                const active = pathname === item.href
+                return (
+                  <Link key={item.href} href={item.href} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '13px 16px',
+                    borderBottom: i < navItems.length - 1
+                      ? '1px solid rgba(255,255,255,.05)' : 'none',
+                    fontSize: 11, letterSpacing: '.12em',
+                    color: active ? 'var(--t1)' : 'var(--t2)',
+                    textDecoration: 'none',
+                    background: active ? 'rgba(220,0,0,.06)' : 'transparent',
+                    fontFamily: 'var(--font-mono)',
+                  }}>
                     <div style={{
-                      width: 3, height: 16, borderRadius: 2, flexShrink: 0,
+                      width: 3, height: 14, borderRadius: 2, flexShrink: 0,
                       background: active ? 'var(--red)' : 'rgba(255,255,255,.1)',
                     }} />
                     {item.label}
-                  </div>
-                  {active && (
-                    <span style={{
-                      fontSize: 7, color: 'var(--red)',
-                      letterSpacing: '.14em', fontFamily: 'var(--font-mono)',
-                    }}>
-                      ●
-                    </span>
-                  )}
-                </Link>
-              )
-            })}
-          </div>
+                    {active && (
+                      <span style={{ marginLeft: 'auto', color: 'var(--red)', fontSize: 8 }}>●</span>
+                    )}
+                  </Link>
+                )
+              })}
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Backdrop to close menu */}
+        {menuOpen && (
+          <div
+            onClick={() => setMenuOpen(false)}
+            style={{
+              position: 'fixed', inset: 0,
+              zIndex: -1,
+            }}
+          />
+        )}
+      </header>
     </>
   )
 }
