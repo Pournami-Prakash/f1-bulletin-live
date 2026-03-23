@@ -6,19 +6,11 @@ import { usePathname } from 'next/navigation'
 
 export default function Header({ onReset }: { onReset?: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
   const pathname = usePathname()
 
   useEffect(() => {
     const saved = localStorage.getItem('f1-theme') as 'dark' | 'light' | null
     if (saved) document.documentElement.setAttribute('data-theme', saved)
-  }, [])
-
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth <= 768)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
   }, [])
 
   useEffect(() => { setMenuOpen(false) }, [pathname])
@@ -39,6 +31,15 @@ export default function Header({ onReset }: { onReset?: () => void }) {
 
   return (
     <>
+      <style>{`
+        .f1-nav { display: flex; gap: 0; margin-left: 8px; }
+        .f1-hamburger { display: none; margin-left: auto; }
+        @media (max-width: 768px) {
+          .f1-nav { display: none !important; }
+          .f1-hamburger { display: flex !important; }
+        }
+      `}</style>
+
       <header style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
         height: 'var(--header-h)',
@@ -47,8 +48,8 @@ export default function Header({ onReset }: { onReset?: () => void }) {
         background: 'rgba(10,10,10,.96)',
         backdropFilter: 'blur(16px)',
         borderBottom: '1px solid var(--b1)',
-        transition: 'background var(--tr)',
       }}>
+        {/* Logo */}
         <Link href="/" onClick={onReset} style={{
           fontFamily: 'var(--font-bebas)',
           fontSize: 22, letterSpacing: '.14em',
@@ -58,6 +59,7 @@ export default function Header({ onReset }: { onReset?: () => void }) {
           F1<em style={{ color: 'var(--red)', fontStyle: 'normal' }}>BULLETIN</em>
         </Link>
 
+        {/* Live pill */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 7,
           padding: '3px 10px', borderRadius: 20,
@@ -69,70 +71,68 @@ export default function Header({ onReset }: { onReset?: () => void }) {
           <span style={{ fontSize: 9, letterSpacing: '.18em', color: 'var(--red)' }}>LIVE</span>
         </div>
 
-        {!isMobile && (
-          <nav style={{ display: 'flex', gap: 0, marginLeft: 8 }}>
-            {navItems.map(item => {
-              const active = pathname === item.href
-              return (
-                <Link key={item.href} href={item.href} style={{
-                  padding: '0 16px',
-                  height: 'var(--header-h)',
-                  display: 'flex', alignItems: 'center',
-                  fontSize: 11, letterSpacing: '.12em',
-                  color: active ? 'var(--t1)' : 'var(--t2)',
-                  textDecoration: 'none',
-                  borderBottom: active ? '1px solid var(--red)' : '1px solid transparent',
-                  transition: 'color var(--tr)',
-                  fontWeight: active ? 500 : 300,
-                }}>
-                  {item.label}
-                </Link>
-              )
-            })}
-          </nav>
-        )}
+        {/* Desktop nav */}
+        <nav className="f1-nav">
+          {navItems.map(item => {
+            const active = pathname === item.href
+            return (
+              <Link key={item.href} href={item.href} style={{
+                padding: '0 16px',
+                height: 'var(--header-h)',
+                display: 'flex', alignItems: 'center',
+                fontSize: 11, letterSpacing: '.12em',
+                color: active ? 'var(--t1)' : 'var(--t2)',
+                textDecoration: 'none',
+                borderBottom: active ? '1px solid var(--red)' : '1px solid transparent',
+                transition: 'color var(--tr)',
+                fontWeight: active ? 500 : 300,
+              }}>
+                {item.label}
+              </Link>
+            )
+          })}
+        </nav>
 
-        {isMobile && (
-          <button
-            onClick={() => setMenuOpen(o => !o)}
-            aria-label="Toggle menu"
-            style={{
-              marginLeft: 'auto',
-              background: 'transparent',
-              border: '1px solid var(--b1)',
-              width: 36, height: 36,
-              borderRadius: 8,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexDirection: 'column',
-              gap: 5,
-              padding: '8px 9px',
-              flexShrink: 0,
-            }}
-          >
-            <span style={{
-              display: 'block', width: '100%', height: 1.5,
-              background: 'var(--t1)', transition: 'all .2s',
-              transform: menuOpen ? 'rotate(45deg) translate(0px, 6.5px)' : 'none',
-            }} />
-            <span style={{
-              display: 'block', width: '100%', height: 1.5,
-              background: menuOpen ? 'transparent' : 'var(--t1)',
-              transition: 'all .2s',
-            }} />
-            <span style={{
-              display: 'block', width: '60%', height: 1.5,
-              background: 'var(--t1)', transition: 'all .2s',
-              transform: menuOpen ? 'rotate(-45deg) translate(1px, -6.5px)' : 'none',
-              alignSelf: 'flex-start',
-            }} />
-          </button>
-        )}
+        {/* Hamburger */}
+        <button
+          className="f1-hamburger"
+          onClick={() => setMenuOpen(o => !o)}
+          aria-label="Toggle menu"
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--b1)',
+            width: 36, height: 36,
+            borderRadius: 8,
+            cursor: 'pointer',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'column',
+            gap: 5,
+            padding: '8px 9px',
+            flexShrink: 0,
+          }}
+        >
+          <span style={{
+            display: 'block', width: '100%', height: 1.5,
+            background: 'var(--t1)', transition: 'all .2s',
+            transform: menuOpen ? 'rotate(45deg) translate(0px, 6.5px)' : 'none',
+          }} />
+          <span style={{
+            display: 'block', width: '100%', height: 1.5,
+            background: menuOpen ? 'transparent' : 'var(--t1)',
+            transition: 'all .2s',
+          }} />
+          <span style={{
+            display: 'block', width: '60%', height: 1.5,
+            background: 'var(--t1)', transition: 'all .2s',
+            transform: menuOpen ? 'rotate(-45deg) translate(1px, -6.5px)' : 'none',
+            alignSelf: 'flex-start',
+          }} />
+        </button>
       </header>
 
-      {isMobile && menuOpen && (
+      {/* Mobile menu */}
+      {menuOpen && (
         <>
           <div
             onClick={() => setMenuOpen(false)}
@@ -166,7 +166,8 @@ export default function Header({ onReset }: { onReset?: () => void }) {
                   display: 'flex', alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '16px 20px',
-                  borderBottom: i < navItems.length - 1 ? '1px solid rgba(255,255,255,.05)' : 'none',
+                  borderBottom: i < navItems.length - 1
+                    ? '1px solid rgba(255,255,255,.05)' : 'none',
                   fontSize: 13, letterSpacing: '.14em',
                   color: active ? 'var(--t1)' : 'var(--t2)',
                   textDecoration: 'none',
