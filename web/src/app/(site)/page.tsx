@@ -115,7 +115,8 @@ function Section({ label, accent, headline, accentWord, body, cta, ctaHref, visu
 
   return (
     <div style={{ background: bg ?? 'transparent', borderTop: borderColor ?? 'none', borderBottom: borderColor ?? 'none' }}>
-      <div style={{ maxWidth: 1320, margin: '0 auto', padding: '96px 24px' }}>
+      {/* ↓ added className="home-section-padding" — mobile collapses padding */}
+      <div className="home-section-padding" style={{ maxWidth: 1320, margin: '0 auto', padding: '96px 24px' }}>
         <FadeIn from="bottom">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 52 }}>
             <div style={{ width: 2, height: 14, background: accent, borderRadius: 1 }} />
@@ -124,7 +125,8 @@ function Section({ label, accent, headline, accentWord, body, cta, ctaHref, visu
           </div>
         </FadeIn>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 72, alignItems: 'center' }}>
+        {/* ↓ added className="home-section-grid" — mobile stacks to single column */}
+        <div className="home-section-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 72, alignItems: 'center' }}>
           <FadeIn from={flip ? 'right' : 'left'} style={{ order: flip ? 2 : 1 }}>
             <div style={{ fontFamily: bebas, fontSize: 'clamp(40px,4.5vw,64px)', lineHeight: 0.9, marginBottom: 18, maxWidth: 560 }}>{h}</div>
             <p style={{ fontSize: 13, lineHeight: 1.85, color: 'rgba(255,255,255,.45)', maxWidth: 420, marginBottom: 28 }}>{body}</p>
@@ -230,7 +232,6 @@ function IntelPanel() {
           <motion.span animate={{ opacity: [1, 0.5, 1] }} transition={{ duration: 2, repeat: Infinity }} style={{ fontSize: 7, fontFamily: mono, color: '#27F4D2', letterSpacing: '.1em' }}>SCANNING {SOURCES.length} SOURCES</motion.span>
         </div>
 
-        {/* Source favicon badges */}
         <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,.05)', display: 'flex', gap: 6 }}>
           {SOURCES.map((src, i) => (
             <motion.div key={src.name} initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 + i * 0.08, duration: 0.35, ease: [0.34, 1.56, 0.64, 1] }} title={src.name}
@@ -245,7 +246,6 @@ function IntelPanel() {
           ))}
         </div>
 
-        {/* News rows */}
         <div style={{ padding: '8px 0' }}>
           {FAKE_HEADLINES.map((h, i) => {
             const isVisible = filled.includes(i), isActive = i === activeRow
@@ -312,20 +312,12 @@ function ScrollCue() {
           50%       { transform: translateY(6px); }
         }
       `}</style>
-
-      <span style={{ fontSize: 7, fontFamily: mono, letterSpacing: '.22em', color: 'rgba(255,255,255,.3)' }}>
-        SCROLL TO EXPLORE
-      </span>
-
+      <span style={{ fontSize: 7, fontFamily: mono, letterSpacing: '.22em', color: 'rgba(255,255,255,.3)' }}>SCROLL TO EXPLORE</span>
       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
         {[6, 9, 14, 9, 6].map((h, i) => (
-          <div key={i} style={{
-            width: 2, height: h, background: 'rgba(255,255,255,.5)', borderRadius: 1,
-            animation: `eqBar 1.4s ease-in-out ${i * 0.13}s infinite`,
-          }} />
+          <div key={i} style={{ width: 2, height: h, background: 'rgba(255,255,255,.5)', borderRadius: 1, animation: `eqBar 1.4s ease-in-out ${i * 0.13}s infinite` }} />
         ))}
       </div>
-
       <svg width="16" height="9" viewBox="0 0 16 9" fill="none" style={{ animation: 'chevBounce 1.8s ease-in-out infinite' }}>
         <path d="M1 1L8 8L15 1" stroke="rgba(255,255,255,0.28)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
@@ -404,14 +396,16 @@ export default function HomePage() {
       )}
 
       <div suppressHydrationWarning style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'relative', zIndex: 3 }}>
-        <Header onReset={() => { sessionStorage.removeItem('f1b_booted'); setBooted(false) }} /><Ticker />
+        <Header onReset={() => { sessionStorage.removeItem('f1b_booted'); setBooted(false) }} />
+        <Ticker />
 
-        {/* ═══════════════ HERO ═══════════════ */}
+        {/* ═══ HERO ═══ */}
         <div ref={heroRef} style={{ position: 'relative', minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg,transparent 50%,rgba(225,6,0,.04) 100%)', pointerEvents: 'none' }} />
 
           <motion.div style={{ opacity: heroOp, y: heroY, width: '100%', willChange: 'opacity, transform' }}>
-            <div style={{ maxWidth: 1320, margin: '0 auto', padding: 'calc(var(--header-h) + 56px) 24px 72px', display: 'grid', gridTemplateColumns: '1fr 380px', gap: 52, alignItems: 'start' }}>
+            {/* ↓ className="home-hero-grid" collapses to 1 col on mobile */}
+            <div className="home-hero-grid" style={{ maxWidth: 1320, margin: '0 auto', padding: 'calc(var(--header-h) + 56px) 24px 72px', display: 'grid', gridTemplateColumns: '1fr 380px', gap: 52, alignItems: 'start' }}>
               <div>
                 <motion.div initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
@@ -456,7 +450,7 @@ export default function HomePage() {
                   </motion.div>
                 )}
 
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65, duration: 0.45 }} style={{ display: 'flex', gap: 10 }}>
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65, duration: 0.45 }} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <Link href="/intelligence" style={{ textDecoration: 'none' }}>
                     <motion.div whileHover={{ scale: 1.04, boxShadow: '0 0 32px rgba(225,6,0,.5)' }} whileTap={{ scale: 0.96 }}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '12px 28px', background: '#E10600', borderRadius: 8, cursor: 'pointer' }}>
@@ -473,14 +467,17 @@ export default function HomePage() {
                 </motion.div>
               </div>
 
-              <IntelPanel />
+              {/* ↓ className="home-intel-panel" hides on mobile */}
+              <div className="home-intel-panel">
+                <IntelPanel />
+              </div>
             </div>
           </motion.div>
 
           <ScrollCue />
         </div>
 
-        {/* ═══════════════ INTELLIGENCE ═══════════════ */}
+        {/* ═══ INTELLIGENCE ═══ */}
         <Section
           accent="#E10600" label="INTELLIGENCE · NARRATIVES"
           headline="MERC BUILD A ROCKETSHIP. FERRARI BETS BIG."
@@ -509,7 +506,7 @@ export default function HomePage() {
           }
         />
 
-        {/* ═══════════════ STANDINGS ═══════════════ */}
+        {/* ═══ STANDINGS ═══ */}
         <Section flip
           accent="#4ADE80" label="STANDINGS · 2026"
           headline="STRATEGIES. BATTERIES. TEAMMATES RACING."
@@ -530,7 +527,7 @@ export default function HomePage() {
           }
         />
 
-        {/* ═══════════════ ANALYTICS ═══════════════ */}
+        {/* ═══ ANALYTICS ═══ */}
         <Section
           accent="#27F4D2" label="ANALYTICS · LAP DATA"
           headline="THE GRID JUST RESET. READ THE DATA."
@@ -560,7 +557,7 @@ export default function HomePage() {
           }
         />
 
-        {/* ═══════════════ PREDICTION ═══════════════ */}
+        {/* ═══ PREDICTION ═══ */}
         <Section flip
           accent="#F59E0B" label="PREDICTION · MONTE CARLO"
           headline="DOWNFALL or COMEBACK?"
