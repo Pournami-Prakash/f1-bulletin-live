@@ -27,6 +27,9 @@ on:
         default: false
         type: boolean
 
+env:
+  NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+
 jobs:
   predict:
     runs-on: ubuntu-latest

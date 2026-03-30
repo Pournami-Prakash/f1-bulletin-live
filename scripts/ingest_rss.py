@@ -170,7 +170,7 @@ def sf_connect():
     return snowflake.connector.connect(
         user=os.getenv("SNOWFLAKE_USER"),
         password=os.getenv("SNOWFLAKE_PASSWORD"),
-        account=os.getenv("SNOWFLAKE_ACCOUNT", "ypatcae-ur62720"),
+        account=os.getenv("SNOWFLAKE_ACCOUNT"),
         warehouse=os.getenv("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
         database=os.getenv("SNOWFLAKE_DATABASE", "F1_BULLETIN"),
         schema="RAW",
@@ -355,7 +355,7 @@ def print_recent_rows(cur, limit: int = 10) -> None:
 
 
 def main():
-    account = os.getenv("SNOWFLAKE_ACCOUNT", "ypatcae-ur62720")
+    account = os.getenv("SNOWFLAKE_ACCOUNT")
     print(f"Connecting to Snowflake ({account})...")
 
     con = sf_connect()
