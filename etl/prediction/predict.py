@@ -435,15 +435,24 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
     features_df = artifacts['features']
 
     quali = query("""
-        SELECT q.driver_code, q.grid_position, q.gap_to_pole_ms, q.tyre_compound, q.best_ms
+        SELECT q.driver_code, q.grid_position, q.gap_to_pole_ms, q.tyre_compound,
+               q.best_ms, q.q1_ms, q.q2_ms, q.q3_ms
         FROM qualifying_laps q
         JOIN sessions s ON s.id = q.session_id
         WHERE s.season=%s AND s.round=%s
         ORDER BY q.grid_position
     """, (season, round_))
     if not quali.empty:
-        step(f"  Using qualifying data: {len(quali)} drivers")
-    else:
+        valid_quali = quali['grid_position'].notna() & quali['best_ms'].notna()
+        if int(valid_quali.sum()) < 3:
+            step(f"  Ignoring qualifying data: {len(quali)} rows found but grid/times are missing")
+            quali = pd.DataFrame()
+        else:
+            if int(valid_quali.sum()) < len(quali):
+                step(f"  Dropping {len(quali) - int(valid_quali.sum())} incomplete qualifying rows")
+                quali = quali[valid_quali].copy()
+            step(f"  Using qualifying data: {len(quali)} drivers")
+    if quali.empty:
         step(f"  No qualifying data for {season} R{round_} — estimating from Elo")
 
     race_results = query("""
@@ -538,7 +547,7 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
         JOIN sessions s ON s.id = r.session_id
         WHERE s.season = %s
           AND s.session_type = 'S'
-          AND s.round < %s
+          AND s.round <= %s
         GROUP BY r.driver_code
     """, (season, round_))
     if not sprint_recent.empty:
@@ -986,6 +995,9 @@ def write_predictions(predictions: list[dict]) -> None:
             )
             ON CONFLICT (season, round, driver_code, model_version)
             DO UPDATE SET
+                gp_name             = EXCLUDED.gp_name,
+                circuit             = EXCLUDED.circuit,
+                team                = EXCLUDED.team,
                 predicted_position  = EXCLUDED.predicted_position,
                 win_probability     = EXCLUDED.win_probability,
                 podium_probability  = EXCLUDED.podium_probability,
@@ -993,8 +1005,14 @@ def write_predictions(predictions: list[dict]) -> None:
                 confidence          = EXCLUDED.confidence,
                 simulation_runs     = EXCLUDED.simulation_runs,
                 data_weight_2026    = EXCLUDED.data_weight_2026,
+                training_seasons    = EXCLUDED.training_seasons,
+                elo_rating          = EXCLUDED.elo_rating,
+                grid_position       = EXCLUDED.grid_position,
+                gap_to_pole_ms      = EXCLUDED.gap_to_pole_ms,
+                rolling_avg_finish  = EXCLUDED.rolling_avg_finish,
                 is_upset_pick       = EXCLUDED.is_upset_pick,
                 upset_score         = EXCLUDED.upset_score,
+                predicted_at        = NOW(),
                 updated_at          = NOW()
         """, (
             i(p['season']), i(p['round']), p['gp_name'], p['circuit'],

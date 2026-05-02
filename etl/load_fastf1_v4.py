@@ -21,7 +21,10 @@ Usage:
 """
 from __future__ import annotations
 import argparse
+import json
 from pathlib import Path
+import re
+import urllib.request
 import fastf1 as f1
 import numpy as np
 import pandas as pd
@@ -70,6 +73,103 @@ def safe_int(v) -> int | None:
         return int(v) if pd.notna(v) else None
     except (TypeError, ValueError):
         return None
+
+# ── Formula 1 live timing fallback ────────────────────────────────────────────
+LT_BASE = "https://livetiming.formula1.com/static"
+
+def lt_json(path: str) -> dict:
+    url = path if path.startswith("http") else f"{LT_BASE}/{path.lstrip('/')}"
+    with urllib.request.urlopen(url, timeout=20) as response:
+        return json.loads(response.read().decode("utf-8-sig"))
+
+def normalise_name(value: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (value or "").lower())
+
+def lt_ms(value: str | None) -> int | None:
+    if not value:
+        return None
+    value = str(value).strip().lstrip("+")
+    if not value:
+        return None
+    try:
+        parts = value.split(":")
+        if len(parts) == 1:
+            return int(float(parts[0]) * 1000)
+        minutes = int(parts[0])
+        seconds = float(parts[1])
+        return int((minutes * 60 + seconds) * 1000)
+    except (TypeError, ValueError):
+        return None
+
+def find_lt_session(season: int, gp_name: str, session_name: str) -> dict | None:
+    try:
+        index = lt_json(f"{season}/Index.json")
+    except Exception as exc:
+        print(f"  ✗ Live timing index unavailable: {exc}")
+        return None
+
+    wanted_gp = normalise_name(gp_name)
+    wanted_session = normalise_name(session_name)
+    for meeting in index.get("Meetings", []):
+        meeting_names = [
+            normalise_name(meeting.get("Name")),
+            normalise_name(meeting.get("OfficialName")),
+            normalise_name(meeting.get("Location")),
+        ]
+        if wanted_gp and not any(wanted_gp in name or name in wanted_gp for name in meeting_names if name):
+            continue
+        for session in meeting.get("Sessions", []):
+            if normalise_name(session.get("Name")) == wanted_session and session.get("Path"):
+                return session
+    return None
+
+def livetiming_qualifying_rows(season: int, gp_name: str, q_session_id: int) -> list[tuple]:
+    session = find_lt_session(season, gp_name, "Qualifying")
+    if not session:
+        return []
+
+    try:
+        path = session["Path"]
+        drivers = lt_json(f"{path}DriverList.json")
+        timing = lt_json(f"{path}TimingData.json")
+    except Exception as exc:
+        print(f"  ✗ Live timing qualifying fallback failed: {exc}")
+        return []
+
+    raw_rows = []
+    for number, line in timing.get("Lines", {}).items():
+        driver_info = drivers.get(str(line.get("RacingNumber") or number), {})
+        driver = driver_info.get("Tla")
+        grid_pos = safe_int(line.get("Position"))
+        if not driver or not grid_pos:
+            continue
+
+        best_laps = line.get("BestLapTimes") or []
+        q_times = [lt_ms(lap.get("Value")) for lap in best_laps[:3]]
+        q1_time, q2_time, q3_time = (q_times + [None, None, None])[:3]
+        best_time = lt_ms((line.get("BestLapTime") or {}).get("Value"))
+        best_time = best_time or min([t for t in q_times if t is not None], default=None)
+        if best_time is None:
+            continue
+
+        raw_rows.append((
+            q_session_id, driver,
+            q1_time, q2_time, q3_time,
+            best_time, None,
+            grid_pos, None,
+        ))
+
+    pole_time = min((row[5] for row in raw_rows if row[5] is not None), default=None)
+    if pole_time is None:
+        return []
+
+    rows = []
+    for row in raw_rows:
+        row = list(row)
+        row[6] = row[5] - pole_time if row[5] is not None else None
+        rows.append(tuple(row))
+
+    return sorted(rows, key=lambda row: row[7])
 
 # ── Sprint loader ─────────────────────────────────────────────────────────────
 def load_sprint(season: int, round_number: int, conn) -> None:
@@ -272,6 +372,16 @@ def load_qualifying(season: int, round_number: int, conn) -> None:
             best_time, gap_to_pole,
             grid_pos, final_compound,
         ))
+
+    valid_rows = [row for row in rows if row[5] is not None and row[7] is not None]
+    if len(valid_rows) < 3:
+        lt_rows = livetiming_qualifying_rows(season, gp_name, q_session_id)
+        if lt_rows:
+            rows = lt_rows
+            print(f"  → FastF1 qualifying rows incomplete; used Formula 1 live timing fallback")
+        else:
+            rows = valid_rows
+            print(f"  ✗ Qualifying rows incomplete and no live timing fallback available")
 
     if rows:
         cur.executemany("""

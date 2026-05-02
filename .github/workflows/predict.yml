@@ -61,6 +61,7 @@ jobs:
         run: |
           python - <<'EOF'
           import fastf1 as f1
+          import pandas as pd
           from datetime import datetime, timezone
           import os
 
@@ -69,25 +70,32 @@ jobs:
 
           # Find the next upcoming race
           next_round = None
+          latest_completed_round = None
           for _, event in schedule.iterrows():
               event_date = event['EventDate']
               if hasattr(event_date, 'tzinfo') and event_date.tzinfo is None:
-                  import pandas as pd
                   event_date = pd.Timestamp(event_date).tz_localize('UTC')
-              if event_date > pd.Timestamp(now):
+              else:
+                  event_date = pd.Timestamp(event_date)
+
+              if event_date < pd.Timestamp(now):
+                  latest_completed_round = int(event['RoundNumber'])
+              elif event_date > pd.Timestamp(now) and next_round is None:
                   next_round = int(event['RoundNumber'])
-                  break
 
           if next_round:
               print(f"Next round: {next_round}")
+              print(f"Latest completed round: {latest_completed_round or ''}")
               with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
                   f.write(f"round={next_round}\n")
                   f.write(f"season=2026\n")
+                  f.write(f"score_round={latest_completed_round or ''}\n")
           else:
               print("No upcoming rounds found")
               with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
                   f.write("round=0\n")
                   f.write("season=2026\n")
+                  f.write(f"score_round={latest_completed_round or ''}\n")
           EOF
 
       - name: Set round variables
@@ -96,7 +104,7 @@ jobs:
           if [ "${{ github.event_name }}" = "schedule" ]; then
             echo "season=${{ steps.detect_round.outputs.season }}" >> $GITHUB_OUTPUT
             echo "round=${{ steps.detect_round.outputs.round }}" >> $GITHUB_OUTPUT
-            echo "score_round=" >> $GITHUB_OUTPUT
+            echo "score_round=${{ steps.detect_round.outputs.score_round }}" >> $GITHUB_OUTPUT
             echo "dry_run=false" >> $GITHUB_OUTPUT
           else
             echo "season=${{ inputs.season }}" >> $GITHUB_OUTPUT
@@ -119,6 +127,25 @@ jobs:
             --round ${{ steps.vars.outputs.round }} \
             --quali-only
         continue-on-error: true   # quali may not be available yet
+
+      # ── Load sprint data for sprint weekends ──────────────────────────────
+      - name: Load sprint data
+        run: |
+          python load_fastf1_v4.py \
+            --seasons ${{ steps.vars.outputs.season }} \
+            --round ${{ steps.vars.outputs.round }} \
+            --sprint-only
+        continue-on-error: true   # non-sprint rounds or in-progress sprint sessions are expected
+
+      # ── Load actual race data for scoring ─────────────────────────────────
+      - name: Load scoring race data
+        if: steps.vars.outputs.score_round != ''
+        run: |
+          python load_fastf1_v4.py \
+            --seasons ${{ steps.vars.outputs.season }} \
+            --round ${{ steps.vars.outputs.score_round }} \
+            --no-replay
+        continue-on-error: true   # scoring step will no-op if actuals are unavailable
 
       # ── Feature engineering ───────────────────────────────────────────────
       - name: Run feature engineering
