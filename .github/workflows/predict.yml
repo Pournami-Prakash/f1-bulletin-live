@@ -49,7 +49,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install fastf1 pandas numpy scikit-learn psycopg2-binary python-dotenv
+          pip install fastf1 pandas numpy scikit-learn psycopg2-binary python-dotenv pyarrow
 
       - name: Create .env.local
         run: |
@@ -96,9 +96,13 @@ jobs:
           if [ "${{ github.event_name }}" = "schedule" ]; then
             echo "season=${{ steps.detect_round.outputs.season }}" >> $GITHUB_OUTPUT
             echo "round=${{ steps.detect_round.outputs.round }}" >> $GITHUB_OUTPUT
+            echo "score_round=" >> $GITHUB_OUTPUT
+            echo "dry_run=false" >> $GITHUB_OUTPUT
           else
             echo "season=${{ inputs.season }}" >> $GITHUB_OUTPUT
             echo "round=${{ inputs.round }}" >> $GITHUB_OUTPUT
+            echo "score_round=${{ inputs.score_round }}" >> $GITHUB_OUTPUT
+            echo "dry_run=${{ inputs.dry_run }}" >> $GITHUB_OUTPUT
           fi
 
       - name: Skip if no upcoming round
@@ -122,21 +126,21 @@ jobs:
 
       # ── Score previous race (if specified) ───────────────────────────────
       - name: Score previous race
-        if: inputs.score_round != ''
+        if: steps.vars.outputs.score_round != ''
         run: |
           python prediction/predict.py \
             --season ${{ steps.vars.outputs.season }} \
-            --round ${{ inputs.score_round }} \
+            --round ${{ steps.vars.outputs.score_round }} \
             --score
 
       - name: Refit calibrator (after scoring)
-        if: inputs.score_round != ''
+        if: steps.vars.outputs.score_round != ''
         run: python prediction/predict.py --fit-calibrator
         continue-on-error: true   # needs 50+ scored rows to activate
 
       # ── Generate prediction ───────────────────────────────────────────────
       - name: Generate prediction (dry run)
-        if: inputs.dry_run == 'true'
+        if: steps.vars.outputs.dry_run == 'true'
         run: |
           python prediction/predict.py \
             --season ${{ steps.vars.outputs.season }} \
@@ -144,7 +148,7 @@ jobs:
             --dry-run
 
       - name: Generate prediction (write to DB)
-        if: inputs.dry_run != 'true'
+        if: steps.vars.outputs.dry_run != 'true'
         run: |
           python prediction/predict.py \
             --season ${{ steps.vars.outputs.season }} \
@@ -156,4 +160,8 @@ jobs:
           echo "✓ Prediction complete"
           echo "  Season: ${{ steps.vars.outputs.season }}"
           echo "  Round:  ${{ steps.vars.outputs.round }}"
-          echo "  Mode:   ${{ inputs.dry_run == 'true' && 'DRY RUN' || 'LIVE' }}"
+          if [ "${{ steps.vars.outputs.dry_run }}" = "true" ]; then
+            echo "  Mode:   DRY RUN"
+          else
+            echo "  Mode:   LIVE"
+          fi

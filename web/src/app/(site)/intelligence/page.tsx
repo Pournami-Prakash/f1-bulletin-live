@@ -16,7 +16,7 @@ import {
   computeStoryArc, compareEntities,
 } from '@/lib/drivers-analytics'
 
-type MainTab    = 'stories' | 'drivers' | 'teams'
+type MainTab    = 'stories' | 'newsletter' | 'drivers' | 'teams'
 type WindowMode = 'race' | '14' | '30'
 type IntelTab   = 'driver' | 'team'
 
@@ -26,6 +26,36 @@ type Story = {
   best_priority_tier?: string; is_breaking?: boolean; momentum_score?: number
   events_count?: number; sources_count?: number; driver?: string | null; heat_index?: number
   image_url?: string | null
+}
+type NewsletterStory = {
+  storyId: string; title: string; url: string | null; source: string | null
+  sourceType: 'news' | 'reddit' | 'official'; cluster: string; driver: string | null
+  time: string; priorityTier: string; momentum: number; heat: number
+  sourceCount: number; eventCount: number; updateCount: number
+  isBreaking: boolean; majorScore: number
+}
+type NewsletterSection = {
+  key: string; label: string; kicker: string; tone: string; stories: NewsletterStory[]
+}
+type Newsletter = {
+  title: string; issueLabel: string; rangeLabel: string; generatedAt: string; dek: string
+  stats: {
+    totalStories: number; breakingStories: number; officialStories: number
+    redditStories: number; topCluster: string; peakMomentum: number
+  }
+  contextBullets?: string[]
+  breakingNews?: NewsletterStory[]
+  sections: NewsletterSection[]
+  awards: { label: string; story: NewsletterStory }[]
+  headlineRollup: NewsletterStory[]
+  standings?: {
+    drivers: { position: number; name: string; team?: string; points: number }[]
+    constructors: { position: number; name: string; points: number }[]
+  }
+  sessionTopThree?: {
+    session: string; gpName: string; date: string | null
+    rows: { position: number; driver: string; team?: string | null; timeMs?: number | null; gapMs?: number | null }[]
+  } | null
 }
 type SummaryEntity = {
   driverName: string; mentions: number; sentimentAvg: number; sentimentDelta: number
@@ -1042,6 +1072,531 @@ function CompactCluster({ cluster, driverSentiment, onDriverClick }: {
   )
 }
 
+function msTime(ms?: number | null) {
+  if (!ms || !Number.isFinite(ms)) return '—'
+  const m = Math.floor(ms / 60000)
+  const s = ((ms % 60000) / 1000).toFixed(3).padStart(6, '0')
+  return m > 0 ? `${m}:${s}` : s
+}
+
+function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number, maxLines: number) {
+  const words = text.split(/\s+/)
+  let line = ''
+  let lines = 0
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word
+    if (ctx.measureText(test).width > maxWidth && line) {
+      ctx.fillText(lines === maxLines - 1 ? `${line.replace(/[,.]$/, '')}...` : line, x, y)
+      y += lineHeight
+      lines += 1
+      line = word
+      if (lines >= maxLines) return y
+    } else {
+      line = test
+    }
+  }
+  if (line && lines < maxLines) ctx.fillText(line, x, y)
+  return y + lineHeight
+}
+
+function exportNewsletterPng(newsletter: Newsletter) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1240
+  canvas.height = 1754
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const bg = '#070707'
+  const panel = '#111111'
+  const panel2 = '#171717'
+  const line = 'rgba(255,255,255,.16)'
+  const text = '#ffffff'
+  const muted = 'rgba(255,255,255,.56)'
+  const faint = 'rgba(255,255,255,.30)'
+  const red = '#E10600'
+  const cyan = '#27F4D2'
+
+  ctx.fillStyle = bg
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  const glow = ctx.createRadialGradient(1080, 120, 0, 1080, 120, 520)
+  glow.addColorStop(0, 'rgba(225,6,0,.18)')
+  glow.addColorStop(1, 'rgba(225,6,0,0)')
+  ctx.fillStyle = glow
+  ctx.fillRect(0, 0, canvas.width, 520)
+
+  ctx.fillStyle = red
+  ctx.fillRect(54, 54, 1132, 4)
+  ctx.fillStyle = red
+  ctx.font = '700 18px Arial'
+  ctx.letterSpacing = '2px'
+  ctx.fillText(`F1 BULLETIN INTELLIGENCE / ${newsletter.rangeLabel.toUpperCase()}`, 54, 96)
+  ctx.letterSpacing = '0px'
+  ctx.fillStyle = text
+  ctx.font = '900 70px Impact, Arial Narrow, Arial'
+  ctx.fillText(newsletter.title.toUpperCase(), 54, 165)
+  ctx.font = '26px Georgia'
+  ctx.fillStyle = muted
+  wrapCanvasText(ctx, newsletter.dek, 54, 214, 780, 34, 3)
+
+  ctx.strokeStyle = 'rgba(225,6,0,.36)'
+  ctx.fillStyle = 'rgba(225,6,0,.08)'
+  ctx.fillRect(900, 82, 230, 140)
+  ctx.strokeRect(900, 82, 230, 140)
+  ctx.fillStyle = red
+  ctx.font = '900 28px Impact'
+  ctx.fillText('BREAKING', 924, 126)
+  ctx.fillStyle = text
+  ctx.font = '900 32px Impact'
+  ctx.fillText('NEWS DESK', 924, 160)
+  ctx.fillStyle = muted
+  ctx.font = '700 13px Arial'
+  ctx.fillText('Top signals from the month', 924, 188)
+
+  const newsDesk = (newsletter.breakingNews?.length ? newsletter.breakingNews : newsletter.sections[0]?.stories ?? []).slice(0, 3)
+  ctx.fillStyle = panel2
+  ctx.fillRect(54, 296, 1076, 94)
+  ctx.strokeStyle = line
+  ctx.strokeRect(54, 296, 1076, 94)
+  ctx.fillStyle = red
+  ctx.font = '900 22px Impact'
+  ctx.fillText('BREAKING NEWS', 78, 336)
+  ctx.fillStyle = muted
+  ctx.font = '700 11px Arial'
+  ctx.fillText('MONTHLY DESK', 78, 358)
+  newsDesk.forEach((story, i) => {
+    const x = 260 + i * 286
+    ctx.fillStyle = text
+    ctx.font = '700 15px Georgia'
+    wrapCanvasText(ctx, story.title, x, 324, 250, 19, 2)
+    ctx.fillStyle = i === 1 ? cyan : red
+    ctx.font = '700 10px Arial'
+    ctx.fillText(`${story.source || story.sourceType} / ${story.momentum} MOM`, x, 374)
+  })
+
+  const lead = newsletter.sections[0]?.stories.slice(0, 7) ?? []
+  ctx.fillStyle = panel
+  ctx.fillRect(54, 410, 660, 520)
+  ctx.strokeStyle = line
+  ctx.strokeRect(54, 410, 660, 520)
+  ctx.fillStyle = text
+  ctx.font = '900 36px Impact'
+  ctx.fillText('THE BIG LAP', 78, 466)
+  ctx.fillStyle = red
+  ctx.fillRect(78, 484, 580, 3)
+  ctx.font = '700 21px Georgia'
+  let y = 526
+  lead.forEach((story, i) => {
+    ctx.fillStyle = text
+    y = wrapCanvasText(ctx, `${i + 1}. ${story.title}`, 92, y, 550, 25, 2)
+    ctx.fillStyle = red
+    ctx.font = '700 12px Arial'
+    ctx.fillText(`${story.source || story.sourceType} / ${story.momentum} MOM`, 92, y + 2)
+    ctx.strokeStyle = 'rgba(255,255,255,.09)'
+    ctx.beginPath(); ctx.moveTo(92, y + 14); ctx.lineTo(658, y + 14); ctx.stroke()
+    ctx.font = '700 21px Georgia'
+    y += 34
+  })
+
+  ctx.fillStyle = panel2
+  ctx.fillRect(744, 410, 386, 520)
+  ctx.strokeStyle = line
+  ctx.strokeRect(744, 410, 386, 520)
+  ctx.fillStyle = text
+  ctx.font = '900 31px Impact'
+  ctx.fillText('STANDINGS', 772, 466)
+  ctx.fillStyle = cyan
+  ctx.fillRect(772, 484, 312, 3)
+  ctx.font = '700 17px Georgia'
+  let sy = 528
+  ;(newsletter.standings?.drivers ?? []).slice(0, 5).forEach(row => {
+    ctx.fillStyle = text
+    ctx.fillText(`${row.position}. ${row.name}`, 772, sy)
+    ctx.fillStyle = red
+    ctx.font = '700 13px Arial'
+    ctx.fillText(`${row.points} PTS`, 1042, sy)
+    ctx.font = '700 17px Georgia'
+    sy += 30
+  })
+  if (newsletter.sessionTopThree?.rows?.length) {
+    sy += 28
+    ctx.fillStyle = text
+    ctx.font = '900 28px Impact'
+    ctx.fillText(`${newsletter.sessionTopThree.session} TOP 3`, 772, sy)
+    ctx.fillStyle = muted
+    ctx.font = '700 13px Arial'
+    ctx.fillText(newsletter.sessionTopThree.gpName.toUpperCase(), 772, sy + 22)
+    sy += 58
+    ctx.font = '700 17px Georgia'
+    newsletter.sessionTopThree.rows.slice(0, 3).forEach(row => {
+      ctx.fillStyle = text
+      ctx.fillText(`${row.position}. ${row.driver}`, 772, sy)
+      ctx.fillStyle = cyan
+      ctx.font = '700 13px Arial'
+      ctx.fillText(msTime(row.timeMs), 1018, sy)
+      ctx.font = '700 17px Georgia'
+      sy += 30
+    })
+  }
+
+  const sections = newsletter.sections.slice(1, 5)
+  let sx = 54
+  let secY = 1000
+  sections.forEach((section, i) => {
+    if (i === 2) { sx = 620; secY = 1000 }
+    ctx.fillStyle = red
+    ctx.font = '900 29px Impact'
+    ctx.fillText(section.label.toUpperCase(), sx, secY)
+    ctx.font = '16px Georgia'
+    let ty = secY + 38
+    section.stories.slice(0, 3).forEach(story => {
+      ctx.fillStyle = text
+      ty = wrapCanvasText(ctx, story.title, sx, ty, 480, 22, 2)
+      ctx.strokeStyle = 'rgba(255,255,255,.1)'
+      ctx.beginPath(); ctx.moveTo(sx, ty + 4); ctx.lineTo(sx + 480, ty + 4); ctx.stroke()
+      ty += 22
+    })
+    secY = ty + 30
+  })
+
+  ctx.fillStyle = faint
+  ctx.font = '700 13px Arial'
+  ctx.fillText(`TOP THREAD: ${newsletter.stats.topCluster.replace(/_/g, ' ').toUpperCase()}`, 54, 1696)
+  ctx.fillText(`GENERATED ${fmtDate(newsletter.generatedAt).toUpperCase()}`, 950, 1696)
+
+  const link = document.createElement('a')
+  link.download = `f1-bulletin-${newsletter.rangeLabel.replace(/\s+/g, '-').toLowerCase()}.png`
+  link.href = canvas.toDataURL('image/png')
+  link.click()
+}
+
+function NewsletterStoryItem({ story, index, compact }: { story: NewsletterStory; index: number; compact?: boolean }) {
+  const src = story.sourceType
+  const color = story.isBreaking ? 'var(--red)' : srcColor(src)
+  const content = (
+    <div style={{display:'grid',gridTemplateColumns:'34px minmax(0,1fr) auto',gap:12,alignItems:'start',padding:compact?'9px 0':'13px 0',borderBottom:'1px solid rgba(255,255,255,.06)'}}>
+      <div style={{width:28,height:28,borderRadius:6,border:`1px solid ${hr(color,.28)}`,background:hr(color,.1),display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'var(--font-bebas)',fontSize:15,color}}>
+        {String(index + 1).padStart(2, '0')}
+      </div>
+      <div style={{minWidth:0}}>
+        <div style={{fontSize:compact?11:13,lineHeight:1.55,color:'rgba(255,255,255,.86)',wordBreak:'break-word'}}>
+          {story.title}
+          {story.url&&<span style={{marginLeft:6,color,opacity:.65,fontSize:10}}>↗</span>}
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:7,flexWrap:'wrap',marginTop:6}}>
+          <Pill color={srcColor(src)}>{src.toUpperCase()}</Pill>
+          {story.isBreaking&&<Pill color="var(--red)">BREAKING</Pill>}
+          <span style={{fontSize:9,color:'rgba(255,255,255,.28)'}}>{story.source || 'Unknown source'}</span>
+          <span style={{fontSize:9,color:'rgba(255,255,255,.22)'}}>{timeAgo(story.time)}</span>
+          {story.driver&&<span style={{fontSize:9,color:col(story.driver),fontFamily:'var(--font-mono)'}}>{story.driver}</span>}
+        </div>
+      </div>
+      <div style={{display:'grid',gap:5,justifyItems:'end',minWidth:54}}>
+        <span style={{fontFamily:'var(--font-bebas)',fontSize:17,lineHeight:1,color}}>{story.momentum}</span>
+        <span style={{fontSize:7,letterSpacing:'.12em',fontFamily:'var(--font-mono)',color:'rgba(255,255,255,.25)'}}>MOM</span>
+      </div>
+    </div>
+  )
+  if (!story.url) return content
+  return <a href={story.url} target="_blank" rel="noopener noreferrer" style={{display:'block',textDecoration:'none',color:'inherit'}}>{content}</a>
+}
+
+function PrintNewsletterSheet({ newsletter }: { newsletter: Newsletter }) {
+  const leadStories = newsletter.sections[0]?.stories.slice(0, 6) ?? []
+  const breakingDesk = (newsletter.breakingNews?.length ? newsletter.breakingNews : leadStories).slice(0, 4)
+  const sectionBriefs = newsletter.sections.slice(1, 5).map(section => ({
+    ...section,
+    stories: section.stories.slice(0, 2),
+  })).filter(section => section.stories.length > 0)
+
+  return (
+    <article className="newsletter-print-sheet" aria-hidden>
+      <header className="print-masthead">
+        <div>
+          <div className="print-kicker">F1 Bulletin Intelligence / {newsletter.rangeLabel}</div>
+          <h1>{newsletter.title}</h1>
+          <p>{newsletter.dek}</p>
+        </div>
+        <div className="print-badge">
+          <span>MIAMI</span>
+          <b>restart issue</b>
+        </div>
+      </header>
+
+      <section className="print-breaking">
+        <div className="print-breaking-label">
+          <b>Breaking News</b>
+          <span>{newsletter.contextBullets?.[0] ?? 'Top monthly F1 headlines with the sharpest signal.'}</span>
+        </div>
+        {breakingDesk.map(story => (
+          <p key={story.storyId}>{story.title}</p>
+        ))}
+      </section>
+
+      <main className="print-grid">
+        <section className="print-lead">
+          <h2>The Big Lap</h2>
+          <ol>
+            {leadStories.map(story => (
+              <li key={story.storyId}>
+                <span>{story.title}</span>
+                <em>{story.source || story.sourceType} / {story.momentum} mom</em>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <aside className="print-side">
+          <section className="print-standings">
+            <h2>Current Standings</h2>
+            {(newsletter.standings?.drivers ?? []).slice(0, 5).map(row => (
+              <div key={row.name}>
+                <b>{row.position}</b>
+                <span>{row.name}</span>
+                <em>{row.points} pts</em>
+              </div>
+            ))}
+          </section>
+
+          {newsletter.sessionTopThree?.rows?.length ? (
+            <section className="print-session">
+              <h2>{newsletter.sessionTopThree.session} Top 3</h2>
+              <p>{newsletter.sessionTopThree.gpName}</p>
+              {newsletter.sessionTopThree.rows.slice(0, 3).map(row => (
+                <div key={`${row.position}-${row.driver}`}>
+                  <b>{row.position}</b>
+                  <span>{row.driver}</span>
+                  <em>{msTime(row.timeMs)}</em>
+                </div>
+              ))}
+            </section>
+          ) : (
+            <section className="print-awards">
+              <h2>One-Liner Awards</h2>
+              {newsletter.awards.slice(0, 3).map(award => (
+                <div key={`${award.label}-${award.story.storyId}`}>
+                  <b>{award.label}</b>
+                  <span>{award.story.title}</span>
+                </div>
+              ))}
+            </section>
+          )}
+        </aside>
+      </main>
+
+      {newsletter.awards.length > 0 && (
+        <section className="print-awards-row">
+          {newsletter.awards.slice(0, 4).map(award => (
+            <div key={`${award.label}-${award.story.storyId}`}>
+              <b>{award.label}</b>
+              <span>{award.story.title}</span>
+            </div>
+          ))}
+        </section>
+      )}
+
+      <section className="print-sections">
+        {sectionBriefs.map(section => (
+          <div key={section.key}>
+            <h3>{section.label}</h3>
+            {section.stories.map(story => (
+              <p key={story.storyId}>{story.title}</p>
+            ))}
+          </div>
+        ))}
+      </section>
+
+      <footer className="print-footer">
+        <span>Top thread: {newsletter.stats.topCluster.replace(/_/g, ' ')}</span>
+        <span>Generated {fmtDate(newsletter.generatedAt)}</span>
+      </footer>
+    </article>
+  )
+}
+
+function NewsletterContextPanel({ newsletter }: { newsletter: Newsletter }) {
+  const drivers = newsletter.standings?.drivers ?? []
+  const constructors = newsletter.standings?.constructors ?? []
+  const session = newsletter.sessionTopThree
+  if (!drivers.length && !constructors.length && !session?.rows?.length) return null
+
+  return (
+    <section>
+      <SectionHead label="Current race context" count={(session?.rows?.length ?? 0) + drivers.length} accent="#27F4D2"/>
+      <div className="newsletter-context" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+        {drivers.length > 0 && (
+          <div style={{border:'1px solid rgba(255,255,255,.08)',borderRadius:16,padding:'15px 16px',background:'rgba(0,0,0,.22)'}}>
+            <h3 style={{fontFamily:'var(--font-bebas)',fontSize:22,lineHeight:1,letterSpacing:'.05em',margin:'0 0 12px',color:'#fff'}}>Driver Standings</h3>
+            {drivers.slice(0,5).map(row=>(
+              <div key={row.name} style={{display:'grid',gridTemplateColumns:'24px 1fr auto',gap:8,alignItems:'center',padding:'7px 0',borderBottom:'1px solid rgba(255,255,255,.055)'}}>
+                <span style={{fontFamily:'var(--font-bebas)',fontSize:15,color:'var(--red)'}}>{row.position}</span>
+                <span style={{fontSize:11,color:'rgba(255,255,255,.78)',lineHeight:1.35}}>{row.name}</span>
+                <span style={{fontSize:9,fontFamily:'var(--font-mono)',color:'rgba(255,255,255,.38)'}}>{row.points} pts</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {constructors.length > 0 && (
+          <div style={{border:'1px solid rgba(255,255,255,.08)',borderRadius:16,padding:'15px 16px',background:'rgba(0,0,0,.22)'}}>
+            <h3 style={{fontFamily:'var(--font-bebas)',fontSize:22,lineHeight:1,letterSpacing:'.05em',margin:'0 0 12px',color:'#fff'}}>Constructor Standings</h3>
+            {constructors.slice(0,5).map(row=>(
+              <div key={row.name} style={{display:'grid',gridTemplateColumns:'24px 1fr auto',gap:8,alignItems:'center',padding:'7px 0',borderBottom:'1px solid rgba(255,255,255,.055)'}}>
+                <span style={{fontFamily:'var(--font-bebas)',fontSize:15,color:'#27F4D2'}}>{row.position}</span>
+                <span style={{fontSize:11,color:'rgba(255,255,255,.78)',lineHeight:1.35}}>{row.name}</span>
+                <span style={{fontSize:9,fontFamily:'var(--font-mono)',color:'rgba(255,255,255,.38)'}}>{row.points} pts</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {session?.rows?.length ? (
+          <div style={{border:'1px solid rgba(255,255,255,.08)',borderRadius:16,padding:'15px 16px',background:'linear-gradient(160deg,rgba(39,244,210,.06),rgba(0,0,0,.22))'}}>
+            <h3 style={{fontFamily:'var(--font-bebas)',fontSize:22,lineHeight:1,letterSpacing:'.05em',margin:'0 0 4px',color:'#fff'}}>{session.session} Top 3</h3>
+            <p style={{margin:'0 0 12px',fontSize:9,fontFamily:'var(--font-mono)',letterSpacing:'.08em',color:'rgba(255,255,255,.32)'}}>{session.gpName}</p>
+            {session.rows.slice(0,3).map(row=>(
+              <div key={`${row.position}-${row.driver}`} style={{display:'grid',gridTemplateColumns:'24px 1fr auto',gap:8,alignItems:'center',padding:'8px 0',borderBottom:'1px solid rgba(255,255,255,.055)'}}>
+                <span style={{fontFamily:'var(--font-bebas)',fontSize:17,color:'#27F4D2'}}>{row.position}</span>
+                <span style={{fontSize:12,color:'rgba(255,255,255,.86)',lineHeight:1.35,fontFamily:'var(--font-mono)'}}>{row.driver}</span>
+                <span style={{fontSize:10,fontFamily:'var(--font-mono)',color:'rgba(255,255,255,.48)'}}>{msTime(row.timeMs)}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  )
+}
+
+function NewsletterIssue({ newsletter, loading }: { newsletter: Newsletter | null; loading: boolean }) {
+  if (loading) {
+    return (
+      <div style={{display:'grid',gap:16}}>
+        <div className="sk" style={{height:270,borderRadius:20}}/>
+        <div className="newsletter-grid">{Array(4).fill(null).map((_,i)=><div key={i} className="sk" style={{height:150,borderRadius:16}}/>)}</div>
+      </div>
+    )
+  }
+
+  if (!newsletter) {
+    return (
+      <div style={{padding:'44px 24px',border:'1px solid rgba(255,255,255,.07)',borderRadius:18,textAlign:'center',background:'rgba(0,0,0,.2)'}}>
+        <div style={{fontFamily:'var(--font-bebas)',fontSize:34,color:'#fff',letterSpacing:'.04em',marginBottom:8}}>No issue yet</div>
+        <p style={{margin:0,color:'rgba(255,255,255,.42)',fontSize:12,lineHeight:1.7}}>The newsletter will appear once the story timeline has headlines in the selected month.</p>
+      </div>
+    )
+  }
+
+  const leadSection = newsletter.sections[0]
+  const restSections = newsletter.sections.slice(1)
+  const breakingDesk = (newsletter.breakingNews?.length ? newsletter.breakingNews : leadSection?.stories ?? []).slice(0, 5)
+
+  return (
+    <>
+    <div className="newsletter-screen-issue" style={{display:'grid',gap:22}}>
+      <motion.section initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{duration:.32}} style={{border:'1px solid rgba(255,255,255,.08)',borderRadius:24,overflow:'hidden',background:'linear-gradient(150deg,rgba(225,6,0,.09),rgba(255,255,255,.025) 42%,rgba(0,0,0,.34))',boxShadow:'inset 0 1px 0 rgba(255,255,255,.05),0 24px 70px rgba(0,0,0,.28)'}}>
+        <div style={{height:4,background:'linear-gradient(90deg,var(--red),#f59e0b,transparent)'}}/>
+        <div className="newsletter-hero" style={{display:'grid',gridTemplateColumns:'minmax(0,1.2fr) 340px',gap:26,padding:'28px 32px'}}>
+          <div>
+            <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:18}}>
+              <Pill color="var(--red)">MONTHLY DISPATCH</Pill>
+              <span style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:'.14em',color:'rgba(255,255,255,.34)'}}>{newsletter.rangeLabel}</span>
+            </div>
+            <h2 style={{fontFamily:'var(--font-bebas)',fontSize:'clamp(44px,8vw,86px)',lineHeight:.88,letterSpacing:'.035em',margin:'0 0 16px',color:'#fff'}}>
+              {newsletter.title}
+            </h2>
+            <p style={{fontSize:14,lineHeight:1.85,color:'rgba(255,255,255,.64)',maxWidth:690,margin:'0 0 22px'}}>{newsletter.dek}</p>
+            <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+              <button onClick={()=>exportNewsletterPng(newsletter)} style={{height:36,padding:'0 14px',borderRadius:8,border:'1px solid rgba(225,6,0,.35)',background:'rgba(225,6,0,.12)',color:'#fff',fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:'.12em',cursor:'pointer'}}>
+                EXPORT PNG
+              </button>
+              <button onClick={()=>window.print()} style={{height:36,padding:'0 14px',borderRadius:8,border:'1px solid rgba(255,255,255,.1)',background:'rgba(255,255,255,.04)',color:'rgba(255,255,255,.65)',fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:'.12em',cursor:'pointer'}}>
+                PRINT
+              </button>
+            </div>
+          </div>
+          <div className="newsletter-breaking-desk" style={{border:'1px solid rgba(225,6,0,.22)',borderRadius:16,padding:'16px 18px',background:'linear-gradient(160deg,rgba(225,6,0,.08),rgba(0,0,0,.24))',alignSelf:'start'}}>
+            <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:11}}>
+              <div style={{width:7,height:7,borderRadius:'50%',background:'var(--red)',boxShadow:'0 0 14px rgba(225,6,0,.6)'}}/>
+              <span style={{fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.16em',color:'var(--red)'}}>BREAKING NEWS DESK</span>
+            </div>
+            {newsletter.contextBullets?.[0]&&<p style={{margin:'0 0 12px',fontSize:10,lineHeight:1.65,color:'rgba(255,255,255,.44)'}}>{newsletter.contextBullets[0]}</p>}
+            <div style={{display:'grid',gap:9}}>
+              {breakingDesk.map((story,i)=>(
+                <a key={story.storyId} href={story.url || undefined} target={story.url ? '_blank' : undefined} rel={story.url ? 'noopener noreferrer' : undefined} style={{display:'grid',gridTemplateColumns:'20px minmax(0,1fr)',gap:9,textDecoration:'none',color:'inherit',padding:'8px 0',borderTop:i>0?'1px solid rgba(255,255,255,.06)':undefined}}>
+                  <span style={{fontFamily:'var(--font-bebas)',fontSize:15,lineHeight:1,color:i===0?'var(--red)':'rgba(255,255,255,.25)'}}>{i+1}</span>
+                  <span style={{fontSize:11,lineHeight:1.45,color:'rgba(255,255,255,.78)'}}>{story.title}</span>
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      </motion.section>
+
+      {leadSection&&(
+        <section className="card">
+          <SectionHead label={leadSection.label} count={leadSection.stories.length} accent="var(--red)"/>
+          <p style={{margin:'-8px 0 12px',fontSize:12,lineHeight:1.7,color:'rgba(255,255,255,.42)'}}>{leadSection.kicker}</p>
+          <div>{leadSection.stories.map((story,i)=><NewsletterStoryItem key={story.storyId} story={story} index={i}/>)}</div>
+        </section>
+      )}
+
+      <NewsletterContextPanel newsletter={newsletter}/>
+
+      {newsletter.awards.length>0&&(
+        <section>
+          <SectionHead label="One-liner awards" count={newsletter.awards.length} accent="#f59e0b"/>
+          <div className="newsletter-awards" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+            {newsletter.awards.map((award,i)=>(
+              <motion.a key={`${award.label}-${award.story.storyId}`} href={award.story.url || undefined} target={award.story.url ? '_blank' : undefined} rel={award.story.url ? 'noopener noreferrer' : undefined} whileHover={{y:-3}} transition={{duration:.18}} style={{textDecoration:'none',color:'inherit',border:'1px solid rgba(255,255,255,.08)',borderRadius:16,padding:'15px 16px',background:'rgba(0,0,0,.22)',minHeight:132,display:'flex',flexDirection:'column',gap:10}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                  <span style={{fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.13em',color:'#f59e0b'}}>{award.label.toUpperCase()}</span>
+                  <span style={{fontFamily:'var(--font-bebas)',fontSize:18,color:'rgba(255,255,255,.18)'}}>{i+1}</span>
+                </div>
+                <div style={{fontSize:12.5,lineHeight:1.55,color:'rgba(255,255,255,.76)',wordBreak:'break-word'}}>{award.story.title}</div>
+                <div style={{marginTop:'auto',display:'flex',gap:6,alignItems:'center'}}>
+                  <Pill color={srcColor(award.story.sourceType)}>{award.story.sourceType.toUpperCase()}</Pill>
+                  <span style={{fontSize:8,color:'rgba(255,255,255,.25)'}}>{award.story.source}</span>
+                </div>
+              </motion.a>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {restSections.length>0&&(
+        <section>
+          <SectionHead label="Inside the issue" count={restSections.length}/>
+          <div className="newsletter-sections" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+            {restSections.map(section=>(
+              <div key={section.key} style={{border:'1px solid rgba(255,255,255,.075)',borderRadius:18,padding:'18px 20px',background:'rgba(0,0,0,.2)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:6}}>
+                  <div style={{width:3,height:16,borderRadius:2,background:section.tone==='urgent'?'var(--red)':section.tone==='fans'?'#FF6314':section.tone==='official'?'#27F4D2':'rgba(255,255,255,.24)'}}/>
+                  <h3 style={{fontFamily:'var(--font-bebas)',fontSize:24,lineHeight:1,letterSpacing:'.05em',margin:0,color:'#fff'}}>{section.label}</h3>
+                </div>
+                <p style={{margin:'0 0 9px',fontSize:11,lineHeight:1.65,color:'rgba(255,255,255,.38)'}}>{section.kicker}</p>
+                {section.stories.map((story,i)=><NewsletterStoryItem key={story.storyId} story={story} index={i} compact/>)}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {newsletter.headlineRollup.length>0&&(
+        <section className="card-np">
+          <div style={{padding:'16px 20px',borderBottom:'1px solid rgba(255,255,255,.06)',display:'flex',alignItems:'center',gap:10}}>
+            <div style={{width:3,height:16,borderRadius:2,background:'rgba(255,255,255,.3)'}}/>
+            <span style={{fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.18em',color:'rgba(255,255,255,.4)'}}>MORE FROM THE MONTH</span>
+            <span style={{fontSize:8,fontFamily:'var(--font-mono)',color:'rgba(255,255,255,.22)'}}>{newsletter.headlineRollup.length} extra items</span>
+          </div>
+          <div style={{padding:'0 20px 8px'}}>
+            {newsletter.headlineRollup.map((story,i)=><NewsletterStoryItem key={`${story.storyId}-${i}`} story={story} index={i} compact/>)}
+          </div>
+        </section>
+      )}
+    </div>
+    <PrintNewsletterSheet newsletter={newsletter}/>
+    </>
+  )
+}
+
 const CSS = `
   *{box-sizing:border-box}
   .pg{max-width:1440px;margin:0 auto;padding:20px 24px 96px;display:grid;gap:20px}
@@ -1070,6 +1625,8 @@ const CSS = `
   .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
   .row-2{display:grid;grid-template-columns:1.15fr .95fr;gap:18px;align-items:start}
   .row-main{display:grid;grid-template-columns:minmax(0,1fr) 370px;gap:18px;align-items:start}
+  .newsletter-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .newsletter-print-sheet{display:none}
   .card{border:1px solid rgba(255,255,255,.08);border-radius:22px;padding:22px 24px;background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.013));box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 16px 44px rgba(0,0,0,.2);backdrop-filter:blur(14px)}
   .card-np{border:1px solid rgba(255,255,255,.08);border-radius:22px;overflow:hidden;background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.013));box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 16px 44px rgba(0,0,0,.2);backdrop-filter:blur(14px)}
   .detail{border:1px solid rgba(255,255,255,.08);border-radius:22px;position:sticky;top:calc(var(--header-h) + 18px);max-height:calc(100vh - var(--header-h) - 36px);overflow-y:auto;background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.013));box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 16px 44px rgba(0,0,0,.2);backdrop-filter:blur(16px)}
@@ -1111,6 +1668,9 @@ const CSS = `
 
     /* Layouts: single column */
     .row-main,.row-2{grid-template-columns:1fr!important;gap:12px!important}
+    .newsletter-grid,.newsletter-hero,.newsletter-awards,.newsletter-sections,.newsletter-context{grid-template-columns:1fr!important}
+    .newsletter-hero{padding:22px 18px!important}
+    .newsletter-stats{grid-template-columns:1fr 1fr!important}
 
     /* Story carousel: single column, hide queue */
     .carousel-grid{grid-template-columns:1fr!important}
@@ -1139,6 +1699,67 @@ const CSS = `
     .kpi-row{grid-template-columns:1fr!important}
     .mast-title{font-size:clamp(28px,10vw,44px)!important}
   }
+
+  @page{size:A4;margin:8mm}
+  @media print{
+    html,body{width:210mm!important;height:297mm!important;margin:0!important;background:#070707!important;overflow:hidden!important}
+    body *{visibility:hidden!important}
+    .newsletter-print-sheet,.newsletter-print-sheet *{visibility:visible!important}
+    .newsletter-print-sheet{
+      display:block!important;
+      position:fixed!important;
+      inset:0!important;
+      width:194mm!important;
+      height:281mm!important;
+      padding:0!important;
+      overflow:hidden!important;
+      background:radial-gradient(110mm 70mm at 92% 3%,rgba(225,6,0,.16),transparent 62%),#070707!important;
+      color:#fff!important;
+      font-family:Georgia,'Times New Roman',serif!important;
+      print-color-adjust:exact;
+      -webkit-print-color-adjust:exact;
+    }
+    .newsletter-screen-issue,.mast,nav,canvas{display:none!important}
+    .print-masthead{display:grid;grid-template-columns:1fr 31mm;gap:6mm;align-items:start;border-bottom:1.4mm solid #E10600;padding:0 0 3.8mm;margin:0 0 3.2mm}
+    .print-kicker{font-family:Arial,sans-serif;font-size:7pt;letter-spacing:.16em;text-transform:uppercase;color:#E10600;margin-bottom:2.4mm}
+    .print-masthead h1{font-family:Impact,'Arial Narrow',sans-serif;font-size:31pt;line-height:.88;letter-spacing:.02em;margin:0 0 2.2mm;color:#fff}
+    .print-masthead p{font-size:8.2pt;line-height:1.28;margin:0;max-width:128mm;color:rgba(255,255,255,.62)}
+    .print-badge{border:1px solid rgba(255,255,255,.32);background:rgba(255,255,255,.04);min-height:26mm;padding:2.5mm;text-align:center;display:flex;flex-direction:column;justify-content:center}
+    .print-badge span{font-family:Impact,'Arial Narrow',sans-serif;font-size:22pt;line-height:.9;color:#E10600}
+    .print-badge b{font-family:Arial,sans-serif;font-size:6.7pt;letter-spacing:.12em;text-transform:uppercase;color:#fff}
+    .print-breaking{display:grid;grid-template-columns:31mm repeat(4,1fr);gap:2.8mm;margin-bottom:3.5mm;background:rgba(225,6,0,.07);border:1px solid rgba(225,6,0,.25);padding:2.5mm}
+    .print-breaking-label b{display:block;font-family:Impact,'Arial Narrow',sans-serif;font-size:12pt;line-height:1;color:#E10600;text-transform:uppercase}
+    .print-breaking-label span{display:block;font-family:Arial,sans-serif;font-size:5.8pt;line-height:1.25;color:rgba(255,255,255,.48);margin-top:1mm}
+    .print-breaking p{font-size:6.9pt;line-height:1.22;margin:0;color:#fff;font-weight:700;border-left:1px solid rgba(255,255,255,.12);padding-left:2mm}
+    .print-grid{display:grid;grid-template-columns:1.46fr .94fr;gap:5mm;margin-bottom:3mm}
+    .print-lead,.print-awards,.print-side{min-height:0}
+    .print-lead,.print-side{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.12);padding:4mm}
+    .print-lead h2,.print-awards h2,.print-standings h2,.print-session h2,.print-sections h3{font-family:Impact,'Arial Narrow',sans-serif;letter-spacing:.03em;text-transform:uppercase;color:#fff;margin:0}
+    .print-lead h2,.print-awards h2,.print-standings h2,.print-session h2{font-size:14.5pt;border-bottom:1px solid #E10600;padding-bottom:1.2mm;margin-bottom:2mm}
+    .print-lead ol{margin:0;padding:0 0 0 6.2mm;display:grid;gap:1.3mm}
+    .print-lead li{font-size:7.8pt;line-height:1.17;padding-bottom:1.2mm;border-bottom:1px solid rgba(255,255,255,.10)}
+    .print-lead li span{display:block;font-weight:700;color:#fff}
+    .print-lead li em{display:block;font-family:Arial,sans-serif;font-size:5.8pt;font-style:normal;text-transform:uppercase;letter-spacing:.08em;color:#E10600;margin-top:.6mm}
+    .print-side{display:grid;gap:3mm;align-content:start}
+    .print-standings div,.print-session div{display:grid;grid-template-columns:6mm 1fr auto;gap:2mm;align-items:baseline;padding:1.15mm 0;border-bottom:1px solid rgba(255,255,255,.10)}
+    .print-standings b,.print-session b{font-family:Impact,'Arial Narrow',sans-serif;color:#27F4D2;font-size:10pt;line-height:1}
+    .print-standings span,.print-session span{font-size:7.5pt;font-weight:700;line-height:1.16;color:#fff}
+    .print-standings em,.print-session em{font-family:Arial,sans-serif;font-size:6pt;font-style:normal;text-transform:uppercase;color:rgba(255,255,255,.58)}
+    .print-session p{font-family:Arial,sans-serif;font-size:6pt;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.48);margin:-1mm 0 1mm}
+    .print-awards{padding-left:0}
+    .print-awards div{padding:0 0 2mm;margin-bottom:2mm;border-bottom:1px solid rgba(255,255,255,.10)}
+    .print-awards b{display:block;font-family:Arial,sans-serif;font-size:6.2pt;letter-spacing:.11em;text-transform:uppercase;color:#E10600;margin-bottom:.8mm}
+    .print-awards span{display:block;font-size:7.4pt;line-height:1.22;font-weight:700;color:#fff}
+    .print-awards-row{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm;border-top:1px solid rgba(255,255,255,.18);border-bottom:1px solid rgba(255,255,255,.10);padding:2.2mm 0;margin-bottom:3mm}
+    .print-awards-row div{min-width:0}
+    .print-awards-row b{display:block;font-family:Arial,sans-serif;font-size:5.8pt;letter-spacing:.1em;text-transform:uppercase;color:#E10600;margin-bottom:.8mm}
+    .print-awards-row span{display:block;font-size:6.7pt;line-height:1.18;font-weight:700;color:#fff}
+    .print-sections{display:grid;grid-template-columns:repeat(2,1fr);gap:3mm 5mm;border-top:0;padding-top:0}
+    .print-sections div{break-inside:avoid}
+    .print-sections h3{font-size:11.2pt;margin-bottom:1.1mm;color:#E10600}
+    .print-sections p{font-size:7pt;line-height:1.18;margin:0 0 1.1mm;padding-bottom:1.1mm;border-bottom:1px solid rgba(255,255,255,.10);color:#fff}
+    .print-footer{position:absolute;left:0;right:0;bottom:0;border-top:1px solid rgba(255,255,255,.18);padding-top:1.8mm;display:flex;justify-content:space-between;font-family:Arial,sans-serif;font-size:6.3pt;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.46)}
+  }
 `
 
 export default function IntelligencePage() {
@@ -1147,7 +1768,9 @@ export default function IntelligencePage() {
   const [intelTab, setIntelTab] = useState<IntelTab>('driver')
   const [stories,  setStories]  = useState<Story[]>([])
   const [briefing, setBriefing] = useState<any>(null)
+  const [newsletter, setNewsletter] = useState<Newsletter|null>(null)
   const [storiesLoading, setStoriesLoading] = useState(true)
+  const [newsletterLoading, setNewsletterLoading] = useState(true)
   const [drivers,  setDrivers]  = useState<SummaryEntity[]>([])
   const [teams,    setTeams]    = useState<SummaryEntity[]>([])
   const [rawCon,   setRawCon]   = useState<ControversyRaw[]>([])
@@ -1169,11 +1792,14 @@ export default function IntelligencePage() {
     Promise.all([
       fetch('/api/news/stories?hours=720&limit=80').then(r=>r.ok?r.json():null),
       fetch('/api/intelligence/briefing').then(r=>r.ok?r.json():null),
-    ]).then(([sd,bd])=>{
+      fetch('/api/intelligence/newsletter?days=30&limit=160').then(r=>r.ok?r.json():null),
+    ]).then(([sd,bd,nd])=>{
       if(!m)return
       setStories(sd?.ok?(sd.data??[]):[])
       setBriefing(bd?.ok?(bd.briefing??null):null)
+      setNewsletter(nd?.ok?(nd.data??null):null)
     }).finally(()=>{ if(m) setStoriesLoading(false) })
+      .finally(()=>{ if(m) setNewsletterLoading(false) })
     return ()=>{ m=false }
   },[])
 
@@ -1271,7 +1897,7 @@ export default function IntelligencePage() {
               <div>
                 <div className="tabs">
                   <div className="tgrp">
-                    {([{key:'stories',label:'STORIES',count:deduped.length},{key:'drivers',label:'DRIVERS',count:drivers.length},{key:'teams',label:'CONSTRUCTORS',count:teams.length}] as const).map(t=>(
+                    {([{key:'stories',label:'STORIES',count:deduped.length},{key:'newsletter',label:'NEWSLETTER',count:newsletter?.stats?.totalStories ?? 0},{key:'drivers',label:'DRIVERS',count:drivers.length},{key:'teams',label:'CONSTRUCTORS',count:teams.length}] as const).map(t=>(
                       <button key={t.key} className={`tbtn${mainTab===t.key?' on':''}`} onClick={()=>{setMainTab(t.key);if(t.key==='drivers')setIntelTab('driver');if(t.key==='teams')setIntelTab('team')}}>
                         {t.label}<span className="tcnt">{t.count||'—'}</span>
                       </button>
@@ -1324,6 +1950,12 @@ export default function IntelligencePage() {
                     <ClusterGrid clusters={clusters} driverSentiment={driverSentMap} onDriverClick={handleDriverTagClick}/>
                   )}
                 </div>
+              </motion.div>
+            )}
+
+            {mainTab==='newsletter'&&(
+              <motion.div key="newsletter" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-6}} transition={{duration:.22}}>
+                <NewsletterIssue newsletter={newsletter} loading={newsletterLoading}/>
               </motion.div>
             )}
 
