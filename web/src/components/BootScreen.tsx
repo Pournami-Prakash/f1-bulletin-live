@@ -130,11 +130,15 @@ function useCalendar() {
   return { calendar, ready }
 }
 function useCountdown(targetMs: number) {
-  const [v, set] = useState({ d: 0, h: 0, m: 0, s: 0 })
+  const [v, set] = useState({ d: 0, h: 0, m: 0, s: 0, live: false })
   useEffect(() => {
     const t = () => {
       const diff = targetMs - Date.now()
-      if (diff > 0) set({ d: Math.floor(diff / 86400000), h: Math.floor((diff % 86400000) / 3600000), m: Math.floor((diff % 3600000) / 60000), s: Math.floor((diff % 60000) / 1000) })
+      if (diff > 0) {
+        set({ d: Math.floor(diff / 86400000), h: Math.floor((diff % 86400000) / 3600000), m: Math.floor((diff % 3600000) / 60000), s: Math.floor((diff % 60000) / 1000), live: false })
+      } else {
+        set(prev => ({ ...prev, live: true }))
+      }
     }
     t(); const i = setInterval(t, 1000); return () => clearInterval(i)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -449,14 +453,22 @@ export default function BootScreen({ onEnter }: Props) {
                         </div>
                       </div>
                       {/* Countdown */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', background: dark ? '#060606' : '#ececec', borderTopWidth: 1, borderTopStyle: 'solid' as const, borderTopColor: bd }}>
-                        {([[cd.d, 'DAYS'], [cd.h, 'HRS'], [cd.m, 'MIN'], [cd.s, 'SEC']] as [number, string][]).map(([v, l], i) => (
-                          <div key={l} style={{ textAlign: 'center', padding: '13px 0', borderRightWidth: i < 3 ? 1 : 0, borderRightStyle: 'solid' as const, borderRightColor: bd }}>
-                            <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 'clamp(24px,3vw,38px)', fontWeight: 900, fontStyle: 'italic', lineHeight: 1, letterSpacing: '-.03em', color: l === 'SEC' && secTick ? '#e10600' : fg, transition: 'color .1s' }}>{pad(v)}</div>
-                            <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 7, letterSpacing: '.14em', marginTop: 2, color: dim }}>{l}</div>
-                          </div>
-                        ))}
-                      </div>
+                      {cd.live ? (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, background: '#0a0000', borderTopWidth: 1, borderTopStyle: 'solid' as const, borderTopColor: '#3a0000', padding: '14px 0' }}>
+                          <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: '#e10600', animation: 'blink 1s ease-in-out infinite' }} />
+                          <span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 22, letterSpacing: '.12em', color: '#e10600' }}>RACE IN PROGRESS</span>
+                          <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: '#e10600', animation: 'blink 1s ease-in-out infinite .5s' }} />
+                        </div>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', background: dark ? '#060606' : '#ececec', borderTopWidth: 1, borderTopStyle: 'solid' as const, borderTopColor: bd }}>
+                          {([[cd.d, 'DAYS'], [cd.h, 'HRS'], [cd.m, 'MIN'], [cd.s, 'SEC']] as [number, string][]).map(([v, l], i) => (
+                            <div key={l} style={{ textAlign: 'center', padding: '13px 0', borderRightWidth: i < 3 ? 1 : 0, borderRightStyle: 'solid' as const, borderRightColor: bd }}>
+                              <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 'clamp(24px,3vw,38px)', fontWeight: 900, fontStyle: 'italic', lineHeight: 1, letterSpacing: '-.03em', color: l === 'SEC' && secTick ? '#e10600' : fg, transition: 'color .1s' }}>{pad(v)}</div>
+                              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 7, letterSpacing: '.14em', marginTop: 2, color: dim }}>{l}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       {/* CTA button — made more prominent */}
                       <button
                         className="btn"
