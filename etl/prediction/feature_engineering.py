@@ -121,6 +121,39 @@ SC_PROB_DEFAULTS = {
     'permanent':     0.38,
 }
 
+REGULATION_CONFIG_PATH = Path(__file__).with_name("regulation_eras.json")
+with open(REGULATION_CONFIG_PATH) as f:
+    REGULATION_CONFIG = json.load(f)
+
+def regulation_profile(season: int) -> dict:
+    profile = dict(REGULATION_CONFIG.get("default", {}))
+    profile.update(REGULATION_CONFIG.get(str(season), {}))
+    return profile
+
+def circuit_energy_demand(circuit: str, circuit_type: str) -> float:
+    overrides = REGULATION_CONFIG.get("circuit_energy_overrides", {})
+    if circuit in overrides:
+        return float(overrides[circuit])
+    return {
+        'street':        0.72,
+        'street_hybrid': 0.66,
+        'permanent':     0.58,
+    }.get(circuit_type, 0.60)
+
+def pu_uncertainty(team: str, season: int) -> float:
+    if season < 2026:
+        return 0.0
+    return {
+        'Red Bull Racing': 0.32,
+        'Racing Bulls':    0.32,
+        'Aston Martin':    0.28,
+        'Kick Sauber':     0.34,
+        'Audi':            0.34,
+        'Cadillac':        0.45,
+        'Alpine':          0.20,
+        'Williams':        0.14,
+    }.get(team, 0.10)
+
 # ── DB helpers ────────────────────────────────────────────────
 def get_conn():
     return psycopg2.connect(DATABASE_URL, connect_timeout=30)
@@ -508,6 +541,7 @@ for circuit in all_circuits:
         'tyre_deg_soft_ms_per_lap': round(tyre_deg.get(circuit, 80.0), 1),
         'overtaking_index':         round(overtaking_by_circuit.get(circuit, 0.3), 3),
         'circuit_type':             ctype,
+        'energy_demand_index':      round(circuit_energy_demand(circuit, ctype), 3),
         'arw_effectiveness':        round(overtaking_by_circuit.get(circuit, 0.3) * 0.85, 3),
         'pit_lane_delta_sec':       PIT_LANE_DELTA.get(circuit, PIT_LANE_DELTA['default']),
     }
@@ -557,6 +591,7 @@ for (season, round_), race in results.groupby(['season','round']):
     gp_name  = race['gp_name'].iloc[0]
     cp       = circuit_profiles.get(circuit, {})
     circuit_type = cp.get('circuit_type', 'permanent')
+    reg      = regulation_profile(season)
 
     wx             = weather[(weather['season']==season) & (weather['round']==round_)]
     avg_air_temp   = wx['air_temp'].mean()   if not wx.empty else np.nan
@@ -678,6 +713,7 @@ for (season, round_), race in results.groupby(['season','round']):
         tyre_deg_rate     = cp.get('tyre_deg_soft_ms_per_lap', 80.0)
         pit_lane_delta    = cp.get('pit_lane_delta_sec', PIT_LANE_DELTA.get(circuit, PIT_LANE_DELTA['default']))
         pit_crew_speed    = PIT_CREW_SPEED.get(team, PIT_CREW_SPEED['default'])
+        energy_demand     = cp.get('energy_demand_index', circuit_energy_demand(circuit, circuit_type))
 
         grid_pos_int = int(grid_position) if pd.notna(grid_position) else 10
         lap1_risk    = (
@@ -692,7 +728,11 @@ for (season, round_), race in results.groupby(['season','round']):
             'permanent':     0.45,
         }.get(circuit_type, 0.50)
 
-        pu_strength_adjusted = pu_strength * (1 - ers_circuit_factor * 0.15)
+        if reg.get('active_aero'):
+            ers_circuit_factor = min(1.0, 0.35 + energy_demand * 0.65)
+
+        uncertainty = pu_uncertainty(team, season)
+        pu_strength_adjusted = pu_strength * (1 - ers_circuit_factor * 0.15) * (1 - uncertainty * 0.20)
 
         features_rows.append({
             # Identifiers
@@ -742,6 +782,18 @@ for (season, round_), race in results.groupby(['season','round']):
             'pit_lane_delta_sec':      pit_lane_delta,
             'pit_crew_speed':          pit_crew_speed,
             'lap1_risk':               lap1_risk,
+            # Regulation era / energy management
+            'regulation_era':          int(reg.get('regulation_era', 0)),
+            'active_aero':             int(bool(reg.get('active_aero', False))),
+            'ers_power_kw':            float(reg.get('ers_power_kw', 120)),
+            'recharge_limit_mj':       float(reg.get('recharge_limit_mj', 8.5)),
+            'race_boost_cap_kw':       float(reg.get('race_boost_cap_kw', 120)),
+            'wet_ers_deploy_factor':   float(reg.get('wet_ers_deploy_factor', 1.0)),
+            'start_assist_factor':     float(reg.get('start_assist_factor', 0.0)),
+            'constructor_prior_reliability': float(reg.get('constructor_prior_reliability', 1.0)),
+            'live_weekend_weight':     float(reg.get('live_weekend_weight', 0.35)),
+            'energy_demand_index':     round(energy_demand, 3),
+            'pu_uncertainty':          round(uncertainty, 3),
             # Season weight
             'season_weight':           season_weight(season),
             # Weather
@@ -770,6 +822,8 @@ numeric_features = [
     'rolling_avg_finish', 'team_strength', 'pu_strength_adjusted',
     'circuit_affinity', 'rolling_dnf_rate', 'sprint_points_last3',
     'q1_to_q3_ms', 'q2_to_q3_ms',
+    'regulation_era', 'energy_demand_index', 'pu_uncertainty',
+    'live_weekend_weight',
 ]
 print("\n  Feature correlations with finish_position:")
 target = 'finish_position'
@@ -834,6 +888,11 @@ prediction_features = [
     'track_temp', 'had_rain',
     'pit_lane_delta_sec', 'pit_crew_speed', 'lap1_risk',
     'q1_to_q3_ms', 'q2_to_q3_ms',   # Q-session improvement signals
+    'regulation_era', 'active_aero', 'ers_power_kw',
+    'recharge_limit_mj', 'race_boost_cap_kw',
+    'wet_ers_deploy_factor', 'start_assist_factor',
+    'constructor_prior_reliability', 'live_weekend_weight',
+    'energy_demand_index', 'pu_uncertainty',
 ]
 
 available_train_seasons = sorted(features[features['season']!=2026]['season'].unique().tolist())
@@ -850,10 +909,15 @@ feature_meta = {
     'sprint_elo_k_scale':  SPRINT_ELO_K_SCALE,
     'season_weights':      SEASON_WEIGHTS,
     'sprint_races_found':  len(sprint_results['round'].unique()) if not sprint_results.empty else 0,
+    'regulation_config':   REGULATION_CONFIG,
 }
 with open(OUT / 'feature_meta.json', 'w') as f:
     json.dump(feature_meta, f, indent=2)
 step(f"Saved feature_meta.json")
+
+with open(OUT / 'regulation_eras.json', 'w') as f:
+    json.dump(REGULATION_CONFIG, f, indent=2)
+step("Saved regulation_eras.json")
 
 print(f"\n{'='*55}")
 print(f"  Feature engineering complete!")

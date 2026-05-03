@@ -1,0 +1,56 @@
+{
+  "default": {
+    "regulation_era": 0,
+    "active_aero": false,
+    "ers_power_kw": 120,
+    "recharge_limit_mj": 8.5,
+    "race_boost_cap_kw": 120,
+    "qualifying_superclip_power_kw": 120,
+    "wet_ers_deploy_factor": 1.0,
+    "start_assist_factor": 0.0,
+    "historical_weight_multiplier": 1.0,
+    "constructor_prior_reliability": 1.0,
+    "live_weekend_weight": 0.35
+  },
+  "2026": {
+    "regulation_era": 1,
+    "active_aero": true,
+    "ers_power_kw": 350,
+    "recharge_limit_mj": 7.0,
+    "race_boost_cap_kw": 150,
+    "qualifying_superclip_power_kw": 350,
+    "wet_ers_deploy_factor": 0.62,
+    "start_assist_factor": 0.35,
+    "historical_weight_multiplier": 0.55,
+    "constructor_prior_reliability": 0.62,
+    "live_weekend_weight": 0.72,
+    "source_notes": [
+      "FIA 2026 regulation refinements agreed 2026-04-20: recharge limit reduced to 7MJ, peak superclip power 350kW, race boost capped at +150kW, wet ERS deployment reduced.",
+      "F1 2026 terminology: active aero, overtake mode, boost mode, and 350kW MGU-K define the regulation era."
+    ]
+  },
+  "circuit_energy_overrides": {
+    "Baku": 0.92,
+    "Jeddah": 0.9,
+    "Las Vegas": 0.89,
+    "Monza": 0.88,
+    "Miami": 0.82,
+    "Miami Gardens": 0.82,
+    "Shanghai": 0.78,
+    "Spa": 0.78,
+    "Silverstone": 0.74,
+    "Austin": 0.72,
+    "Sakhir": 0.72,
+    "Mexico City": 0.7,
+    "Melbourne": 0.68,
+    "Montreal": 0.68,
+    "Suzuka": 0.62,
+    "Lusail": 0.6,
+    "Barcelona": 0.58,
+    "Yas Island": 0.58,
+    "Zandvoort": 0.52,
+    "Budapest": 0.5,
+    "Singapore": 0.48,
+    "Monaco": 0.34
+  }
+}

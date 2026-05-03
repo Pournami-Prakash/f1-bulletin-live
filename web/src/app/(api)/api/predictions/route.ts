@@ -47,12 +47,65 @@ export type RacePrediction = {
   } | null
 }
 
+type DbNumber = string | number | null
+
+type PredictionRow = Omit<
+  DriverPrediction,
+  | 'win_probability'
+  | 'podium_probability'
+  | 'points_expected'
+  | 'confidence'
+  | 'elo_rating'
+  | 'rolling_avg_finish'
+  | 'upset_score'
+  | 'actual_points'
+> & {
+  win_probability: DbNumber
+  podium_probability: DbNumber
+  points_expected: DbNumber
+  confidence: DbNumber
+  elo_rating: DbNumber
+  rolling_avg_finish: DbNumber
+  upset_score: DbNumber
+  actual_points: DbNumber
+  model_version: string
+  simulation_runs: number
+  data_weight_2026: DbNumber
+  training_seasons: string
+  predicted_at: string
+  gp_name: string
+  circuit: string
+}
+
+type StandingRow = {
+  driver_code: string
+  team: string
+  actual_points: DbNumber
+}
+
+type AccuracyRow = {
+  mae_position: DbNumber
+  winner_correct: boolean | null
+  podium_hits: number | null
+  top5_hits: number | null
+  brier_score: DbNumber
+}
+
+type ChampionshipRow = RacePrediction['championship'][number]
+
+const toNumber = (value: DbNumber, fallback = 0) => {
+  if (value === null || value === undefined) return fallback
+  const parsed = typeof value === 'number' ? value : parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const season  = searchParams.get('season')  ? parseInt(searchParams.get('season')!)  : null
   const round   = searchParams.get('round')   ? parseInt(searchParams.get('round')!)   : null
   const latest  = searchParams.get('latest')  === '1'
   const history = searchParams.get('history') === '1'
+  const model   = searchParams.get('model')
 
   try {
     // ── Accuracy history ───────────────────────────────────────────────────────
@@ -89,8 +142,28 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Provide ?season=&round= or ?latest=1' }, { status: 400 })
     }
 
+    const modelRows = model
+      ? [{ model_version: model }]
+      : await sql`
+          SELECT model_version
+          FROM predictions
+          WHERE season = ${targetSeason}
+            AND round  = ${targetRound}
+          ORDER BY predicted_at DESC
+          LIMIT 1
+        `
+
+    if (modelRows.length === 0) {
+      return NextResponse.json(
+        { error: `No prediction model for ${targetSeason} R${targetRound}` },
+        { status: 404 }
+      )
+    }
+
+    const targetModel = modelRows[0].model_version
+
     // ── Fetch predictions ──────────────────────────────────────────────────────
-    const predictions = await sql`
+    const predictionRows = await sql`
       SELECT p.driver_code, p.team,
              p.predicted_position, p.win_probability, p.podium_probability,
              p.points_expected, p.confidence, p.model_version,
@@ -102,8 +175,10 @@ export async function GET(request: Request) {
       FROM predictions p
       WHERE p.season = ${targetSeason}
         AND p.round  = ${targetRound}
+        AND p.model_version = ${targetModel}
       ORDER BY p.win_probability DESC
     `
+    const predictions = predictionRows as unknown as PredictionRow[]
 
     if (predictions.length === 0) {
       return NextResponse.json(
@@ -113,19 +188,22 @@ export async function GET(request: Request) {
     }
 
     // ── Fetch accuracy ─────────────────────────────────────────────────────────
-    const accuracy = await sql`
+    const accuracyRows = await sql`
       SELECT mae_position, winner_correct, podium_hits, top5_hits, brier_score
       FROM prediction_accuracy
-      WHERE season = ${targetSeason} AND round = ${targetRound}
+      WHERE season = ${targetSeason}
+        AND round = ${targetRound}
+        AND model_version = ${targetModel}
       LIMIT 1
     `
+    const accuracy = accuracyRows as unknown as AccuracyRow[]
 
     // ── Championship projection ────────────────────────────────────────────────
     // Include both race (R) and sprint (S) points.
     // If sprint results aren't ingested yet, IN ('R','S') still works —
     // it just sums whatever exists and picks up sprint points automatically
     // once they're loaded.
-    const standings = await sql`
+    const standingsRows = await sql`
       SELECT r.driver_code, r.team, SUM(r.points)::numeric AS actual_points
       FROM results r
       JOIN sessions s ON s.id = r.session_id
@@ -134,6 +212,7 @@ export async function GET(request: Request) {
       GROUP BY r.driver_code, r.team
       ORDER BY actual_points DESC
     `
+    const standings = standingsRows as unknown as StandingRow[]
 
     // nDone = number of race rounds completed (not sprint sessions —
     // we don't want to double-count rounds that have both R and S)
@@ -145,18 +224,19 @@ export async function GET(request: Request) {
     const nDone      = nDoneRow[0]?.n ?? 0
     const nRemaining = Math.max(0, RACES_PER_SEASON - nDone)
 
-    const championship = standings.map((s: any) => {
-      const pred = predictions.find((p: any) => p.driver_code === s.driver_code)
-      const pts  = pred ? parseFloat(pred.points_expected) : 2.0
+    const championship = standings.map((s): ChampionshipRow => {
+      const pred = predictions.find((p) => p.driver_code === s.driver_code)
+      const pts  = pred ? toNumber(pred.points_expected, 2.0) : 2.0
+      const actualPoints = toNumber(s.actual_points)
       return {
         driver_code:     s.driver_code,
         team:            s.team,
-        actual_points:   parseFloat(s.actual_points),
-        projected_total: Math.round(parseFloat(s.actual_points) + pts * nRemaining),
+        actual_points:   actualPoints,
+        projected_total: Math.round(actualPoints + pts * nRemaining),
         races_done:      nDone,
         races_remaining: nRemaining,
       }
-    }).sort((a: any, b: any) => b.projected_total - a.projected_total)
+    }).sort((a, b) => b.projected_total - a.projected_total)
 
     // ── Shape response ─────────────────────────────────────────────────────────
     const meta = predictions[0]
@@ -166,37 +246,37 @@ export async function GET(request: Request) {
       gp_name:          meta.gp_name,
       circuit:          meta.circuit,
       model_version:    meta.model_version,
-      confidence:       parseFloat(meta.confidence),
+      confidence:       toNumber(meta.confidence),
       simulation_runs:  meta.simulation_runs,
-      data_weight_2026: parseFloat(meta.data_weight_2026 ?? 0),
+      data_weight_2026: toNumber(meta.data_weight_2026),
       training_seasons: meta.training_seasons,
       predicted_at:     meta.predicted_at,
-      has_actuals:      predictions.some((p: any) => p.actual_position !== null),
+      has_actuals:      predictions.some((p) => p.actual_position !== null),
       championship,
-      drivers: predictions.map((p: any) => ({
+      drivers: predictions.map((p) => ({
         driver_code:        p.driver_code,
         team:               p.team,
         predicted_position: p.predicted_position,
-        win_probability:    parseFloat(p.win_probability),
-        podium_probability: parseFloat(p.podium_probability),
-        points_expected:    parseFloat(p.points_expected ?? 0),
-        confidence:         parseFloat(p.confidence),
-        elo_rating:         parseFloat(p.elo_rating ?? 0),
+        win_probability:    toNumber(p.win_probability),
+        podium_probability: toNumber(p.podium_probability),
+        points_expected:    toNumber(p.points_expected),
+        confidence:         toNumber(p.confidence),
+        elo_rating:         toNumber(p.elo_rating),
         grid_position:      p.grid_position,
         gap_to_pole_ms:     p.gap_to_pole_ms,
-        rolling_avg_finish: parseFloat(p.rolling_avg_finish ?? 10.5),
+        rolling_avg_finish: toNumber(p.rolling_avg_finish, 10.5),
         is_upset_pick:      p.is_upset_pick,
-        upset_score:        p.upset_score ? parseFloat(p.upset_score) : null,
+        upset_score:        p.upset_score ? toNumber(p.upset_score) : null,
         actual_position:    p.actual_position,
-        actual_points:      p.actual_points ? parseFloat(p.actual_points) : null,
+        actual_points:      p.actual_points ? toNumber(p.actual_points) : null,
         position_error:     p.position_error,
       })),
       accuracy: accuracy.length > 0 ? {
-        mae_position:   accuracy[0].mae_position   ? parseFloat(accuracy[0].mae_position)   : null,
+        mae_position:   accuracy[0].mae_position   ? toNumber(accuracy[0].mae_position)   : null,
         winner_correct: accuracy[0].winner_correct,
         podium_hits:    accuracy[0].podium_hits,
         top5_hits:      accuracy[0].top5_hits,
-        brier_score:    accuracy[0].brier_score ? parseFloat(accuracy[0].brier_score) : null,
+        brier_score:    accuracy[0].brier_score ? toNumber(accuracy[0].brier_score) : null,
       } : null,
     }
 

@@ -39,7 +39,7 @@ if not DATABASE_URL:
     raise RuntimeError("NEON_DATABASE_URL not found in web/.env.local")
 
 FEATURES_DIR  = Path("features_output")
-MODEL_VERSION = "v3_ensemble_mc"
+MODEL_VERSION = "v4_regulation_aware_mc"
 MC_RUNS       = 500
 RACES_PER_SEASON = 24
 
@@ -73,6 +73,45 @@ PU_PRIOR = {
     'Ford': 0.50,    'Renault': 0.45,  'Audi': 0.40, 'General Motors': 0.35,
 }
 POINTS_MAP = {1:25, 2:18, 3:15, 4:12, 5:10, 6:8, 7:6, 8:4, 9:2, 10:1}
+
+REGULATION_CONFIG_PATH = Path(__file__).with_name("regulation_eras.json")
+
+def load_regulation_config() -> dict:
+    output_path = FEATURES_DIR / "regulation_eras.json"
+    path = output_path if output_path.exists() else REGULATION_CONFIG_PATH
+    with open(path) as f:
+        return json.load(f)
+
+REGULATION_CONFIG = load_regulation_config()
+
+def regulation_profile(season: int) -> dict:
+    profile = dict(REGULATION_CONFIG.get("default", {}))
+    profile.update(REGULATION_CONFIG.get(str(season), {}))
+    return profile
+
+def circuit_energy_demand(circuit: str, circuit_type: str = "permanent") -> float:
+    overrides = REGULATION_CONFIG.get("circuit_energy_overrides", {})
+    if circuit in overrides:
+        return float(overrides[circuit])
+    return {
+        'street':        0.72,
+        'street_hybrid': 0.66,
+        'permanent':     0.58,
+    }.get(circuit_type, 0.60)
+
+def pu_uncertainty(team: str, season: int) -> float:
+    if season < 2026:
+        return 0.0
+    return {
+        'Red Bull Racing': 0.32,
+        'Racing Bulls':    0.32,
+        'Aston Martin':    0.28,
+        'Kick Sauber':     0.34,
+        'Audi':            0.34,
+        'Cadillac':        0.45,
+        'Alpine':          0.20,
+        'Williams':        0.14,
+    }.get(team, 0.10)
 
 PIT_LANE_DELTA = {
     'Monaco': 19.0, 'Singapore': 24.0, 'Marina Bay': 24.0,
@@ -128,6 +167,7 @@ def load_artifacts() -> dict:
     with open(FEATURES_DIR / 'constructor_strength.json') as f: artifacts['constructor'] = json.load(f)
     with open(FEATURES_DIR / 'circuit_profiles.json')     as f: artifacts['circuits']    = json.load(f)
     with open(FEATURES_DIR / 'feature_meta.json')         as f: artifacts['meta']        = json.load(f)
+    artifacts['regulation_config'] = artifacts['meta'].get('regulation_config', REGULATION_CONFIG)
     for fname, key in [
         ('circuit_elo.json',    'circuit_elo'),
         ('dnf_survival.json',   'dnf_survival'),
@@ -150,15 +190,30 @@ RIDGE_FEATURES = [
     'overtaking_index', 'tyre_deg_rate',
     'ers_circuit_factor', 'track_temp',
     'sprint_points_last3',   # sprint form signal
+    'regulation_era', 'active_aero',
+    'energy_demand_index', 'pu_uncertainty',
+    'constructor_prior_reliability', 'live_weekend_weight',
+    'wet_ers_deploy_factor', 'start_assist_factor',
     # q1_to_q3_ms and q2_to_q3_ms excluded from Ridge —
     # 51% null + weak correlation (0.04) adds noise at this stage.
     # Re-enabled automatically when XGBoost activates at R8 (handles nulls natively).
 ]
 
+def _training_rows(features_df: pd.DataFrame, target_season: int, target_round: int) -> pd.DataFrame:
+    train = features_df[
+        (features_df['season'] < target_season) |
+        ((features_df['season'] == target_season) & (features_df['round'] < target_round))
+    ].copy()
+    if target_season >= 2026 and 'season_weight' in train.columns:
+        train['season_weight'] = train['season'].map(SEASON_WEIGHTS).fillna(0.5)
+        train.loc[train['season'] < 2026, 'season_weight'] *= float(regulation_profile(2026).get('historical_weight_multiplier', 0.55))
+        train.loc[train['season'] == 2026, 'season_weight'] *= 2.25
+    return train
+
 def _sample_weights(train: pd.DataFrame) -> np.ndarray:
     w = train['season'].map(SEASON_WEIGHTS).fillna(0.5)
-    # Extra weight to 2025 — most relevant pre-2026 season under closest regulations
-    w = w * train['season'].apply(lambda s: 1.5 if s == 2025 else 1.0)
+    if 'season_weight' in train.columns:
+        w = train['season_weight'].fillna(w)
     max_r = train[['season','round']].apply(tuple, axis=1).max()
     rec   = train.apply(
         lambda r: 2.0 if (r['season'], r['round']) >= (max_r[0], max_r[1]-3) else 1.0,
@@ -166,10 +221,12 @@ def _sample_weights(train: pd.DataFrame) -> np.ndarray:
     )
     return (w * rec).values
 
-def train_ridge(features_df) -> Pipeline | None:
+def train_ridge(features_df, target_season: int, target_round: int) -> Pipeline | None:
     if features_df is None or len(features_df) < 50:
         return None
-    train     = features_df[features_df['season'] != 2026].copy()
+    train     = _training_rows(features_df, target_season, target_round)
+    if len(train) < 50:
+        return None
     available = [f for f in RIDGE_FEATURES if f in train.columns]
     pipe = Pipeline([
         ('imputer', SimpleImputer(strategy='median')),
@@ -180,11 +237,14 @@ def train_ridge(features_df) -> Pipeline | None:
     step(f"  Ridge trained: {len(train)} rows, {len(available)} features")
     return pipe
 
-def train_random_forest(features_df) -> Pipeline | None:
+def train_random_forest(features_df, target_season: int, target_round: int) -> Pipeline | None:
     if features_df is None or len(features_df) < 100:
         step("  Random Forest: insufficient data (<100 rows)")
         return None
-    train     = features_df[features_df['season'] != 2026].copy()
+    train     = _training_rows(features_df, target_season, target_round)
+    if len(train) < 100:
+        step("  Random Forest: insufficient eligible training rows (<100)")
+        return None
     available = [f for f in RIDGE_FEATURES if f in train.columns]
     pipe = Pipeline([
         ('imputer', SimpleImputer(strategy='median')),
@@ -217,20 +277,22 @@ def predict_ridge(pipe: Pipeline | None, entries: list[dict]) -> dict[str, float
 # XGBoost handles 51% nulls natively (no imputer distortion)
 XGB_EXTRA_FEATURES = ['q1_to_q3_ms', 'q2_to_q3_ms']
 
-def train_xgboost(features_df: pd.DataFrame, n_2026_races: int) -> object | None:
+def train_xgboost(features_df: pd.DataFrame, n_2026_races: int, target_season: int, target_round: int) -> object | None:
     if not XGBOOST_AVAILABLE:
         step("  XGBoost not installed — run: pip install xgboost")
         return None
     if features_df is None or n_2026_races < XGB_TRIGGER_RACES:
         return None
-    train     = features_df.copy()
+    train     = _training_rows(features_df, target_season, target_round)
+    if len(train) < 100:
+        return None
     xgb_features = RIDGE_FEATURES + [f for f in XGB_EXTRA_FEATURES if f not in RIDGE_FEATURES]
     available = [f for f in xgb_features if f in train.columns]
     X         = train[available].copy()
     y         = train['finish_position'].values
     imp       = SimpleImputer(strategy='median')
     X_imp     = imp.fit_transform(X)
-    weights   = train['season'].map(SEASON_WEIGHTS).fillna(0.5).values
+    weights   = _sample_weights(train)
     model     = xgb.XGBRegressor(
         n_estimators=300, max_depth=4, learning_rate=0.05,
         subsample=0.8, colsample_bytree=0.8,
@@ -502,10 +564,15 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
 
     circuit_row = query("""
         SELECT circuit FROM sessions
-        WHERE season=%s AND round=%s AND session_type='R' LIMIT 1
+        WHERE season=%s AND round=%s
+        ORDER BY CASE session_type WHEN 'R' THEN 1 WHEN 'Q' THEN 2 WHEN 'S' THEN 3 ELSE 4 END
+        LIMIT 1
     """, (season, round_))
     circuit = circuit_row.iloc[0]['circuit'] if not circuit_row.empty else 'Unknown'
     cp = circuits.get(circuit, {})
+    ctype = cp.get('circuit_type', 'permanent')
+    reg = regulation_profile(season)
+    energy_demand = cp.get('energy_demand_index', circuit_energy_demand(circuit, ctype))
 
     wx = query("""
         SELECT AVG(track_temp) as track_temp, BOOL_OR(rainfall) as had_rain
@@ -560,7 +627,10 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
     n_2026_races = query(
         "SELECT COUNT(DISTINCT round) as n FROM sessions WHERE season=2026 AND session_type='R'"
     ).iloc[0]['n']
-    confidence = min(0.30 + (n_2026_races / 24) * 0.65, 0.95)
+    if season >= 2026:
+        confidence = min(0.24 + (n_2026_races / 24) * 0.64, 0.88)
+    else:
+        confidence = min(0.30 + (n_2026_races / 24) * 0.65, 0.95)
 
     entries = []
     all_drivers = latest_results['driver_code'].tolist() if not latest_results.empty else []
@@ -614,6 +684,14 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
         # Sprint points as a form signal — drivers with sprint points have proven
         # recent pace regardless of race finishes
         sprint_pts = sprint_pts_map.get(driver, 0.0)
+        uncertainty = pu_uncertainty(team, season)
+        ers_circuit_factor = (
+            min(1.0, 0.35 + float(energy_demand) * 0.65)
+            if reg.get('active_aero') else
+            {'street': 0.75, 'street_hybrid': 0.60, 'permanent': 0.45}.get(ctype, 0.50)
+        )
+        pu_strength_adjusted = PU_PRIOR.get(PU_MANUFACTURERS.get(team, 'Unknown'), 0.50)
+        pu_strength_adjusted = pu_strength_adjusted * (1 - ers_circuit_factor * 0.15) * (1 - uncertainty * 0.20)
 
         entries.append({
             'driver_code':        driver,
@@ -629,6 +707,7 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
             'team_strength':      constructor.get(team, 10.5),
             'pu_manufacturer':    PU_MANUFACTURERS.get(team, 'Unknown'),
             'pu_strength':        PU_PRIOR.get(PU_MANUFACTURERS.get(team, 'Unknown'), 0.50),
+            'pu_strength_adjusted': pu_strength_adjusted,
             'rolling_avg_finish': rolling_avg,
             'rolling_dnf_rate':   rolling_dnf,
             'circuit_affinity':   circuit_aff,
@@ -640,6 +719,18 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
             'arw_effectiveness':  cp.get('arw_effectiveness', 0.255),
             'tyre_deg_rate':      cp.get('tyre_deg_soft_ms_per_lap', 80.0),
             'avg_pit_stops':      cp.get('avg_pit_stops', 2.0),
+            'ers_circuit_factor': ers_circuit_factor,
+            'regulation_era':     int(reg.get('regulation_era', 0)),
+            'active_aero':        int(bool(reg.get('active_aero', False))),
+            'ers_power_kw':       float(reg.get('ers_power_kw', 120)),
+            'recharge_limit_mj':  float(reg.get('recharge_limit_mj', 8.5)),
+            'race_boost_cap_kw':  float(reg.get('race_boost_cap_kw', 120)),
+            'wet_ers_deploy_factor': float(reg.get('wet_ers_deploy_factor', 1.0)),
+            'start_assist_factor': float(reg.get('start_assist_factor', 0.0)),
+            'constructor_prior_reliability': float(reg.get('constructor_prior_reliability', 1.0)),
+            'live_weekend_weight': float(reg.get('live_weekend_weight', 0.35)),
+            'energy_demand_index': float(energy_demand),
+            'pu_uncertainty':     uncertainty,
             'track_temp':         avg_track_temp,
             'had_rain':           had_rain,
             'circuit':            circuit,
@@ -662,12 +753,21 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
 def bayesian_prior(entries: list[dict]) -> dict[str, float]:
     scores        = {}
     overtaking_idx = entries[0].get('overtaking_index', 0.30) if entries else 0.30
+    reg_era = entries[0].get('regulation_era', 0) if entries else 0
+    live_w  = entries[0].get('live_weekend_weight', 0.35) if entries else 0.35
+    reliability = entries[0].get('constructor_prior_reliability', 1.0) if entries else 1.0
     grid_w    = 0.35 + (1 - overtaking_idx) * 0.15
     elo_w     = 0.20 - (1 - overtaking_idx) * 0.05
     team_w    = 0.15
     gap_w     = 0.15
     circuit_w = 0.10
     pu_w      = 0.05
+    if reg_era >= 1:
+        grid_w = 0.30 + live_w * 0.20
+        gap_w  = 0.20 + live_w * 0.12
+        elo_w  = max(0.06, elo_w * 0.55)
+        team_w = team_w * reliability
+        pu_w   = pu_w * reliability
 
     for e in entries:
         n = len(entries)
@@ -676,7 +776,7 @@ def bayesian_prior(entries: list[dict]) -> dict[str, float]:
         team_score    = max(0, min(1, 1 - (e['team_strength'] - 1) / max(20 - 1, 1)))
         gap_score     = 1 - min(e['gap_to_pole_sec'] / 5.0, 1)
         circuit_score = max(0, min(1, 1 - (e['circuit_affinity'] - 1) / max(n - 1, 1)))
-        pu_score      = e['pu_strength']
+        pu_score      = e.get('pu_strength_adjusted', e['pu_strength'])
 
         team = e.get('team', '')
         extra_discount = CONSTRUCTOR_2026_DISCOUNT.get(team, 0.0)
@@ -686,6 +786,8 @@ def bayesian_prior(entries: list[dict]) -> dict[str, float]:
 
         fp_pace_adj        = e.get('fp_pace_adj', 0.0)
         adjusted_gap_score = max(0, min(1, gap_score + fp_pace_adj))
+        if e.get('had_rain') and e.get('regulation_era', 0) >= 1:
+            adjusted_gap_score *= e.get('wet_ers_deploy_factor', 0.62)
 
         composite = (
             grid_w    * grid_score        +
@@ -714,6 +816,10 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
     pit_delta_sec = PIT_LANE_DELTA.get(circuit, PIT_LANE_DELTA['default'])
     avg_lap_sec   = 90.0
     pit_pos_loss  = pit_delta_sec / avg_lap_sec * n * 0.3
+    reg_era       = entries[0].get('regulation_era', 0)
+    active_aero   = bool(entries[0].get('active_aero', 0))
+    energy_demand = float(entries[0].get('energy_demand_index', 0.6))
+    wet_factor    = float(entries[0].get('wet_ers_deploy_factor', 1.0)) if entries[0].get('had_rain') else 1.0
 
     for run in range(MC_RUNS):
         positions = {e['driver_code']: float(e['grid_position']) for e in entries}
@@ -729,8 +835,10 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
 
         for e in entries:
             elo_adj = (1500 - e['elo_rating']) * 0.05
-            noise   = np.random.normal(0, 120)
-            pace_ms[e['driver_code']] = e['gap_to_pole_sec'] * 1000 + elo_adj + noise
+            era_noise = 120 + (80 * reg_era) + (70 * energy_demand if active_aero else 0)
+            noise   = np.random.normal(0, era_noise)
+            energy_penalty = energy_demand * max(e['grid_position'] - 1, 0) * 4 if active_aero else 0
+            pace_ms[e['driver_code']] = e['gap_to_pole_sec'] * 1000 + elo_adj + energy_penalty + noise
 
         lap1_risk = {e['driver_code']: (
             0.01 if e['grid_position'] <= 3 else
@@ -739,7 +847,8 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
         ) for e in entries}
         for e in entries:
             d = e['driver_code']
-            if np.random.random() < lap1_risk[d]:
+            assisted_lap1_risk = lap1_risk[d] * (1 - e.get('start_assist_factor', 0.0) * 0.35)
+            if np.random.random() < assisted_lap1_risk:
                 if np.random.random() < 0.3:
                     retired.add(d)
                 else:
@@ -832,7 +941,11 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
                     1.0 if current_pos <= 15 else
                     1.4
                 )
-                base_overtake = e['arw_effectiveness'] * 0.15 * pos_overtake_factor
+                active_aero_factor = 1.0
+                if e.get('active_aero'):
+                    active_aero_factor = 0.88 + e.get('energy_demand_index', 0.6) * 0.45
+                    active_aero_factor *= wet_factor
+                base_overtake = e['arw_effectiveness'] * 0.15 * pos_overtake_factor * active_aero_factor
                 for j, other in enumerate(pos_sorted):
                     if other == d or other in retired:
                         continue
@@ -874,12 +987,27 @@ def compute_predictions(
     rf_preds:    dict[str, float] | None = None,
 ) -> list[dict]:
     n_2026       = query("SELECT COUNT(DISTINCT round) as n FROM sessions WHERE season=2026 AND session_type='R'").iloc[0]['n']
+    reg_era      = entries[0].get('regulation_era', 0) if entries else 0
+    live_w       = entries[0].get('live_weekend_weight', 0.35) if entries else 0.35
     data_weight  = min(n_2026 / 10.0, 0.9)
-    prior_weight = max(0.45 - data_weight * 0.25, 0.15)  # 0.45 at R1 → reduces as 2026 data grows
+    if season >= 2026 and reg_era >= 1:
+        prior_weight = max(0.38 - data_weight * 0.20, 0.16)
+        ridge_weight_pos = 0.12 if ridge_preds else 0.0
+        rf_weight_pos    = 0.06 if rf_preds    else 0.0
+        live_boost       = min(live_w * 0.10, 0.08)
+        mc_weight_pos    = 1.0 - ridge_weight_pos - rf_weight_pos + live_boost
+    else:
+        prior_weight = max(0.45 - data_weight * 0.25, 0.15)  # 0.45 at R1 → reduces as 2026 data grows
+        ridge_weight_pos = 0.20 if ridge_preds else 0.0
+        rf_weight_pos    = 0.10 if rf_preds    else 0.0
+        mc_weight_pos    = 1.0 - ridge_weight_pos - rf_weight_pos  # 0.70
     mc_weight    = 1.0 - prior_weight
-    ridge_weight_pos = 0.20 if ridge_preds else 0.0
-    rf_weight_pos    = 0.10 if rf_preds    else 0.0
-    mc_weight_pos    = 1.0 - ridge_weight_pos - rf_weight_pos  # 0.70
+    pos_total     = mc_weight_pos + ridge_weight_pos + rf_weight_pos
+    mc_weight_pos, ridge_weight_pos, rf_weight_pos = (
+        mc_weight_pos / pos_total,
+        ridge_weight_pos / pos_total,
+        rf_weight_pos / pos_total,
+    )
 
     n           = len(entries)
     predictions = []
@@ -927,7 +1055,7 @@ def compute_predictions(
             'model_version':      MODEL_VERSION,
             'simulation_runs':    MC_RUNS,
             'data_weight_2026':   round(data_weight, 3),
-            'training_seasons':   ','.join(str(s) for s in sorted(SEASON_WEIGHTS.keys()) if s < 2026),
+            'training_seasons':   ','.join(str(s) for s in sorted(SEASON_WEIGHTS.keys()) if s < season or s == season),
             'elo_rating':         round(e['elo_rating'], 1),
             'grid_position':      e['grid_position'],
             'gap_to_pole_ms':     int(e['gap_to_pole_sec'] * 1000),
@@ -1179,15 +1307,15 @@ def main():
 
     if XGBOOST_AVAILABLE and n_2026_races >= XGB_TRIGGER_RACES:
         step(f"Training XGBoost...")
-        ml_model = train_xgboost(artifacts['features'], n_2026_races)
+        ml_model = train_xgboost(artifacts['features'], n_2026_races, season, round_)
         ml_type  = 'xgboost'
     else:
         step(f"Training Ridge (XGBoost activates at R{XGB_TRIGGER_RACES})...")
-        ml_model = train_ridge(artifacts['features'])
+        ml_model = train_ridge(artifacts['features'], season, round_)
         ml_type  = 'ridge'
 
     global MODEL_VERSION
-    MODEL_VERSION = f"v3_bayesian_{'xgb' if ml_type == 'xgboost' else 'ridge'}_mc"
+    MODEL_VERSION = f"v4_regaware_{'xgb' if ml_type == 'xgboost' else 'ridge'}_mc"
 
     step("Building entry list...")
     entries = get_entry_list(season, round_, artifacts)
@@ -1205,7 +1333,7 @@ def main():
         step(f"  {ml_type.capitalize()} predictions computed for {len(ridge_preds)} drivers")
 
     step("Training Random Forest ensemble...")
-    rf_pipe  = train_random_forest(artifacts['features'])
+    rf_pipe  = train_random_forest(artifacts['features'], season, round_)
     rf_preds = predict_ridge(rf_pipe, entries) if rf_pipe else None
     if rf_preds:
         step(f"  Random Forest predictions computed")
