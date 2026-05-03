@@ -33,7 +33,7 @@ try:
 except ImportError:
     XGBOOST_AVAILABLE = False
 
-load_dotenv("../../web/.env.local")
+load_dotenv(Path(__file__).resolve().parents[2] / "web" / ".env.local")
 DATABASE_URL = os.environ.get("NEON_DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("NEON_DATABASE_URL not found in web/.env.local")
@@ -75,6 +75,7 @@ PU_PRIOR = {
 POINTS_MAP = {1:25, 2:18, 3:15, 4:12, 5:10, 6:8, 7:6, 8:4, 9:2, 10:1}
 
 REGULATION_CONFIG_PATH = Path(__file__).with_name("regulation_eras.json")
+GRID_OVERRIDES_PATH = Path(__file__).with_name("grid_overrides.json")
 
 def load_regulation_config() -> dict:
     output_path = FEATURES_DIR / "regulation_eras.json"
@@ -113,6 +114,20 @@ def pu_uncertainty(team: str, season: int) -> float:
         'Williams':        0.14,
     }.get(team, 0.10)
 
+def historical_signal_weight(season: int, completed_races: int, base: float = 0.45) -> float:
+    """
+    How much pre-2026 evidence to trust in a regulation-reset season.
+    Circuit layout still matters, but aero/PU/tyre behavior should start as
+    a discounted prior and earn trust back as same-era races accumulate.
+    """
+    if season < 2026:
+        return 1.0
+    evidence = min(max(completed_races / max(XGB_TRIGGER_RACES, 1), 0.0), 1.0)
+    return min(0.90, base + evidence * 0.35)
+
+def blend_value(value: float, neutral: float, weight: float) -> float:
+    return neutral + (float(value) - neutral) * weight
+
 PIT_LANE_DELTA = {
     'Monaco': 19.0, 'Singapore': 24.0, 'Marina Bay': 24.0,
     'Baku': 18.0,   'Jeddah': 22.0,    'Las Vegas': 17.0,
@@ -120,6 +135,7 @@ PIT_LANE_DELTA = {
     'Budapest': 20.0,  'default': 21.0,
 }
 MAX_POSITION_GAIN = 12
+DEFAULT_MC_SEED = 4260
 
 RACE_LAPS_BY_CIRCUIT = {
     'Melbourne': 58,
@@ -228,6 +244,77 @@ def get_race_distance(season: int, round_: int, circuit: str) -> int:
 def section(t): print(f"\n{'='*55}\n  {t}\n{'='*55}")
 def step(t):    print(f"  → {t}")
 
+def load_grid_overrides() -> dict:
+    if not GRID_OVERRIDES_PATH.exists():
+        return {}
+    with open(GRID_OVERRIDES_PATH) as f:
+        return json.load(f)
+
+def normalize_grid_positions(quali: pd.DataFrame) -> pd.DataFrame:
+    if quali.empty or 'grid_position' not in quali.columns:
+        return quali
+
+    q = quali.copy()
+    positions = pd.to_numeric(q['grid_position'], errors='coerce')
+    expected = set(range(1, len(q) + 1))
+    actual = set(int(p) for p in positions.dropna())
+    has_duplicates = positions.dropna().duplicated().any()
+    has_missing = actual != expected
+
+    if not has_duplicates and not has_missing:
+        q['grid_position'] = positions.astype(int)
+        return q
+
+    q['_source_grid_position'] = positions
+    q['_grid_sort'] = positions.fillna(len(q) + 1)
+    q['_best_sort'] = pd.to_numeric(q.get('best_ms'), errors='coerce').fillna(float('inf'))
+    q = q.sort_values(['_grid_sort', '_best_sort', 'driver_code']).reset_index(drop=True)
+    q['grid_position'] = np.arange(1, len(q) + 1)
+    q = q.drop(columns=['_grid_sort', '_best_sort'])
+    step("  Normalized qualifying grid positions: duplicate/missing grid slots detected")
+    return q
+
+def apply_grid_overrides(quali: pd.DataFrame, season: int, round_: int) -> pd.DataFrame:
+    overrides = load_grid_overrides().get(f"{season}-{round_}", {})
+    if quali.empty or not overrides:
+        return quali
+
+    q = normalize_grid_positions(quali)
+    override_slots = {
+        str(driver).upper(): int(slot)
+        for driver, slot in overrides.items()
+    }
+    assigned = {
+        driver: min(max(slot, 1), len(q))
+        for driver, slot in override_slots.items()
+        if driver in set(q['driver_code'].astype(str).str.upper())
+    }
+    if not assigned:
+        return q
+
+    q['_driver_key'] = q['driver_code'].astype(str).str.upper()
+    fixed_slots = set(assigned.values())
+    free_slots = [slot for slot in range(1, len(q) + 1) if slot not in fixed_slots]
+    next_free = iter(free_slots)
+
+    new_positions = []
+    for _, row in q.sort_values('grid_position').iterrows():
+        driver = row['_driver_key']
+        if driver in assigned:
+            new_positions.append(assigned[driver])
+        else:
+            new_positions.append(next(next_free))
+
+    q = q.sort_values('grid_position').copy()
+    q['grid_position'] = new_positions
+    q = q.drop(columns=['_driver_key'])
+    q = q.sort_values(['grid_position', 'driver_code']).reset_index(drop=True)
+    step(
+        "  Applied starting-grid overrides: " +
+        ", ".join(f"{driver}=P{slot}" for driver, slot in sorted(assigned.items()))
+    )
+    return q
+
 # ─────────────────────────────────────────────────────────────
 # LOAD ARTIFACTS
 # ─────────────────────────────────────────────────────────────
@@ -244,6 +331,7 @@ def load_artifacts() -> dict:
         ('circuit_elo.json',    'circuit_elo'),
         ('dnf_survival.json',   'dnf_survival'),
         ('tyre_deg_gp.json',    'tyre_deg_gp'),
+        ('circuit_memory.json', 'circuit_memory'),
     ]:
         p = FEATURES_DIR / fname
         artifacts[key] = json.load(open(p)) if p.exists() else {}
@@ -259,8 +347,13 @@ RIDGE_FEATURES = [
     'rolling_avg_finish', 'rolling_dnf_rate',
     'team_strength', 'pu_strength_adjusted',
     'circuit_affinity', 'sc_probability',
+    'driver_overperformance',
     'overtaking_index', 'tyre_deg_rate',
     'ers_circuit_factor', 'track_temp',
+    'grid_volatility', 'front_hold_rate',
+    'late_sc_probability', 'one_stop_rate', 'two_stop_rate',
+    'first_stop_median_lap', 'early_stop_gain_advantage',
+    'strategy_entropy', 'crash_dnf_rate', 'race_control_chaos',
     'sprint_points_last3',   # sprint form signal
     'regulation_era', 'active_aero',
     'energy_demand_index', 'pu_uncertainty',
@@ -306,6 +399,7 @@ def train_ridge(features_df, target_season: int, target_round: int) -> Pipeline 
         ('model',   Ridge(alpha=50.0)),
     ])
     pipe.fit(train[available], train['finish_position'], model__sample_weight=_sample_weights(train))
+    pipe._features = available
     step(f"  Ridge trained: {len(train)} rows, {len(available)} features")
     return pipe
 
@@ -326,6 +420,7 @@ def train_random_forest(features_df, target_season: int, target_round: int) -> P
         )),
     ])
     pipe.fit(train[available], train['finish_position'], model__sample_weight=_sample_weights(train))
+    pipe._features = available
     importances = pipe.named_steps['model'].feature_importances_
     top = sorted(zip(available, importances), key=lambda x: x[1], reverse=True)[:4]
     step(f"  RF trained: {len(train)} rows — top: {', '.join(f+':'+str(round(v,2)) for f,v in top)}")
@@ -334,9 +429,10 @@ def train_random_forest(features_df, target_season: int, target_round: int) -> P
 def predict_ridge(pipe: Pipeline | None, entries: list[dict]) -> dict[str, float] | None:
     if pipe is None:
         return None
-    rows      = [{f: e.get(f, np.nan) for f in RIDGE_FEATURES} for e in entries]
+    pipe_features = getattr(pipe, '_features', RIDGE_FEATURES)
+    rows      = [{f: e.get(f, np.nan) for f in pipe_features} for e in entries]
     X         = pd.DataFrame(rows)
-    available = [f for f in RIDGE_FEATURES if f in X.columns]
+    available = [f for f in pipe_features if f in X.columns]
     X         = X[available]
     try:
         preds = np.clip(pipe.predict(X), 1, len(entries))
@@ -478,25 +574,41 @@ def project_championship(season: int) -> pd.DataFrame | None:
     toward the championship. Gracefully handles seasons with no sprint data.
     """
     actual = query("""
-        SELECT r.driver_code, r.team,
-               SUM(r.points) AS actual_points,
-               COUNT(DISTINCT s.round) AS races_completed
-        FROM results r
-        JOIN sessions s ON s.id = r.session_id
-        WHERE s.season = %s
-          AND s.session_type IN ('R', 'S')
-        GROUP BY r.driver_code, r.team
-        ORDER BY actual_points DESC
-    """, (season,))
+        WITH points AS (
+            SELECT r.driver_code,
+                   SUM(r.points) AS actual_points,
+                   COUNT(DISTINCT s.round) AS races_completed
+            FROM results r
+            JOIN sessions s ON s.id = r.session_id
+            WHERE s.season = %s
+              AND s.session_type IN ('R', 'S')
+            GROUP BY r.driver_code
+        ),
+        latest_team AS (
+            SELECT DISTINCT ON (r.driver_code)
+                   r.driver_code, r.team
+            FROM results r
+            JOIN sessions s ON s.id = r.session_id
+            WHERE s.season = %s
+              AND s.session_type IN ('R', 'S')
+            ORDER BY r.driver_code, s.round DESC,
+                     CASE s.session_type WHEN 'R' THEN 1 WHEN 'S' THEN 2 ELSE 3 END
+        )
+        SELECT p.driver_code, lt.team, p.actual_points, p.races_completed
+        FROM points p
+        LEFT JOIN latest_team lt ON lt.driver_code = p.driver_code
+        ORDER BY p.actual_points DESC
+    """, (season, season))
     if actual.empty:
         return None
 
     latest_pred = query("""
-        SELECT driver_code, win_probability, podium_probability, points_expected
+        SELECT DISTINCT ON (driver_code)
+               driver_code, win_probability, podium_probability, points_expected
         FROM predictions
         WHERE season=%s
           AND round = (SELECT MAX(round) FROM predictions WHERE season=%s)
-        ORDER BY win_probability DESC
+        ORDER BY driver_code, predicted_at DESC
     """, (season, season))
     if latest_pred.empty:
         return None
@@ -580,12 +692,13 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
             if int(valid_quali.sum()) < len(quali):
                 step(f"  Dropping {len(quali) - int(valid_quali.sum())} incomplete qualifying rows")
                 quali = quali[valid_quali].copy()
+            quali = apply_grid_overrides(normalize_grid_positions(quali), season, round_)
             step(f"  Using qualifying data: {len(quali)} drivers")
     if quali.empty:
         step(f"  No qualifying data for {season} R{round_} — estimating from Elo")
 
     race_results = query("""
-        SELECT DISTINCT r.driver_code, r.team
+        SELECT DISTINCT r.driver_code, r.team, r.grid_position AS result_grid_position
         FROM results r
         JOIN sessions s ON s.id = r.session_id
         WHERE s.session_type='R' AND s.season=%s AND s.round=%s
@@ -609,7 +722,7 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
         step(f"  Built driver list from qualifying data ({len(latest_results)} drivers)")
     else:
         latest_results = query("""
-            SELECT DISTINCT r.driver_code, r.team
+            SELECT DISTINCT r.driver_code, r.team, r.grid_position AS result_grid_position
             FROM results r
             JOIN sessions s ON s.id = r.session_id
             WHERE s.session_type = 'R'
@@ -637,9 +750,37 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
     """, (season, round_))
     circuit = circuit_row.iloc[0]['circuit'] if not circuit_row.empty else 'Unknown'
     cp = circuits.get(circuit, {})
+    cm = artifacts.get('circuit_memory', {}).get(circuit, {})
     ctype = cp.get('circuit_type', 'permanent')
     reg = regulation_profile(season)
     energy_demand = cp.get('energy_demand_index', circuit_energy_demand(circuit, ctype))
+    n_2026_races = count_completed_races(2026)
+    memory_w = historical_signal_weight(season, n_2026_races)
+    structural_w = historical_signal_weight(season, n_2026_races, base=0.65)
+    cm_adj = {
+        'avg_pit_stops': blend_value(cm.get('avg_pit_stops', cp.get('avg_pit_stops', 2.0)), cp.get('avg_pit_stops', 2.0), memory_w),
+        'grid_volatility': blend_value(cm.get('grid_volatility', 3.0), 3.0, memory_w),
+        'front_hold_rate': blend_value(cm.get('front_hold_rate', 0.55), 0.55, memory_w),
+        'top10_shuffle_rate': blend_value(cm.get('top10_shuffle_rate', 0.30), 0.30, memory_w),
+        'sc_race_probability': blend_value(cm.get('sc_race_probability', cp.get('sc_probability', 0.35)), cp.get('sc_probability', 0.35), structural_w),
+        'early_sc_probability': blend_value(cm.get('early_sc_probability', 0.18), 0.18, structural_w),
+        'middle_sc_probability': blend_value(cm.get('middle_sc_probability', 0.18), 0.18, structural_w),
+        'late_sc_probability': blend_value(cm.get('late_sc_probability', 0.14), 0.14, structural_w),
+        'one_stop_rate': blend_value(cm.get('one_stop_rate', 0.45), 0.45, memory_w),
+        'two_stop_rate': blend_value(cm.get('two_stop_rate', 0.35), 0.35, memory_w),
+        'first_stop_median_lap': blend_value(cm.get('first_stop_median_lap', 20.0), 20.0, memory_w),
+        'first_stop_p25_lap': blend_value(cm.get('first_stop_p25_lap', 15.0), 15.0, memory_w),
+        'first_stop_p75_lap': blend_value(cm.get('first_stop_p75_lap', 28.0), 28.0, memory_w),
+        'early_stop_gain_advantage': blend_value(cm.get('early_stop_gain_advantage', 0.0), 0.0, memory_w),
+        'strategy_entropy': blend_value(cm.get('strategy_entropy', 0.5), 0.5, memory_w),
+        'crash_dnf_rate': blend_value(cm.get('crash_dnf_rate', 0.03), 0.03, structural_w),
+        'race_control_chaos': blend_value(
+            cm.get('race_control_chaos', cm.get('sc_race_probability', cp.get('sc_probability', 0.35))),
+            cp.get('sc_probability', 0.35),
+            structural_w,
+        ),
+        'strategy_archetype': cm.get('strategy_archetype', 'balanced'),
+    }
 
     wx = query("""
         SELECT AVG(track_temp) as track_temp, BOOL_OR(rainfall) as had_rain
@@ -691,7 +832,6 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
     else:
         step("  No sprint points yet for this season")
 
-    n_2026_races = count_completed_races(2026)
     confidence = prediction_confidence(season, n_2026_races)
 
     entries = []
@@ -702,14 +842,23 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
         team     = team_row.iloc[0]['team'] if not team_row.empty else 'Unknown'
 
         q_row = quali[quali['driver_code']==driver] if not quali.empty else pd.DataFrame()
+        result_grid = (
+            int(team_row.iloc[0]['result_grid_position'])
+            if (
+                not team_row.empty and
+                'result_grid_position' in team_row.columns and
+                pd.notna(team_row.iloc[0].get('result_grid_position'))
+            ) else
+            None
+        )
         if not q_row.empty:
             qr             = q_row.iloc[0]
-            grid_pos       = int(qr['grid_position']) if pd.notna(qr.get('grid_position')) else i+1
+            grid_pos       = int(qr['grid_position']) if pd.notna(qr.get('grid_position')) else (result_grid or i+1)
             gap_to_pole    = float(qr['gap_to_pole_ms']) / 1000 if pd.notna(qr.get('gap_to_pole_ms')) else (i * 0.3)
             start_compound = qr.get('tyre_compound') or 'SOFT'
         else:
-            grid_pos       = i + 1
-            gap_to_pole    = i * 0.22
+            grid_pos       = result_grid or i + 1
+            gap_to_pole    = max(grid_pos - 1, 0) * 0.22
             start_compound = 'SOFT'
 
         # Q1→Q3 and Q2→Q3 improvement (negative = got faster = better)
@@ -731,12 +880,20 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
         dnf_surv = artifacts.get('dnf_survival', {}).get(driver, {'dnf_rate':0.10,'shape':0.8,'scale':60.0})
 
         driver_hist = features_df[
-            (features_df['driver_code']==driver) &
-            (features_df['season'] < 2026)
-        ].tail(3) if features_df is not None else pd.DataFrame()
+            (features_df['driver_code'] == driver) &
+            (
+                (features_df['season'] < season) |
+                ((features_df['season'] == season) & (features_df['round'] < round_))
+            )
+        ].sort_values(['season', 'round']).tail(3) if features_df is not None else pd.DataFrame()
 
         rolling_avg = driver_hist['finish_position'].mean() if not driver_hist.empty else 10.5
         rolling_dnf = driver_hist['is_dnf'].mean()          if not driver_hist.empty else 0.10
+        driver_overperformance = (
+            float(driver_hist['driver_overperformance'].mean())
+            if not driver_hist.empty and 'driver_overperformance' in driver_hist.columns else
+            0.0
+        )
         circuit_aff = driver_hist[
             driver_hist.get('circuit', pd.Series()) == circuit
         ]['finish_position'].mean() if (
@@ -773,6 +930,7 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
             'rolling_avg_finish': rolling_avg,
             'rolling_dnf_rate':   rolling_dnf,
             'circuit_affinity':   circuit_aff,
+            'driver_overperformance': driver_overperformance,
             'sprint_points_last3': sprint_pts,  # sprint form signal
             'q1_to_q3_ms':         q1_to_q3,   # Q1→Q3 improvement
             'q2_to_q3_ms':         q2_to_q3,   # Q2→Q3 improvement
@@ -780,17 +938,38 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
             'overtaking_index':   cp.get('overtaking_index', 0.30),
             'arw_effectiveness':  cp.get('arw_effectiveness', 0.255),
             'tyre_deg_rate':      cp.get('tyre_deg_soft_ms_per_lap', 80.0),
-            'avg_pit_stops':      cp.get('avg_pit_stops', 2.0),
+            'avg_pit_stops':      cm_adj['avg_pit_stops'],
+            'grid_volatility':    cm_adj['grid_volatility'],
+            'front_hold_rate':    cm_adj['front_hold_rate'],
+            'top10_shuffle_rate': cm_adj['top10_shuffle_rate'],
+            'sc_race_probability': cm_adj['sc_race_probability'],
+            'early_sc_probability': cm_adj['early_sc_probability'],
+            'middle_sc_probability': cm_adj['middle_sc_probability'],
+            'late_sc_probability': cm_adj['late_sc_probability'],
+            'one_stop_rate':      cm_adj['one_stop_rate'],
+            'two_stop_rate':      cm_adj['two_stop_rate'],
+            'first_stop_median_lap': cm_adj['first_stop_median_lap'],
+            'first_stop_p25_lap': cm_adj['first_stop_p25_lap'],
+            'first_stop_p75_lap': cm_adj['first_stop_p75_lap'],
+            'early_stop_gain_advantage': cm_adj['early_stop_gain_advantage'],
+            'strategy_entropy':   cm_adj['strategy_entropy'],
+            'crash_dnf_rate':     cm_adj['crash_dnf_rate'],
+            'race_control_chaos': cm_adj['race_control_chaos'],
+            'strategy_archetype': cm_adj['strategy_archetype'],
             'ers_circuit_factor': ers_circuit_factor,
             'regulation_era':     int(reg.get('regulation_era', 0)),
             'active_aero':        int(bool(reg.get('active_aero', False))),
             'ers_power_kw':       float(reg.get('ers_power_kw', 120)),
             'recharge_limit_mj':  float(reg.get('recharge_limit_mj', 8.5)),
+            'race_recharge_limit_mj': float(reg.get('race_recharge_limit_mj', reg.get('recharge_limit_mj', 8.5))),
             'race_boost_cap_kw':  float(reg.get('race_boost_cap_kw', 120)),
             'wet_ers_deploy_factor': float(reg.get('wet_ers_deploy_factor', 1.0)),
             'start_assist_factor': float(reg.get('start_assist_factor', 0.0)),
             'constructor_prior_reliability': float(reg.get('constructor_prior_reliability', 1.0)),
             'live_weekend_weight': float(reg.get('live_weekend_weight', 0.35)),
+            'overtake_mode_bonus_mj': float(reg.get('overtake_mode_bonus_mj', 0.0)),
+            'x_mode_drag_reduction': float(reg.get('x_mode_drag_reduction', 0.0)),
+            'mgu_k_non_accel_cap_kw': float(reg.get('mgu_k_non_accel_cap_kw', 120)),
             'energy_demand_index': float(energy_demand),
             'pu_uncertainty':     uncertainty,
             'track_temp':         avg_track_temp,
@@ -815,6 +994,8 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
 def bayesian_prior(entries: list[dict]) -> dict[str, float]:
     scores        = {}
     overtaking_idx = entries[0].get('overtaking_index', 0.30) if entries else 0.30
+    grid_volatility = entries[0].get('grid_volatility', 3.0) if entries else 3.0
+    front_hold = entries[0].get('front_hold_rate', 0.55) if entries else 0.55
     reg_era = entries[0].get('regulation_era', 0) if entries else 0
     live_w  = entries[0].get('live_weekend_weight', 0.35) if entries else 0.35
     reliability = entries[0].get('constructor_prior_reliability', 1.0) if entries else 1.0
@@ -824,8 +1005,11 @@ def bayesian_prior(entries: list[dict]) -> dict[str, float]:
     gap_w     = 0.15
     circuit_w = 0.10
     pu_w      = 0.05
+    grid_memory_adj = max(-0.10, min(0.10, (front_hold - 0.55) * 0.18 - (grid_volatility - 3.0) * 0.025))
+    grid_w = max(0.20, min(0.55, grid_w + grid_memory_adj))
     if reg_era >= 1:
         grid_w = 0.30 + live_w * 0.20
+        grid_w = max(0.20, min(0.52, grid_w + grid_memory_adj))
         gap_w  = 0.20 + live_w * 0.12
         elo_w  = max(0.06, elo_w * 0.55)
         team_w = team_w * reliability
@@ -838,6 +1022,7 @@ def bayesian_prior(entries: list[dict]) -> dict[str, float]:
         team_score    = max(0, min(1, 1 - (e['team_strength'] - 1) / max(20 - 1, 1)))
         gap_score     = 1 - min(e['gap_to_pole_sec'] / 5.0, 1)
         circuit_score = max(0, min(1, 1 - (e['circuit_affinity'] - 1) / max(n - 1, 1)))
+        overperf_score = max(0, min(1, 0.5 + e.get('driver_overperformance', 0.0) / 8.0))
         pu_score      = e.get('pu_strength_adjusted', e['pu_strength'])
 
         team = e.get('team', '')
@@ -857,6 +1042,7 @@ def bayesian_prior(entries: list[dict]) -> dict[str, float]:
             team_w    * team_score        +
             gap_w     * adjusted_gap_score +
             circuit_w * circuit_score     +
+            0.04      * overperf_score    +
             pu_w      * pu_score
         )
         scores[e['driver_code']] = composite
@@ -874,14 +1060,35 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
         return {}
 
     results       = {e['driver_code']: [] for e in entries}
+    entry_by_driver = {e['driver_code']: e for e in entries}
     circuit       = entries[0].get('circuit', 'default')
     pit_delta_sec = PIT_LANE_DELTA.get(circuit, PIT_LANE_DELTA['default'])
     avg_lap_sec   = 90.0
     pit_pos_loss  = pit_delta_sec / avg_lap_sec * n * 0.3
-    reg_era       = entries[0].get('regulation_era', 0)
-    active_aero   = bool(entries[0].get('active_aero', 0))
-    energy_demand = float(entries[0].get('energy_demand_index', 0.6))
-    wet_factor    = float(entries[0].get('wet_ers_deploy_factor', 1.0)) if entries[0].get('had_rain') else 1.0
+    reg_era              = entries[0].get('regulation_era', 0)
+    active_aero          = bool(entries[0].get('active_aero', 0))
+    energy_demand        = float(entries[0].get('energy_demand_index', 0.6))
+    wet_factor           = float(entries[0].get('wet_ers_deploy_factor', 1.0)) if entries[0].get('had_rain') else 1.0
+    overtake_bonus_mj    = float(entries[0].get('overtake_mode_bonus_mj', 0.0))
+    x_mode_drag          = float(entries[0].get('x_mode_drag_reduction', 0.0))
+    sc_race_prob = float(entries[0].get('sc_race_probability', entries[0].get('sc_probability', 0.35)))
+    chaos_factor = float(entries[0].get('race_control_chaos', sc_race_prob))
+    sc_race_prob = min(1.0, sc_race_prob * (0.85 + min(chaos_factor, 2.0) * 0.15))
+    early_sc_prob = float(entries[0].get('early_sc_probability', 0.18))
+    middle_sc_prob = float(entries[0].get('middle_sc_probability', 0.18))
+    late_sc_prob = float(entries[0].get('late_sc_probability', 0.14))
+    sc_phase_total = max(early_sc_prob + middle_sc_prob + late_sc_prob, 0.001)
+    sc_phase_weights = {
+        'early': early_sc_prob / sc_phase_total,
+        'middle': middle_sc_prob / sc_phase_total,
+        'late': late_sc_prob / sc_phase_total,
+    }
+    strategy_entropy = float(entries[0].get('strategy_entropy', 0.5))
+    early_stop_gain_advantage = float(entries[0].get('early_stop_gain_advantage', 0.0))
+    one_stop_rate = float(entries[0].get('one_stop_rate', 0.45))
+    two_stop_rate = float(entries[0].get('two_stop_rate', 0.35))
+    first_stop_median = float(entries[0].get('first_stop_median_lap', max(18, race_distance * 0.34)))
+    quali_gap_weight = 0.42 if reg_era >= 1 else 0.62
 
     for run in range(MC_RUNS):
         positions = {e['driver_code']: float(e['grid_position']) for e in entries}
@@ -896,11 +1103,18 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
         sc_count     = 0
 
         for e in entries:
-            elo_adj = (1500 - e['elo_rating']) * 0.05
+            elo_adj = (1500 - e['elo_rating']) * (0.34 if reg_era >= 1 else 0.22)
+            team_adj = (e.get('team_strength', 10.5) - 8.5) * 18
+            form_adj = (e.get('rolling_avg_finish', 10.5) - 8.5) * 16
+            overperf_adj = -e.get('driver_overperformance', 0.0) * 28
+            fp_adj = e.get('fp_pace_adj', 0.0) * 900
             era_noise = 120 + (80 * reg_era) + (70 * energy_demand if active_aero else 0)
             noise   = np.random.normal(0, era_noise)
-            energy_penalty = energy_demand * max(e['grid_position'] - 1, 0) * 4 if active_aero else 0
-            pace_ms[e['driver_code']] = e['gap_to_pole_sec'] * 1000 + elo_adj + energy_penalty + noise
+            # 2026: superclip at 350kW gives better energy recovery for backmarkers; reduce penalty vs original 4x
+            energy_penalty_coeff = 2.0 if reg_era >= 1 else 4.0
+            energy_penalty = energy_demand * max(e['grid_position'] - 1, 0) * energy_penalty_coeff if active_aero else 0
+            race_gap_ms = e['gap_to_pole_sec'] * 1000 * quali_gap_weight
+            pace_ms[e['driver_code']] = race_gap_ms + elo_adj + team_adj + form_adj + overperf_adj + fp_adj + energy_penalty + noise
 
         lap1_risk = {e['driver_code']: (
             0.01 if e['grid_position'] <= 3 else
@@ -918,7 +1132,9 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
 
         for lap in range(1, race_distance + 1):
             if not sc_active and sc_count < 3:
-                if np.random.random() < entries[0]['sc_probability'] / race_distance:
+                phase = 'early' if lap <= race_distance * 0.33 else 'middle' if lap <= race_distance * 0.67 else 'late'
+                phase_weight = sc_phase_weights.get(phase, 1 / 3) * 3
+                if np.random.random() < sc_race_prob * phase_weight / race_distance:
                     sc_active    = True
                     sc_laps_left = np.random.randint(3, 8)
                     sc_count    += 1
@@ -951,8 +1167,19 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
                 traffic_f = traffic_tyre_factor(current_pos)
                 effective_age = tyre_age[d] * traffic_f
 
-                avg_pits      = e['avg_pit_stops']
+                avg_pits = e['avg_pit_stops']
+                if one_stop_rate > two_stop_rate and compound != 'SOFT':
+                    avg_pits = min(avg_pits, 1.35)
+                elif two_stop_rate > one_stop_rate:
+                    avg_pits = max(avg_pits, 1.75)
                 pit_threshold = max_life * (0.82 + np.random.normal(0, 0.08))
+                if first_stop_median > 0 and pit_count[d] == 0:
+                    pit_threshold = 0.65 * pit_threshold + 0.35 * first_stop_median
+                if early_stop_gain_advantage > 0.5 and pit_count[d] == 0:
+                    pit_threshold *= max(0.80, 1 - min(early_stop_gain_advantage, 3.0) * 0.035)
+                elif early_stop_gain_advantage < -0.5 and pit_count[d] == 0:
+                    pit_threshold *= min(1.15, 1 + min(abs(early_stop_gain_advantage), 3.0) * 0.03)
+                pit_threshold *= 0.94 + strategy_entropy * 0.12
                 laps_remaining = race_distance - lap
 
                 undercut_threat = False
@@ -967,7 +1194,7 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
                     (effective_age >= pit_threshold or undercut_threat) and
                     pit_count[d] < int(avg_pits + 1) and
                     laps_remaining > 8 and
-                    not sc_active
+                    (not sc_active or entries[0].get('late_sc_probability', 0.14) > 0.22)
                 ) or (
                     effective_age > max_life * 1.15 and laps_remaining > 3
                 )
@@ -993,7 +1220,8 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
                     deg_factor = comp_data['deg_ms_per_lap'] * effective_age
 
                 fuel_benefit   = (race_distance - lap) * 28
-                effective_pace = pace_ms[d] + deg_factor - fuel_benefit
+                lap_noise      = np.random.normal(0, 60)
+                effective_pace = pace_ms[d] + deg_factor - fuel_benefit + lap_noise
                 if sc_active:
                     effective_pace = np.random.normal(0, 50)
 
@@ -1005,7 +1233,9 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
                 )
                 active_aero_factor = 1.0
                 if e.get('active_aero'):
+                    # X-Mode: 55% drag reduction on straights; slightly boosts overtaking vs DRS era
                     active_aero_factor = 0.88 + e.get('energy_demand_index', 0.6) * 0.45
+                    active_aero_factor *= (1.0 + x_mode_drag * 0.15)
                     active_aero_factor *= wet_factor
                 base_overtake = e['arw_effectiveness'] * 0.15 * pos_overtake_factor * active_aero_factor
                 for j, other in enumerate(pos_sorted):
@@ -1014,9 +1244,12 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
                     if positions[d] > positions[other]:
                         other_pace = (
                             pace_ms[other] +
-                            COMPOUND_DEG.get(tyre_type[other], COMPOUND_DEG['MEDIUM'])['deg_ms_per_lap'] * tyre_age[other]
+                            COMPOUND_DEG.get(tyre_type[other], COMPOUND_DEG['MEDIUM'])['deg_ms_per_lap'] * tyre_age[other] +
+                            np.random.normal(0, 60)
                         )
-                        if effective_pace - other_pace < -150 and np.random.random() < base_overtake:
+                        # Overtake Mode: +0.5MJ bonus when directly behind the car ahead (within ~1 position)
+                        overtake_mode_mult = (1.0 + overtake_bonus_mj * 0.8) if abs(positions[d] - positions[other]) <= 1.5 else 1.0
+                        if effective_pace - other_pace < -80 and np.random.random() < base_overtake * overtake_mode_mult:
                             positions[d]     -= 1
                             positions[other] += 1
 
@@ -1025,7 +1258,17 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
         final_order = []
         for d in active:
             gained = start_pos[d] - (active.index(d) + 1)
-            capped = start_pos[d] - MAX_POSITION_GAIN if gained > MAX_POSITION_GAIN else active.index(d) + 1
+            e = entry_by_driver[d]
+            recovery_bonus = 0
+            if start_pos[d] > 10:
+                if e.get('elo_rating', 1400) >= 1600:
+                    recovery_bonus += 3
+                if e.get('team_strength', 10.5) <= 7.0:
+                    recovery_bonus += 2
+                if e.get('driver_overperformance', 0.0) > 1.5:
+                    recovery_bonus += 1
+            max_gain = min(n - 1, MAX_POSITION_GAIN + recovery_bonus)
+            capped = start_pos[d] - max_gain if gained > max_gain else active.index(d) + 1
             final_order.append((d, capped))
         final_order.sort(key=lambda x: x[1])
         retired_list = list(retired)
@@ -1132,7 +1375,18 @@ def compute_predictions(
             p['win_probability']    = round(p['win_probability'] / total_win, 4)
             p['podium_probability'] = round(min(p['podium_probability'], 1.0), 4)
 
-    predictions.sort(key=lambda x: x['win_probability'], reverse=True)
+    # Full-field race order should represent expected finishing strength, not
+    # just "most likely winner". After qualifying, win probability is extremely
+    # pole-biased, while expected points preserves race-pace, reliability, and
+    # strategy signals across all finishing positions.
+    predictions.sort(
+        key=lambda x: (
+            x['points_expected'],
+            x['podium_probability'],
+            x['win_probability'],
+        ),
+        reverse=True,
+    )
 
     # Monotonic smoothing
     for i in range(1, len(predictions)):
@@ -1151,10 +1405,8 @@ def compute_predictions(
         for p in predictions:
             p['win_probability'] = round(p['win_probability'] / total, 4)
 
-    # Overwrite predicted_position with win-probability rank (1 = favourite).
-    # This ensures position_error = predicted_rank - actual_position, which is
-    # meaningful (ANT P1 win-prob favourite, finishes P1 → error = 0).
-    # The Ridge/MC blended median is kept internally but not stored as predicted_position.
+    # Store the full-field expected-result rank. Win probability remains visible,
+    # but it no longer forces the table to mirror the qualifying grid.
     for rank, p in enumerate(predictions, 1):
         p['predicted_position'] = rank
 
@@ -1341,6 +1593,8 @@ def main():
     parser = argparse.ArgumentParser(description="F1 Race Prediction Engine")
     parser.add_argument("--season",         type=int, default=None)
     parser.add_argument("--round",          type=int, default=None, dest='round_')
+    parser.add_argument("--seed",           type=int, default=None,
+                        help="Monte Carlo seed. Defaults to a stable season/round seed.")
     parser.add_argument("--score",          action="store_true")
     parser.add_argument("--dry-run",        action="store_true")
     parser.add_argument("--fit-calibrator", action="store_true")
@@ -1418,7 +1672,9 @@ def main():
     priors = bayesian_prior(entries)
 
     race_distance = get_race_distance(season, round_, circuit)
-    step(f"Running {MC_RUNS} Monte Carlo simulations over {race_distance} laps...")
+    mc_seed = args.seed if args.seed is not None else DEFAULT_MC_SEED + season * 100 + round_
+    np.random.seed(mc_seed)
+    step(f"Running {MC_RUNS} Monte Carlo simulations over {race_distance} laps (seed={mc_seed})...")
     sim_results = simulate_race(entries, race_distance=race_distance, artifacts=artifacts)
     step("  Simulations complete")
 

@@ -33,7 +33,7 @@ import os
 from dotenv import load_dotenv
 
 # ── Config ────────────────────────────────────────────────────────────────────
-load_dotenv("../web/.env.local")
+load_dotenv(Path(__file__).resolve().parents[1] / "web" / ".env.local")
 DATABASE_URL = os.environ.get("NEON_DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("NEON_DATABASE_URL not found in web/.env.local")
@@ -432,11 +432,20 @@ def load_practice(season: int, round_number: int, conn) -> None:
         except Exception:
             print(f"  ✗ {fp_name}: session not yet available (future event)")
             continue
-        cur.execute("SELECT id FROM sessions WHERE season=%s AND round=%s AND session_type='R' LIMIT 1", (season, round_number))
-        row = cur.fetchone()
-        if not row:
-            continue
-        session_id = row[0]
+        gp_name = fp_session.event["EventName"]
+        circuit = fp_session.event.get("Location") or fp_session.event.get("Country") or "Unknown"
+        date    = fp_session.date.date() if fp_session.date else None
+        cur.execute("""
+            INSERT INTO sessions (season, round, gp_name, circuit, date, session_type)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (season, round, session_type) DO UPDATE
+              SET gp_name = EXCLUDED.gp_name,
+                  circuit = EXCLUDED.circuit,
+                  date    = EXCLUDED.date
+            RETURNING id
+        """, (season, round_number, gp_name, circuit, date, fp_name))
+        session_id = cur.fetchone()[0]
+        conn.commit()
         cur.execute("DELETE FROM practice_laps WHERE session_id=%s AND fp_session=%s", (session_id, fp_name))
         laps  = fp_session.laps.copy()
         valid = laps[laps["LapTime"].notna()].copy()
@@ -545,6 +554,55 @@ def load_track_status(session_id: int, session: f1.core.Session, conn) -> None:
         print(f"  → {len(rows)} track status events saved (SC/VSC/RED)")
     else:
         print(f"  → No SC/VSC/RED events found")
+    cur.close()
+
+
+def load_race_control_messages(session_id: int, session: f1.core.Session, conn) -> None:
+    """Load race-control messages for chaos / incident similarity features."""
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS race_control_messages (
+            id          SERIAL PRIMARY KEY,
+            session_id  INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            lap_number  INTEGER,
+            event_type  TEXT,
+            message     TEXT NOT NULL,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    cur.execute("DELETE FROM race_control_messages WHERE session_id = %s", (session_id,))
+    conn.commit()
+    try:
+        messages = getattr(session, "race_control_messages", None)
+        if messages is None or messages.empty:
+            print(f"  → No race-control messages found")
+            cur.close()
+            return
+    except Exception as e:
+        print(f"  ✗ Race-control messages error: {e}")
+        cur.close()
+        return
+
+    rows = []
+    for _, row in messages.iterrows():
+        text = str(row.get("Message", "")).strip()
+        if not text or text.lower() == "nan":
+            continue
+        rows.append((
+            session_id,
+            safe_int(row.get("Lap")),
+            str(row.get("Category", "OTHER")),
+            text[:1000],
+        ))
+    if rows:
+        cur.executemany("""
+            INSERT INTO race_control_messages (session_id, lap_number, event_type, message)
+            VALUES (%s, %s, %s, %s)
+        """, rows)
+        conn.commit()
+        print(f"  → {len(rows)} race-control messages saved")
+    else:
+        print(f"  → No race-control messages to save")
     cur.close()
 
 
@@ -749,7 +807,7 @@ def load_session(
     for attempt in range(3):
         try:
             session = f1.get_session(season, round_number, "R")
-            session.load(telemetry=load_telemetry, weather=True, messages=False)
+            session.load(telemetry=load_telemetry, weather=True, messages=True)
             break
         except Exception as e:
             err = str(e)
@@ -800,6 +858,8 @@ def load_session(
 
     if not replay_only:
         load_track_status(session_id, session, conn)
+    if not replay_only:
+        load_race_control_messages(session_id, session, conn)
     if not replay_only:
         load_weather(session_id, session, conn)
 

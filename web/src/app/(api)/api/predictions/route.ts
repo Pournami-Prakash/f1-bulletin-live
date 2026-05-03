@@ -176,7 +176,7 @@ export async function GET(request: Request) {
       WHERE p.season = ${targetSeason}
         AND p.round  = ${targetRound}
         AND p.model_version = ${targetModel}
-      ORDER BY p.win_probability DESC
+      ORDER BY p.predicted_position ASC
     `
     const predictions = predictionRows as unknown as PredictionRow[]
 

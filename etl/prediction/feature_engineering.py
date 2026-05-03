@@ -23,7 +23,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import psycopg2
 
-load_dotenv("../../web/.env.local")
+load_dotenv(Path(__file__).resolve().parents[2] / "web" / ".env.local")
 DATABASE_URL = os.environ.get("NEON_DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("NEON_DATABASE_URL not found in web/.env.local")
@@ -204,6 +204,7 @@ step(f"Sprint results: {len(sprint_results)} rows{' (none ingested yet — will 
 laps = query("""
     SELECT l.driver_code, l.lap_number, l.lap_time_ms,
            l.compound, l.tyre_life, l.position,
+           l.pit_in_time_ms, l.pit_out_time_ms,
            l.s1_ms, l.s2_ms, l.s3_ms,
            s.season, s.round
     FROM laps l
@@ -253,6 +254,19 @@ track_status = query("""
     ORDER BY s.season, s.round, ts.lap_start
 """)
 step(f"Track status: {len(track_status)} rows")
+
+try:
+    race_control = query("""
+        SELECT rcm.lap_number, rcm.event_type, rcm.message,
+               s.season, s.round, s.circuit
+        FROM race_control_messages rcm
+        JOIN sessions s ON s.id = rcm.session_id
+        WHERE s.session_type = 'R'
+        ORDER BY s.season, s.round, rcm.lap_number
+    """)
+except Exception:
+    race_control = pd.DataFrame(columns=['lap_number', 'event_type', 'message', 'season', 'round', 'circuit'])
+step(f"Race-control messages: {len(race_control)} rows")
 
 # ─────────────────────────────────────────────────────────────
 # STEP 2: Clean data
@@ -528,7 +542,175 @@ with open(OUT / 'tyre_deg_gp.json', 'w') as f:
     json.dump(tyre_deg_gp, f, indent=2)
 step(f"Saved tyre_deg_gp.json for {len(tyre_deg_gp)} circuits")
 
-for circuit in all_circuits:
+race_lap_counts = laps_clean.groupby(['season', 'round'])['lap_number'].max().reset_index(name='race_laps')
+stint_strategy = stints.groupby(['season', 'round', 'driver_code']).agg(
+    n_stints=('compound', 'count'),
+    strategy=('compound', lambda s: '-'.join([str(x) for x in s.dropna().tolist()])),
+).reset_index()
+stint_strategy['n_pits_from_stints'] = (stint_strategy['n_stints'] - 1).clip(lower=0)
+
+pit_events = laps_clean[laps_clean['pit_in_time_ms'].notna()].groupby(
+    ['season', 'round', 'driver_code']
+).agg(
+    first_stop_lap=('lap_number', 'min'),
+    final_stop_lap=('lap_number', 'max'),
+    n_pits=('lap_number', 'count'),
+).reset_index()
+
+race_strategy = stint_strategy.merge(
+    pit_events,
+    on=['season', 'round', 'driver_code'],
+    how='left',
+)
+race_strategy['n_pits'] = race_strategy['n_pits'].fillna(race_strategy['n_pits_from_stints']).clip(lower=0)
+fallback_first = stints.groupby(['season', 'round', 'driver_code'])['end_lap'].min().reset_index(name='first_stop_fallback')
+fallback_final = stints.groupby(['season', 'round', 'driver_code'])['end_lap'].max().reset_index(name='final_stop_fallback')
+race_strategy = race_strategy.merge(fallback_first, on=['season', 'round', 'driver_code'], how='left')
+race_strategy = race_strategy.merge(fallback_final, on=['season', 'round', 'driver_code'], how='left')
+race_strategy['first_stop_lap'] = race_strategy['first_stop_lap'].fillna(race_strategy['first_stop_fallback'])
+race_strategy['final_stop_lap'] = race_strategy['final_stop_lap'].fillna(race_strategy['final_stop_fallback'])
+race_strategy.loc[race_strategy['n_pits'] == 0, ['first_stop_lap', 'final_stop_lap']] = np.nan
+strategy_results = results.merge(
+    race_strategy[['season', 'round', 'driver_code', 'first_stop_lap', 'final_stop_lap', 'n_pits', 'strategy']],
+    on=['season', 'round', 'driver_code'],
+    how='left',
+)
+strategy_results['grid_delta'] = strategy_results['grid_position'] - strategy_results['finish_position']
+strategy_results['abs_grid_delta'] = strategy_results['grid_delta'].abs()
+
+status_events = track_status.merge(race_lap_counts, on=['season', 'round'], how='left')
+status_events['status_mid_lap'] = (status_events['lap_start'] + status_events['lap_end']) / 2
+status_events['status_phase'] = np.select(
+    [
+        status_events['status_mid_lap'] <= status_events['race_laps'] * 0.33,
+        status_events['status_mid_lap'] <= status_events['race_laps'] * 0.67,
+    ],
+    ['early', 'middle'],
+    default='late',
+)
+
+def build_circuit_memory(
+    circuit: str,
+    strategy_source: pd.DataFrame,
+    status_source: pd.DataFrame,
+    control_source: pd.DataFrame,
+) -> dict:
+    default_avg_pits = float(avg_pits_by_circuit.get(circuit, 2.0))
+    c_res = strategy_source[strategy_source['circuit'] == circuit].copy()
+    c_events = status_source[status_source['circuit'] == circuit].copy()
+    c_control = control_source[control_source['circuit'] == circuit].copy()
+    if c_res.empty:
+        return {}
+
+    race_keys = c_res[['season', 'round']].drop_duplicates()
+    n_races = max(len(race_keys), 1)
+    valid_grid = c_res.dropna(subset=['grid_position', 'finish_position'])
+    top3 = valid_grid[valid_grid['grid_position'] <= 3]
+    top10 = valid_grid[valid_grid['grid_position'] <= 10]
+
+    pit_rows = c_res.dropna(subset=['first_stop_lap']).copy()
+    first_stop_median = float(pit_rows['first_stop_lap'].median()) if not pit_rows.empty else 20.0
+    early = pit_rows[pit_rows['first_stop_lap'] <= first_stop_median]
+    late = pit_rows[pit_rows['first_stop_lap'] > first_stop_median]
+    early_gain = float(early['grid_delta'].mean()) if not early.empty else 0.0
+    late_gain = float(late['grid_delta'].mean()) if not late.empty else 0.0
+    early_stop_gain_advantage = early_gain - late_gain
+
+    strategy_counts = pit_rows['strategy'].dropna().value_counts()
+    if len(strategy_counts) > 1:
+        probs = strategy_counts / strategy_counts.sum()
+        strategy_entropy = float(-(probs * np.log(probs)).sum() / np.log(len(strategy_counts)))
+    else:
+        strategy_entropy = 0.0
+    common_strategy = str(strategy_counts.index[0]) if len(strategy_counts) else 'UNKNOWN'
+
+    sc_events_c = c_events[c_events['status_type'] == 'SC']
+    vsc_events_c = c_events[c_events['status_type'] == 'VSC']
+    sc_races = sc_events_c[['season', 'round']].drop_duplicates()
+    vsc_races = vsc_events_c[['season', 'round']].drop_duplicates()
+    early_sc_races = sc_events_c[sc_events_c['status_phase'] == 'early'][['season', 'round']].drop_duplicates()
+    middle_sc_races = sc_events_c[sc_events_c['status_phase'] == 'middle'][['season', 'round']].drop_duplicates()
+    late_sc_races = sc_events_c[sc_events_c['status_phase'] == 'late'][['season', 'round']].drop_duplicates()
+    crash_status = c_res['status'].fillna('').str.lower().str.contains(
+        'accident|collision|crash|damage|spun|spun off'
+    )
+    dnf_status = c_res['is_dnf'].astype(bool) if 'is_dnf' in c_res else c_res['status'].fillna('').str.lower().str.contains('retired|disqualified|did not start')
+    grid_volatility = float(valid_grid['abs_grid_delta'].mean()) if not valid_grid.empty else 3.0
+    avg_pits_c = float(pit_rows['n_pits'].mean()) if not pit_rows.empty else default_avg_pits
+    one_stop_rate = float((pit_rows['n_pits'] == 1).mean()) if not pit_rows.empty else 0.45
+    two_stop_rate = float((pit_rows['n_pits'] == 2).mean()) if not pit_rows.empty else 0.35
+    sc_race_probability = len(sc_races) / n_races
+    vsc_race_probability = len(vsc_races) / n_races
+    late_sc_probability = len(late_sc_races) / n_races
+    control_text = (
+        c_control['event_type'].fillna('') + ' ' + c_control['message'].fillna('')
+        if not c_control.empty else
+        pd.Series(dtype=str)
+    )
+    chaos_messages = control_text.str.lower().str.contains(
+        'safety car|\\bvsc\\b|restart|incident|collision|debris|yellow|red flag|track limits|investigat|penalty',
+        regex=True,
+    ) if len(control_text) else pd.Series(dtype=bool)
+    race_control_chaos = (
+        float(chaos_messages.sum()) / n_races
+        if len(chaos_messages) else
+        float(sc_race_probability + vsc_race_probability * 0.45 + late_sc_probability * 0.35)
+    )
+    front_hold_rate = float((top3['finish_position'] <= 3).mean()) if not top3.empty else 0.55
+
+    if sc_race_probability >= 0.58 or late_sc_probability >= 0.22:
+        archetype = 'safety_car_sensitive'
+    elif early_stop_gain_advantage >= 0.8:
+        archetype = 'undercut_friendly'
+    elif one_stop_rate >= 0.58 and grid_volatility <= 2.8:
+        archetype = 'track_position'
+    elif avg_pits_c >= 1.7:
+        archetype = 'high_degradation'
+    else:
+        archetype = 'balanced'
+
+    return {
+        'races_sampled': int(n_races),
+        'grid_volatility': round(grid_volatility, 3),
+        'front_hold_rate': round(front_hold_rate, 3),
+        'top10_shuffle_rate': round(float((top10['abs_grid_delta'] >= 3).mean()) if not top10.empty else 0.30, 3),
+        'avg_grid_gain': round(float(valid_grid['grid_delta'].mean()) if not valid_grid.empty else 0.0, 3),
+        'sc_race_probability': round(sc_race_probability, 3),
+        'vsc_race_probability': round(vsc_race_probability, 3),
+        'early_sc_probability': round(len(early_sc_races) / n_races, 3),
+        'middle_sc_probability': round(len(middle_sc_races) / n_races, 3),
+        'late_sc_probability': round(late_sc_probability, 3),
+        'avg_sc_events': round(len(sc_events_c) / n_races, 3),
+        'avg_vsc_events': round(len(vsc_events_c) / n_races, 3),
+        'race_control_chaos': round(race_control_chaos, 3),
+        'race_control_messages': int(len(c_control)),
+        'chaos_messages': int(chaos_messages.sum()) if len(chaos_messages) else 0,
+        'avg_pit_stops': round(avg_pits_c, 3),
+        'one_stop_rate': round(one_stop_rate, 3),
+        'two_stop_rate': round(two_stop_rate, 3),
+        'first_stop_median_lap': round(first_stop_median, 1),
+        'first_stop_p25_lap': round(float(pit_rows['first_stop_lap'].quantile(0.25)) if not pit_rows.empty else first_stop_median, 1),
+        'first_stop_p75_lap': round(float(pit_rows['first_stop_lap'].quantile(0.75)) if not pit_rows.empty else first_stop_median, 1),
+        'early_stop_gain_advantage': round(early_stop_gain_advantage, 3),
+        'strategy_entropy': round(strategy_entropy, 3),
+        'common_strategy': common_strategy,
+        'strategy_archetype': archetype,
+        'crash_dnf_rate': round(float(crash_status.mean()) if len(crash_status) else 0.03, 3),
+        'dnf_rate': round(float(dnf_status.mean()) if len(c_res) else 0.10, 3),
+    }
+
+circuit_memory = {}
+
+for circuit in sorted(all_circuits):
+    memory = build_circuit_memory(circuit, strategy_results, status_events, race_control)
+    if memory:
+        circuit_memory[circuit] = memory
+
+with open(OUT / 'circuit_memory.json', 'w') as f:
+    json.dump(circuit_memory, f, indent=2)
+step(f"Saved circuit_memory.json for {len(circuit_memory)} circuits")
+
+for circuit in sorted(all_circuits):
     ctype   = CIRCUIT_TYPES.get(circuit, 'permanent')
     sc_prob = (
         round(sc_prob_by_circuit[circuit], 3)
@@ -606,6 +788,19 @@ for (season, round_), race in results.groupby(['season','round']):
         ((results['season'] < season) |
          ((results['season'] == season) & (results['round'] < round_)))
     ]
+    prev_strategy = strategy_results[
+        ((strategy_results['season'] < season) |
+         ((strategy_results['season'] == season) & (strategy_results['round'] < round_)))
+    ]
+    prev_status = status_events[
+        ((status_events['season'] < season) |
+         ((status_events['season'] == season) & (status_events['round'] < round_)))
+    ]
+    prev_control = race_control[
+        ((race_control['season'] < season) |
+         ((race_control['season'] == season) & (race_control['round'] < round_)))
+    ] if not race_control.empty else race_control
+    cm = build_circuit_memory(circuit, prev_strategy, prev_status, prev_control)
 
     # Previous sprint results (strictly before this round)
     if not sprint_results.empty:
@@ -660,6 +855,11 @@ for (season, round_), race in results.groupby(['season','round']):
             team_strength_live = float(team_finishes.mean()) if not team_finishes.empty else 10.5
         else:
             team_strength_live = constructor_strength.get(team, 10.5)
+        driver_overperformance = (
+            float(team_strength_live - rolling_avg_finish)
+            if len(driver_prev) > 0 else
+            0.0
+        )
 
         pu_manufacturer = PU_MANUFACTURERS.get(team, 'Unknown')
         pu_strength     = PU_PRIOR.get(pu_manufacturer, 0.5)
@@ -754,6 +954,7 @@ for (season, round_), race in results.groupby(['season','round']):
             'rolling_points_last3':    round(rolling_points, 1),       # race + sprint
             'sprint_points_last3':     round(sprint_points_last3, 1),  # sprint only
             'circuit_affinity':        round(circuit_affinity, 2),
+            'driver_overperformance':  round(driver_overperformance, 3),
             # Team features
             'team_strength':           round(team_strength_live, 3),
             'pu_manufacturer':         pu_manufacturer,
@@ -782,6 +983,20 @@ for (season, round_), race in results.groupby(['season','round']):
             'pit_lane_delta_sec':      pit_lane_delta,
             'pit_crew_speed':          pit_crew_speed,
             'lap1_risk':               lap1_risk,
+            'grid_volatility':         cm.get('grid_volatility', 3.0),
+            'front_hold_rate':         cm.get('front_hold_rate', 0.55),
+            'top10_shuffle_rate':      cm.get('top10_shuffle_rate', 0.30),
+            'sc_race_probability':     cm.get('sc_race_probability', sc_probability),
+            'early_sc_probability':    cm.get('early_sc_probability', 0.18),
+            'middle_sc_probability':   cm.get('middle_sc_probability', 0.18),
+            'late_sc_probability':     cm.get('late_sc_probability', 0.14),
+            'one_stop_rate':           cm.get('one_stop_rate', 0.45),
+            'two_stop_rate':           cm.get('two_stop_rate', 0.35),
+            'first_stop_median_lap':   cm.get('first_stop_median_lap', 20.0),
+            'early_stop_gain_advantage': cm.get('early_stop_gain_advantage', 0.0),
+            'strategy_entropy':        cm.get('strategy_entropy', 0.5),
+            'crash_dnf_rate':          cm.get('crash_dnf_rate', 0.03),
+            'race_control_chaos':      cm.get('race_control_chaos', cm.get('sc_race_probability', sc_probability)),
             # Regulation era / energy management
             'regulation_era':          int(reg.get('regulation_era', 0)),
             'active_aero':             int(bool(reg.get('active_aero', False))),
@@ -820,8 +1035,14 @@ for col in features.columns:
 numeric_features = [
     'elo_rating', 'grid_position', 'gap_to_pole_sec',
     'rolling_avg_finish', 'team_strength', 'pu_strength_adjusted',
-    'circuit_affinity', 'rolling_dnf_rate', 'sprint_points_last3',
+    'circuit_affinity', 'driver_overperformance',
+    'rolling_dnf_rate', 'sprint_points_last3',
     'q1_to_q3_ms', 'q2_to_q3_ms',
+    'grid_volatility', 'front_hold_rate', 'top10_shuffle_rate',
+    'sc_race_probability', 'early_sc_probability', 'middle_sc_probability',
+    'late_sc_probability', 'one_stop_rate', 'two_stop_rate',
+    'first_stop_median_lap', 'early_stop_gain_advantage',
+    'strategy_entropy', 'crash_dnf_rate', 'race_control_chaos',
     'regulation_era', 'energy_demand_index', 'pu_uncertainty',
     'live_weekend_weight',
 ]
@@ -882,11 +1103,17 @@ prediction_features = [
     'rolling_points_last3',    # now includes sprint
     'sprint_points_last3',     # sprint-only signal
     'team_strength', 'pu_strength_adjusted',
-    'circuit_affinity', 'sc_probability',
+    'circuit_affinity', 'driver_overperformance',
+    'sc_probability',
     'overtaking_index', 'arw_effectiveness',
     'tyre_deg_rate', 'ers_circuit_factor',
     'track_temp', 'had_rain',
     'pit_lane_delta_sec', 'pit_crew_speed', 'lap1_risk',
+    'grid_volatility', 'front_hold_rate', 'top10_shuffle_rate',
+    'sc_race_probability', 'early_sc_probability', 'middle_sc_probability',
+    'late_sc_probability', 'one_stop_rate', 'two_stop_rate',
+    'first_stop_median_lap', 'early_stop_gain_advantage',
+    'strategy_entropy', 'crash_dnf_rate', 'race_control_chaos',
     'q1_to_q3_ms', 'q2_to_q3_ms',   # Q-session improvement signals
     'regulation_era', 'active_aero', 'ers_power_kw',
     'recharge_limit_mj', 'race_boost_cap_kw',
@@ -909,6 +1136,14 @@ feature_meta = {
     'sprint_elo_k_scale':  SPRINT_ELO_K_SCALE,
     'season_weights':      SEASON_WEIGHTS,
     'sprint_races_found':  len(sprint_results['round'].unique()) if not sprint_results.empty else 0,
+    'circuit_memory_fields': [
+        'grid_volatility', 'front_hold_rate', 'top10_shuffle_rate',
+        'sc_race_probability', 'early_sc_probability', 'middle_sc_probability',
+        'late_sc_probability', 'one_stop_rate', 'two_stop_rate',
+        'first_stop_median_lap', 'early_stop_gain_advantage',
+        'strategy_entropy', 'crash_dnf_rate',
+        'race_control_chaos',
+    ],
     'regulation_config':   REGULATION_CONFIG,
 }
 with open(OUT / 'feature_meta.json', 'w') as f:
