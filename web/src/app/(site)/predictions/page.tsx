@@ -471,10 +471,10 @@ export default function PredictionsPage() {
 
               {data ? (
                 <div style={{ padding: '8px 14px', border: `1px solid ${data.confidence < 0.4 ? 'rgba(245,158,11,.25)' : data.confidence < 0.7 ? 'rgba(56,189,248,.25)' : 'rgba(74,222,128,.25)'}`, borderRadius: 8, background: 'rgba(0,0,0,.3)', textAlign: 'center', minWidth: 100, flexShrink: 0, marginTop: 8 }}>
-                  <div style={{ fontSize: 7, color: 'rgba(255,255,255,.25)', fontFamily: mono, letterSpacing: '.12em', marginBottom: 2 }}>MODEL CONFIDENCE</div>
+                  <div style={{ fontSize: 7, color: 'rgba(255,255,255,.25)', fontFamily: mono, letterSpacing: '.12em', marginBottom: 2 }}>2026 CONFIDENCE</div>
                   <div style={{ fontFamily: bebas, fontSize: 32, lineHeight: 1, color: data.confidence < 0.4 ? '#F59E0B' : data.confidence < 0.7 ? '#38BDF8' : '#4ADE80' }}>{Math.round(data.confidence * 100)}%</div>
                   <div style={{ fontSize: 7, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.1em' }}>
-                    {data.confidence < 0.4 ? 'EARLY SEASON' : data.confidence < 0.7 ? 'BUILDING' : 'HIGH'} · {data.championship?.[0]?.races_done ?? 0}/22 RACES
+                    {data.confidence < 0.4 ? 'BUILDING' : data.confidence < 0.7 ? 'STABILIZING' : 'HIGH'} · EVIDENCE {data.championship?.[0]?.races_done ?? 0}/22
                   </div>
                 </div>
               ) : (

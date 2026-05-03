@@ -57,7 +57,7 @@ type Newsletter = {
     rows: { position: number; driver: string; team?: string | null; timeMs?: number | null; gapMs?: number | null }[]
   } | null
   teamRaceReports?: {
-    team: string
+    team: string; overview: string; keyIssues: string[]; storyThemes: string[]; totalPoints: number
     rounds: {
       round: number; gpName: string; circuit: string; eventDate: string | null
       fp: string | null; qualifying: string | null; sprint: string | null; race: string | null
@@ -1473,7 +1473,25 @@ function NewsletterContextPanel({ newsletter }: { newsletter: Newsletter }) {
 
 function NewsletterTeamRaceReport({ newsletter }: { newsletter: Newsletter }) {
   const reports = newsletter.teamRaceReports ?? []
+  const [expandedRounds, setExpandedRounds] = useState<Set<string>>(() => new Set())
+  const [expandedIssues, setExpandedIssues] = useState<Set<string>>(() => new Set())
   if (!reports.length) return null
+  const toggleRound = (key: string) => {
+    setExpandedRounds(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+  const toggleIssues = (key: string) => {
+    setExpandedIssues(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   return (
     <section>
@@ -1485,39 +1503,83 @@ function NewsletterTeamRaceReport({ newsletter }: { newsletter: Newsletter }) {
             <article key={report.team} style={{border:'1px solid rgba(255,255,255,.08)',borderRadius:16,background:'rgba(0,0,0,.22)',overflow:'hidden'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'12px 14px',borderBottom:'1px solid rgba(255,255,255,.06)',background:`linear-gradient(90deg,${c}18,rgba(0,0,0,.08))`}}>
                 <h3 style={{fontFamily:'var(--font-bebas)',fontSize:22,lineHeight:1,letterSpacing:'.05em',margin:0,color:'#fff'}}>{report.team}</h3>
-                <span style={{width:9,height:9,borderRadius:9,background:c,boxShadow:`0 0 14px ${c}80`,flexShrink:0}}/>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontSize:9,fontFamily:'var(--font-mono)',letterSpacing:'.08em',color:'rgba(255,255,255,.42)'}}>{Math.round(report.totalPoints)} pts</span>
+                  <span style={{width:9,height:9,borderRadius:9,background:c,boxShadow:`0 0 14px ${c}80`,flexShrink:0}}/>
+                </div>
+              </div>
+              <div style={{padding:'12px 14px',borderBottom:'1px solid rgba(255,255,255,.055)',background:'rgba(255,255,255,.015)'}}>
+                <p style={{margin:'0 0 8px',fontSize:12,lineHeight:1.65,color:'rgba(255,255,255,.78)'}}>{report.overview}</p>
+                {report.keyIssues.length > 0 && (
+                  <div style={{display:'grid',gap:5}}>
+                    {report.keyIssues.map((issue, i) => (
+                      <div key={`${report.team}-key-${i}`} style={{display:'grid',gridTemplateColumns:'54px 1fr',gap:8}}>
+                        <span style={{fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.1em',color:'#f59e0b'}}>{i === 0 ? 'ISSUES' : ''}</span>
+                        <span style={{fontSize:10.5,lineHeight:1.45,color:'rgba(255,255,255,.54)'}}>{issue}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div style={{display:'grid'}}>
-                {report.rounds.map(round => (
-                  <div key={`${report.team}-${round.round}`} style={{display:'grid',gridTemplateColumns:'74px 1fr',gap:12,padding:'12px 14px',borderBottom:'1px solid rgba(255,255,255,.045)'}}>
+                {report.rounds.map(round => {
+                  const issueKey = `${report.team}-${round.round}`
+                  const isRoundOpen = expandedRounds.has(issueKey)
+                  const isOpen = expandedIssues.has(issueKey)
+                  const detailCount = (round.fp ? 1 : 0) + (round.qualifying ? 1 : 0) + (round.sprint ? 1 : 0) + (round.race ? 1 : 0) + round.wentWrong.length
+                  return (
+                  <div key={issueKey} style={{display:'grid',gridTemplateColumns:'74px 1fr',gap:12,padding:'12px 14px',borderBottom:'1px solid rgba(255,255,255,.045)'}}>
                     <div>
                       <div style={{fontFamily:'var(--font-bebas)',fontSize:20,lineHeight:1,color:c}}>R{round.round}</div>
                       <div style={{fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.08em',lineHeight:1.35,color:'rgba(255,255,255,.35)',textTransform:'uppercase'}}>{round.gpName.replace(' Grand Prix',' GP')}</div>
                     </div>
                     <div style={{display:'grid',gap:6}}>
-                      <p style={{margin:'0 0 2px',fontSize:11,lineHeight:1.55,color:'rgba(255,255,255,.76)'}}>{round.summary}</p>
-                      {[
-                        ['FP', round.fp],
-                        ['Q', round.qualifying],
-                        ['S', round.sprint],
-                        ['R', round.race],
-                      ].map(([label, value]) => (
-                        <div key={`${round.round}-${label}`} style={{display:'grid',gridTemplateColumns:'26px 1fr',gap:8,alignItems:'baseline'}}>
-                          <span style={{fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.1em',color:value ? c : 'rgba(255,255,255,.18)'}}>{label}</span>
-                          <span style={{fontSize:10,lineHeight:1.35,color:value ? 'rgba(255,255,255,.72)' : 'rgba(255,255,255,.24)'}}>{value || 'not loaded yet'}</span>
-                        </div>
-                      ))}
-                      <div style={{marginTop:2,display:'grid',gap:4}}>
-                        {round.wentWrong.slice(0,2).map((item, i) => (
-                          <div key={`${round.round}-issue-${i}`} style={{display:'grid',gridTemplateColumns:'26px 1fr',gap:8}}>
-                            <span style={{fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.1em',color:'rgba(245,158,11,.72)'}}>{i === 0 ? 'WHY' : ''}</span>
-                            <span style={{fontSize:10,lineHeight:1.45,color:'rgba(255,255,255,.5)'}}>{item}</span>
-                          </div>
-                        ))}
-                      </div>
+                      <button onClick={() => toggleRound(issueKey)} aria-expanded={isRoundOpen} style={{display:'grid',gridTemplateColumns:'1fr auto',gap:10,alignItems:'center',width:'100%',padding:0,border:0,background:'transparent',color:'inherit',textAlign:'left',cursor:'pointer'}}>
+                        <span style={{margin:'0 0 2px',fontSize:11,lineHeight:1.55,color:'rgba(255,255,255,.76)'}}>{round.summary}</span>
+                        <span style={{height:22,padding:'0 7px',borderRadius:5,border:`1px solid ${c}42`,background:isRoundOpen?`${c}14`:'rgba(255,255,255,.025)',color:c,fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.1em',display:'inline-flex',alignItems:'center',justifyContent:'center',whiteSpace:'nowrap'}}>
+                          {isRoundOpen ? 'HIDE' : `${detailCount} NOTES`}
+                        </span>
+                      </button>
+                      <AnimatePresence initial={false}>
+                        {isRoundOpen && (
+                          <motion.div initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} transition={{duration:.18}} style={{overflow:'hidden',display:'grid',gap:6}}>
+                            {([
+                              ['FP', round.fp],
+                              ['Q', round.qualifying],
+                              ['S', round.sprint],
+                              ['R', round.race],
+                            ] as const).filter(([, value]) => Boolean(value)).map(([label, value]) => (
+                              <div key={`${round.round}-${label}`} style={{display:'grid',gridTemplateColumns:'26px 1fr',gap:8,alignItems:'baseline'}}>
+                                <span style={{fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.1em',color:c}}>{label}</span>
+                                <span style={{fontSize:10,lineHeight:1.35,color:'rgba(255,255,255,.72)'}}>{value}</span>
+                              </div>
+                            ))}
+                            {round.wentWrong.length > 0 && (
+                              <div style={{marginTop:2,display:'grid',gap:5}}>
+                                <button onClick={() => toggleIssues(issueKey)} style={{justifySelf:'start',height:24,padding:'0 8px',borderRadius:5,border:'1px solid rgba(245,158,11,.26)',background:isOpen?'rgba(245,158,11,.1)':'rgba(255,255,255,.025)',color:'#f59e0b',fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.1em',cursor:'pointer'}}>
+                                  {isOpen ? 'HIDE WHY' : `WHY ${round.wentWrong.length}`}
+                                </button>
+                                <AnimatePresence initial={false}>
+                                  {isOpen && (
+                                    <motion.div initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} transition={{duration:.18}} style={{overflow:'hidden',display:'grid',gap:4}}>
+                                      {round.wentWrong.map((item, i) => (
+                                        <div key={`${round.round}-issue-${i}`} style={{display:'grid',gridTemplateColumns:'26px 1fr',gap:8}}>
+                                          <span style={{fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.1em',color:'rgba(245,158,11,.72)'}}>{i === 0 ? 'WHY' : ''}</span>
+                                          <span style={{fontSize:10,lineHeight:1.45,color:'rgba(255,255,255,.5)'}}>{item}</span>
+                                        </div>
+                                      ))}
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </article>
           )

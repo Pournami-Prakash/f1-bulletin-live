@@ -34,6 +34,7 @@ type StoryRow = {
 
 type NewsletterStory = {
   storyId: string
+  mergeKey: string | null
   title: string
   url: string | null
   source: string | null
@@ -81,6 +82,10 @@ type SessionTopThree = {
 
 type TeamRaceReport = {
   team: string
+  overview: string
+  keyIssues: string[]
+  storyThemes: string[]
+  totalPoints: number
   rounds: {
     round: number
     gpName: string
@@ -116,6 +121,15 @@ type TeamRaceReportRow = {
   race_avg_grid: string | number | null
   race_avg_finish: string | number | null
   race_statuses: string | null
+}
+
+type TeamIssueRow = {
+  title: string
+  summary: string | null
+  body_text: string | null
+  text_all: string | null
+  source: string | null
+  event_ts: string
 }
 
 type LiveTimingSession = {
@@ -167,8 +181,107 @@ function priorityWeight(tier?: string | null) {
   return 12
 }
 
+const STORY_STOPWORDS = new Set([
+  'a', 'amid', 'and', 'at', 'be', 'been', 'but', 'by', 'due', 'for', 'from', 'gp', 'grand',
+  'has', 'have', 'heres', 'in', 'into', 'is', 'it', 'latest', 'main', 'new', 'of', 'on',
+  'over', 'prix', 'race', 's', 'set', 'start', 'the', 'this', 'to', 'will', 'with', 'why',
+])
+
+const ENTITY_ALIASES: Record<string, string[]> = {
+  antonelli: ['antonelli', 'kimi'],
+  bortoleto: ['bortoleto', 'gabriel'],
+  hadjar: ['hadjar', 'isack', '#06', 'car 06'],
+  russell: ['russell', 'george'],
+  mercedes: ['mercedes', 'wolff'],
+}
+
+function storyTokens(title: string) {
+  return title
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(20\d{2}|f1|formula\s+1)\b/g, ' ')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 2 && !STORY_STOPWORDS.has(token))
+}
+
 function storyKey(title: string) {
-  return title.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim().slice(0, 84)
+  return [...new Set(storyTokens(title))].sort().join(' ').slice(0, 140)
+}
+
+function normalizedHeadline(title: string) {
+  return title
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/#0?(\d+)/g, 'car $1')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function storyEntities(title: string) {
+  const text = normalizedHeadline(title)
+  const entities = Object.entries(ENTITY_ALIASES)
+    .filter(([, aliases]) => aliases.some((alias) => text.includes(alias)))
+    .map(([entity]) => entity)
+
+  return entities.length ? entities.sort().join('+') : 'general'
+}
+
+function storyIncidentBucket(title: string) {
+  const text = normalizedHeadline(title)
+  const hasMiami = text.includes('miami')
+  const hasWeather = /\b(storm|thunderstorm|weather|lightning|rain)\b/.test(text)
+
+  if (hasMiami && hasWeather && /\b(start time|moved earlier|forward|changed|combat|risk|threat)\b/.test(text)) {
+    return 'miami-weather-start-time'
+  }
+  if (/\b(disqualified|disqualification|excluded|exclusion|failed technical inspection|technical inspection|technical breach|floorboard|floorboards|referred to stewards|stewards)\b/.test(text)) {
+    return 'regulatory-technical'
+  }
+  if (hasMiami && /\b(post qualifying|qualifying results|qualifying discussion|qualifying result)\b/.test(text)) {
+    return 'miami-qualifying-results'
+  }
+  if (hasMiami && /\b(starting grid|grid for the main race|race grid)\b/.test(text)) {
+    return 'miami-starting-grid'
+  }
+
+  return null
+}
+
+function storyDedupeKeys(story: NewsletterStory) {
+  const keys = new Set<string>()
+  const titleKey = storyKey(story.title)
+  const incidentBucket = storyIncidentBucket(story.title)
+
+  if (story.mergeKey) keys.add(`merge:${story.mergeKey}`)
+  if (titleKey) keys.add(`title:${titleKey}`)
+  if (incidentBucket) keys.add(`incident:${incidentBucket}:${storyEntities(story.title)}`)
+
+  return keys
+}
+
+function isNearDuplicateTitle(a: string, b: string) {
+  const aIncident = storyIncidentBucket(a)
+  const bIncident = storyIncidentBucket(b)
+  if (aIncident && aIncident === bIncident) {
+    const aEntities = storyEntities(a)
+    const bEntities = storyEntities(b)
+    if (aEntities === bEntities || aEntities === 'general' || bEntities === 'general') return true
+  }
+
+  const aTokens = new Set(storyTokens(a))
+  const bTokens = new Set(storyTokens(b))
+  if (!aTokens.size || !bTokens.size) return false
+
+  let overlap = 0
+  for (const token of aTokens) if (bTokens.has(token)) overlap += 1
+  const smaller = Math.min(aTokens.size, bTokens.size)
+  const larger = Math.max(aTokens.size, bTokens.size)
+  const jaccard = overlap / (aTokens.size + bTokens.size - overlap)
+
+  return (smaller >= 4 && overlap >= smaller) || (larger >= 5 && jaccard >= 0.58)
 }
 
 function majorScore(row: StoryRow) {
@@ -186,6 +299,7 @@ function majorScore(row: StoryRow) {
 function mapStory(row: StoryRow): NewsletterStory {
   return {
     storyId: row.story_id,
+    mergeKey: row.merge_key,
     title: row.story_title,
     url: row.latest_url,
     source: row.latest_source,
@@ -214,6 +328,91 @@ function formatPos(value: number | null) {
   return value ? `P${Math.round(value)}` : 'no mark'
 }
 
+const TEAM_ALIASES: Record<string, string[]> = {
+  'Aston Martin': ['aston martin', 'alonso', 'stroll'],
+  Alpine: ['alpine', 'gasly', 'colapinto', 'doohan'],
+  Audi: ['audi', 'sauber', 'kick sauber', 'hulkenberg', 'bortoleto'],
+  Cadillac: ['cadillac', 'perez', 'bottas'],
+  Ferrari: ['ferrari', 'leclerc', 'hamilton'],
+  'Haas F1 Team': ['haas', 'bearman', 'ocon'],
+  McLaren: ['mclaren', 'norris', 'piastri'],
+  Mercedes: ['mercedes', 'antonelli', 'russell', 'wolff'],
+  'Racing Bulls': ['racing bulls', 'lawson', 'lindblad'],
+  'Red Bull Racing': ['red bull', 'verstappen', 'hadjar'],
+  Williams: ['williams', 'albon', 'sainz'],
+}
+
+function teamStoryMatches(team: string, story: NewsletterStory) {
+  return teamTextMatches(team, story.title)
+}
+
+function cleanIssueText(value?: string | null) {
+  return String(value ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&[^;\s]+;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function teamTextMatches(team: string, text: string) {
+  const t = text.toLowerCase()
+  if (/\b(golf|pga|scheffler|young stretches|harry williams)\b/.test(t)) return false
+  const aliases = TEAM_ALIASES[team] ?? [team.toLowerCase()]
+  return aliases.some((alias) => t.includes(alias))
+}
+
+function issueThemeFromText(text: string) {
+  const t = text.toLowerCase()
+  if (/\b(overweight|weight limit|too heavy)\b/.test(t)) return 'Weight is a recurring concern in coverage, costing lap time before the team can fight cleanly.'
+  if (/\b(hydraulic|reliability|failure|issue|problem|retired|dnf)\b/.test(t)) return 'Reliability has been part of the story, turning pace windows into damage limitation.'
+  if (/\b(shakedown|preparation|delays?|missed testing|private testing|barcelona|behind schedule|back foot)\b/.test(t)) return 'Preparation has looked compromised, leaving the team on the back foot early.'
+  if (/\b(front wing|wing change|floor|aero|upgrade|upgraded|package|development|setup)\b/.test(t)) return 'The car is still being worked through aerodynamically, with setup or upgrade questions shaping the weekend.'
+  if (/\b(strategy|tactical|pit stop|pit stops|tyre|tires)\b/.test(t)) return 'Execution and strategy are carrying extra weight because raw pace has not been enough on its own.'
+  if (/\b(disqualified|penalty|penalised|penalized|stewards|track limits)\b/.test(t)) return 'Regulatory or penalty trouble added avoidable drag to the weekend.'
+  if (/\brain|weather|forecast|wet\b/.test(t)) return 'Weather uncertainty complicated the read on pace and race execution.'
+  if (/\b(slow start|poor start|lack pace|lacks raw pace|far off|struggling|passenger|painful|ninth fastest|top four)\b/.test(t)) return 'The competitive picture reads as a pace deficit rather than one isolated bad result.'
+  return null
+}
+
+function issueText(row: TeamIssueRow) {
+  return cleanIssueText([row.title, row.summary, row.body_text, row.text_all].filter(Boolean).join(' '))
+}
+
+function teamStoryThemes(team: string, stories: NewsletterStory[], issueRows: TeamIssueRow[] = []) {
+  const seen = new Set<string>()
+  const themes: string[] = []
+  for (const row of issueRows) {
+    const text = issueText(row)
+    if (!teamTextMatches(team, text)) continue
+    const theme = issueThemeFromText(text)
+    if (!theme || seen.has(theme)) continue
+    seen.add(theme)
+    themes.push(theme)
+  }
+  for (const story of stories) {
+    if (!teamStoryMatches(team, story)) continue
+    const theme = issueThemeFromText(story.title)
+    if (!theme || seen.has(theme)) continue
+    seen.add(theme)
+    themes.push(theme)
+  }
+  return themes
+    .sort((a, b) => issuePriority(a) - issuePriority(b))
+    .slice(0, 4)
+}
+
+function issuePriority(theme: string) {
+  const t = theme.toLowerCase()
+  if (t.includes('weight')) return 1
+  if (t.includes('reliability')) return 2
+  if (t.includes('preparation')) return 3
+  if (t.includes('pace deficit')) return 4
+  if (t.includes('aerodynamically')) return 5
+  if (t.includes('execution') || t.includes('strategy')) return 6
+  if (t.includes('regulatory') || t.includes('penalty')) return 7
+  return 9
+}
+
 function teamWeekendNarrative(row: TeamRaceReportRow) {
   const fpBest = num(row.fp_best_rank)
   const fpSessions = num(row.fp_sessions) ?? 0
@@ -233,21 +432,15 @@ function teamWeekendNarrative(row: TeamRaceReportRow) {
   const phases: string[] = []
   if (fpBest) {
     phases.push(`practice pace peaked at ${formatPos(fpBest)} across ${fpSessions || 1} FP session${fpSessions === 1 ? '' : 's'}`)
-  } else {
-    phases.push('practice data was not loaded')
   }
   if (qualiBest) {
     phases.push(`qualifying topped out at ${formatPos(qualiBest)} with a ${formatPos(qualiAvg)} team average`)
-  } else {
-    phases.push('qualifying is still missing')
   }
   if (sprintBest) {
     phases.push(`sprint best was ${formatPos(sprintBest)} for ${Math.round(sprintPts ?? 0)} pts`)
   }
   if (raceBest) {
     phases.push(`race best was ${formatPos(raceBest)} for ${Math.round(racePts ?? 0)} pts`)
-  } else {
-    phases.push('race result has not landed yet')
   }
 
   const wentWrong: string[] = []
@@ -271,22 +464,22 @@ function teamWeekendNarrative(row: TeamRaceReportRow) {
     wentWrong.push(`Result statuses flagged trouble: ${[...new Set(troubleStatuses)].join(', ')}.`)
   }
   if (!wentWrong.length) {
-    if (!raceBest) wentWrong.push('No main race read yet, so the full weekend diagnosis is incomplete.')
-    else if ((racePts ?? 0) >= 20) wentWrong.push('Very little went wrong in the headline result; this was mainly execution and points conversion.')
+    if ((racePts ?? 0) >= 20) wentWrong.push('Very little went wrong in the headline result; this was mainly execution and points conversion.')
     else wentWrong.push('No single failure signal stands out; the loss was mostly cumulative pace and position ceiling.')
   }
 
+  const fallback = 'the available session data does not yet show a clear competitive pattern'
   return {
-    summary: `${row.gp_name.replace(' Grand Prix', ' GP')}: ${phases.join('; ')}.`,
+    summary: `${row.gp_name.replace(' Grand Prix', ' GP')}: ${phases.length ? phases.join('; ') : fallback}.`,
     wentWrong,
   }
 }
 
-function mapTeamRaceReports(rows: TeamRaceReportRow[]): TeamRaceReport[] {
+function mapTeamRaceReports(rows: TeamRaceReportRow[], stories: NewsletterStory[], issueRows: TeamIssueRow[]): TeamRaceReport[] {
   const grouped = new Map<string, TeamRaceReport>()
   for (const row of rows) {
     const team = row.team || 'Unknown'
-    if (!grouped.has(team)) grouped.set(team, { team, rounds: [] })
+    if (!grouped.has(team)) grouped.set(team, { team, overview: '', keyIssues: [], storyThemes: [], totalPoints: 0, rounds: [] })
     const narrative = teamWeekendNarrative(row)
     grouped.get(team)!.rounds.push({
       round: Number(row.round) || 0,
@@ -304,19 +497,80 @@ function mapTeamRaceReports(rows: TeamRaceReportRow[]): TeamRaceReport[] {
   return [...grouped.values()]
     .map((report) => ({
       ...report,
+      storyThemes: teamStoryThemes(report.team, stories, issueRows),
+      overview: teamOverview(report, stories, issueRows),
+      keyIssues: teamKeyIssues(report, stories, issueRows),
+      totalPoints: teamTotalPoints(report),
       rounds: report.rounds.sort((a, b) => b.round - a.round),
     }))
-    .sort((a, b) => a.team.localeCompare(b.team))
+    .sort((a, b) => a.totalPoints - b.totalPoints || a.team.localeCompare(b.team))
+}
+
+function extractBestPosition(text?: string | null) {
+  const match = String(text ?? '').match(/best P(\d+)/i)
+  return match ? Number(match[1]) : null
+}
+
+function extractPoints(text?: string | null) {
+  const match = String(text ?? '').match(/,\s*([\d.]+)\s*pts/i)
+  return match ? Number(match[1]) : null
+}
+
+function teamOverview(report: TeamRaceReport, stories: NewsletterStory[], issueRows: TeamIssueRow[]) {
+  const rounds = report.rounds
+  const racePoints = rounds.map((r) => extractPoints(r.race)).filter((v): v is number => v !== null)
+  const sprintPoints = rounds.map((r) => extractPoints(r.sprint)).filter((v): v is number => v !== null)
+  const qualiPositions = rounds.map((r) => extractBestPosition(r.qualifying)).filter((v): v is number => v !== null)
+  const racePositions = rounds.map((r) => extractBestPosition(r.race)).filter((v): v is number => v !== null)
+  const totalRacePoints = racePoints.reduce((sum, value) => sum + value, 0)
+  const totalSprintPoints = sprintPoints.reduce((sum, value) => sum + value, 0)
+  const bestQuali = qualiPositions.length ? Math.min(...qualiPositions) : null
+  const bestRace = racePositions.length ? Math.min(...racePositions) : null
+  const score = totalRacePoints + totalSprintPoints
+
+  let tone = 'has had an uneven opening phase'
+  if (score >= 80 || bestRace === 1) tone = 'has started 2026 as one of the benchmark teams'
+  else if (score >= 35 || (bestRace !== null && bestRace <= 3)) tone = 'has been a regular front-end factor'
+  else if (score >= 10 || (bestRace !== null && bestRace <= 8)) tone = 'has lived in the midfield fight'
+  else if (score <= 2) tone = 'has endured a difficult and low-yield start'
+
+  const parts = [`${report.team} ${tone}`]
+  if (bestQuali) parts.push(`best qualifying result ${formatPos(bestQuali)}`)
+  if (bestRace) parts.push(`best race result ${formatPos(bestRace)}`)
+  if (racePoints.length || sprintPoints.length) parts.push(`${Math.round(score)} combined race/sprint points in the sampled rounds`)
+  const themes = teamStoryThemes(report.team, stories, issueRows)
+  const narrative = themes.length ? ` ${themes[0]}` : ''
+  return `${parts.join(', ')}.${narrative}`
+}
+
+function teamTotalPoints(report: TeamRaceReport) {
+  return report.rounds.reduce((sum, round) => (
+    sum + (extractPoints(round.race) ?? 0) + (extractPoints(round.sprint) ?? 0)
+  ), 0)
+}
+
+function teamKeyIssues(report: TeamRaceReport, stories: NewsletterStory[], issueRows: TeamIssueRow[]) {
+  const issues = [...teamStoryThemes(report.team, stories, issueRows), ...report.rounds.flatMap((round) => round.wentWrong)]
+  const seen = new Set<string>()
+  return issues.filter((issue) => {
+    const key = issue.toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  }).slice(0, 3)
 }
 
 function dedupe(rows: StoryRow[]) {
-  const seen = new Set<string>()
+  const seenKeys = new Set<string>()
+  const seenStories: NewsletterStory[] = []
   return rows
     .map(mapStory)
     .filter((story) => {
-      const key = storyKey(story.title)
-      if (!key || seen.has(key)) return false
-      seen.add(key)
+      const keys = storyDedupeKeys(story)
+      if (!keys.size || [...keys].some((key) => seenKeys.has(key))) return false
+      if (seenStories.some((seen) => isNearDuplicateTitle(story.title, seen.title))) return false
+      for (const key of keys) seenKeys.add(key)
+      seenStories.push(story)
       return true
     })
     .sort((a, b) => b.majorScore - a.majorScore || Date.parse(b.time) - Date.parse(a.time))
@@ -325,9 +579,11 @@ function dedupe(rows: StoryRow[]) {
 function pickUnique(stories: NewsletterStory[], count: number, used: Set<string>) {
   const picked: NewsletterStory[] = []
   for (const story of stories) {
-    const key = storyKey(story.title)
-    if (!key || used.has(key)) continue
-    used.add(key)
+    const keys = storyDedupeKeys(story)
+    if (!keys.size || [...keys].some((key) => used.has(key))) continue
+    if ([...used].some((usedKey) => usedKey.startsWith('raw-title:') && isNearDuplicateTitle(story.title, usedKey.slice(10)))) continue
+    for (const key of keys) used.add(key)
+    used.add(`raw-title:${story.title}`)
     picked.push(story)
     if (picked.length >= count) break
   }
@@ -520,7 +776,7 @@ export async function GET(req: Request) {
 
   try {
     const sql = neon(process.env.NEON_DATABASE_URL!)
-    const [rows, qualiRows, practiceRows, teamRaceRows, standings] = await Promise.all([
+    const [rows, qualiRows, practiceRows, teamRaceRows, teamIssueRows, standings] = await Promise.all([
       sql`
       SELECT
         story_id,
@@ -710,6 +966,22 @@ export async function GET(req: Request) {
            OR ra.result_summary IS NOT NULL
         ORDER BY tp.team ASC, sr.round DESC
       `,
+      sql`
+        SELECT title, summary, body_text, text_all, source, event_ts
+        FROM event_f1_only
+        WHERE event_ts >= NOW() - (${days} || ' days')::interval
+          AND is_f1_relevant = TRUE
+          AND (
+            LOWER(COALESCE(text_all, '') || ' ' || COALESCE(title, '') || ' ' || COALESCE(summary, '') || ' ' || COALESCE(body_text, ''))
+              ~ '(williams|albon|sainz|mercedes|antonelli|russell|ferrari|leclerc|hamilton|mclaren|norris|piastri|red bull|verstappen|hadjar|racing bulls|lawson|lindblad|aston martin|alonso|stroll|alpine|gasly|colapinto|audi|sauber|hulkenberg|bortoleto|haas|bearman|ocon|cadillac|perez|bottas)'
+          )
+          AND (
+            LOWER(COALESCE(text_all, '') || ' ' || COALESCE(title, '') || ' ' || COALESCE(summary, '') || ' ' || COALESCE(body_text, ''))
+              ~ '(overweight|weight|hydraulic|reliability|failure|issue|problem|retired|dnf|shakedown|preparation|delay|testing|barcelona|back foot|front wing|wing change|floor|aero|upgrade|package|development|strategy|pit stop|tyre|tire|penalty|penalised|penalized|stewards|track limits|weather|rain|slow start|poor start|lack pace|raw pace|far off|struggling|painful|passenger|disqualified)'
+          )
+        ORDER BY event_ts DESC, priority_score DESC NULLS LAST
+        LIMIT 500
+      `,
       fetchStandings().catch(() => ({ drivers: [], constructors: [] })),
     ])
 
@@ -779,7 +1051,11 @@ export async function GET(req: Request) {
           }
         : null
     const resolvedSessionTopThree = liveTimingSession ?? sessionTopThree
-    const teamRaceReports = mapTeamRaceReports(teamRaceRows as unknown as TeamRaceReportRow[])
+    const teamRaceReports = mapTeamRaceReports(
+      teamRaceRows as unknown as TeamRaceReportRow[],
+      stories,
+      teamIssueRows as unknown as TeamIssueRow[]
+    )
 
     const payload = {
       title: 'The Paddock Month in Review',

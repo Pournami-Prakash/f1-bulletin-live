@@ -208,8 +208,8 @@ def race_actuals_available(season: int, round_: int) -> bool:
 def prediction_confidence(season: int, completed_2026_races: int) -> float:
     evidence_ratio = min(max(completed_2026_races / RACES_PER_SEASON, 0.0), 1.0)
     if season >= 2026:
-        return min(0.40 + (evidence_ratio ** 0.60) * 0.48, 0.88)
-    return min(0.46 + (evidence_ratio ** 0.60) * 0.49, 0.95)
+        return min(0.24 + evidence_ratio * 0.64, 0.88)
+    return min(0.30 + evidence_ratio * 0.65, 0.95)
 
 def get_race_distance(season: int, round_: int, circuit: str) -> int:
     try:
