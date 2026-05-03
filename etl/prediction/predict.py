@@ -192,6 +192,19 @@ def count_completed_races(season: int) -> int:
     """, (season,))
     return int(completed.iloc[0]['n']) if not completed.empty else 0
 
+def race_actuals_available(season: int, round_: int) -> bool:
+    actuals = query("""
+        SELECT 1
+        FROM sessions s
+        JOIN results r ON r.session_id = s.id
+        WHERE s.season = %s
+          AND s.round = %s
+          AND s.session_type = 'R'
+          AND r.finish_position IS NOT NULL
+        LIMIT 1
+    """, (season, round_))
+    return not actuals.empty
+
 def get_race_distance(season: int, round_: int, circuit: str) -> int:
     try:
         row = query("""
@@ -1186,6 +1199,11 @@ def write_predictions(predictions: list[dict]) -> None:
                 rolling_avg_finish  = EXCLUDED.rolling_avg_finish,
                 is_upset_pick       = EXCLUDED.is_upset_pick,
                 upset_score         = EXCLUDED.upset_score,
+                position_error      = CASE
+                    WHEN predictions.actual_position IS NOT NULL
+                    THEN EXCLUDED.predicted_position - predictions.actual_position
+                    ELSE predictions.position_error
+                END,
                 predicted_at        = NOW(),
                 updated_at          = NOW()
         """, (
@@ -1413,6 +1431,9 @@ def main():
     if not args.dry_run:
         step("Writing to Neon...")
         write_predictions(predictions)
+        if race_actuals_available(season, round_):
+            step("Actual race results found — refreshing score for this round...")
+            score_prediction(season, round_)
         step(f"Done. View at /api/predictions?season={season}&round={round_}")
     else:
         step("Dry run — not writing to DB")
