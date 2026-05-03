@@ -878,7 +878,7 @@ def load_session(
                     row.get("TeamName"),
                     safe_int(row.get("GridPosition")),
                     safe_int(row.get("Position")),
-                    safe_float(row.get("Points")),
+                    safe_float(row.get("Points")) or 0.0,
                     row.get("Status"),
                     ms(row.get("FastestLapTime")),
                 ))

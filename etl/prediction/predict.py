@@ -1517,7 +1517,7 @@ def score_prediction(season: int, round_: int) -> None:
             SET actual_position = %s, actual_points = %s, position_error = %s, updated_at = NOW()
             WHERE season=%s AND round=%s AND driver_code=%s AND model_version=%s
         """, (
-            int(row['finish_position']), float(row['points']),
+            int(row['finish_position']), float(row['points'] or 0),
             int(row['predicted_position']) - int(row['finish_position']),
             season, round_, row['driver_code'], score_model_version,
         ))
