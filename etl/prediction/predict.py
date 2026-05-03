@@ -41,7 +41,7 @@ if not DATABASE_URL:
 FEATURES_DIR  = Path("features_output")
 MODEL_VERSION = "v4_regulation_aware_mc"
 MC_RUNS       = 500
-RACES_PER_SEASON = 24
+RACES_PER_SEASON = 22
 
 SEASON_WEIGHTS = {
     2021: 0.20, 2022: 0.50, 2023: 0.75, 2024: 0.85, 2025: 0.90, 2026: 1.00,
@@ -121,6 +121,34 @@ PIT_LANE_DELTA = {
 }
 MAX_POSITION_GAIN = 12
 
+RACE_LAPS_BY_CIRCUIT = {
+    'Melbourne': 58,
+    'Shanghai': 56,
+    'Suzuka': 53,
+    'Miami': 57,
+    'Miami Gardens': 57,
+    'Monaco': 78,
+    'Monte Carlo': 78,
+    'Barcelona': 66,
+    'Spielberg': 71,
+    'Silverstone': 52,
+    'Spa': 44,
+    'Spa-Francorchamps': 44,
+    'Budapest': 70,
+    'Zandvoort': 72,
+    'Monza': 53,
+    'Baku': 51,
+    'Singapore': 62,
+    'Marina Bay': 62,
+    'Austin': 56,
+    'Mexico City': 71,
+    'São Paulo': 71,
+    'Sao Paulo': 71,
+    'Las Vegas': 50,
+    'Lusail': 57,
+    'Yas Island': 58,
+}
+
 PIT_CREW_SPEED = {
     'Red Bull Racing': 2.0, 'Mercedes': 2.2, 'Ferrari': 2.3,
     'McLaren': 2.2, 'Aston Martin': 2.6, 'Alpine': 2.8,
@@ -152,6 +180,31 @@ def query(sql: str, params=None) -> pd.DataFrame:
     df = pd.read_sql(sql, conn, params=params)
     conn.close()
     return df
+
+def count_completed_races(season: int) -> int:
+    completed = query("""
+        SELECT COUNT(DISTINCT s.round)::int AS n
+        FROM sessions s
+        JOIN results r ON r.session_id = s.id
+        WHERE s.season = %s
+          AND s.session_type = 'R'
+          AND r.finish_position IS NOT NULL
+    """, (season,))
+    return int(completed.iloc[0]['n']) if not completed.empty else 0
+
+def get_race_distance(season: int, round_: int, circuit: str) -> int:
+    try:
+        row = query("""
+            SELECT race_laps
+            FROM race_calendar
+            WHERE season = %s AND round = %s
+            LIMIT 1
+        """, (season, round_))
+        if not row.empty and pd.notna(row.iloc[0]['race_laps']):
+            return int(row.iloc[0]['race_laps'])
+    except Exception:
+        pass
+    return int(RACE_LAPS_BY_CIRCUIT.get(circuit, 58))
 
 def section(t): print(f"\n{'='*55}\n  {t}\n{'='*55}")
 def step(t):    print(f"  → {t}")
@@ -429,13 +482,8 @@ def project_championship(season: int) -> pd.DataFrame | None:
     if latest_pred.empty:
         return None
 
-    # races_completed = distinct rounds with a race session completed
-    # (sprint rounds still count as 1 round, not 2)
-    races_done = query("""
-        SELECT COUNT(DISTINCT round)::int AS n
-        FROM sessions
-        WHERE season = %s AND session_type = 'R' AND date <= NOW()
-    """, (season,)).iloc[0]['n']
+    # Count actual completed race result rounds, not merely scheduled sessions.
+    races_done = count_completed_races(season)
 
     races_remaining = max(0, RACES_PER_SEASON - int(races_done))
 
@@ -624,13 +672,11 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
     else:
         step("  No sprint points yet for this season")
 
-    n_2026_races = query(
-        "SELECT COUNT(DISTINCT round) as n FROM sessions WHERE season=2026 AND session_type='R'"
-    ).iloc[0]['n']
+    n_2026_races = count_completed_races(2026)
     if season >= 2026:
-        confidence = min(0.24 + (n_2026_races / 24) * 0.64, 0.88)
+        confidence = min(0.24 + (n_2026_races / RACES_PER_SEASON) * 0.64, 0.88)
     else:
-        confidence = min(0.30 + (n_2026_races / 24) * 0.65, 0.95)
+        confidence = min(0.30 + (n_2026_races / RACES_PER_SEASON) * 0.65, 0.95)
 
     entries = []
     all_drivers = latest_results['driver_code'].tolist() if not latest_results.empty else []
@@ -986,7 +1032,7 @@ def compute_predictions(
     ridge_preds: dict[str, float] | None = None,
     rf_preds:    dict[str, float] | None = None,
 ) -> list[dict]:
-    n_2026       = query("SELECT COUNT(DISTINCT round) as n FROM sessions WHERE season=2026 AND session_type='R'").iloc[0]['n']
+    n_2026       = count_completed_races(2026)
     reg_era      = entries[0].get('regulation_era', 0) if entries else 0
     live_w       = entries[0].get('live_weekend_weight', 0.35) if entries else 0.35
     data_weight  = min(n_2026 / 10.0, 0.9)
@@ -1300,9 +1346,7 @@ def main():
     season, round_, gp_name, circuit = get_target_race(args.season, args.round_)
     step(f"Target: {season} R{round_} — {gp_name} ({circuit})")
 
-    n_2026_races = int(query(
-        "SELECT COUNT(DISTINCT round) as n FROM sessions WHERE season=2026 AND session_type='R'"
-    ).iloc[0]['n'])
+    n_2026_races = count_completed_races(2026)
     step(f"2026 races in DB: {n_2026_races} / {XGB_TRIGGER_RACES} needed for XGBoost")
 
     if XGBOOST_AVAILABLE and n_2026_races >= XGB_TRIGGER_RACES:
@@ -1352,8 +1396,9 @@ def main():
     step("Computing Bayesian prior...")
     priors = bayesian_prior(entries)
 
-    step(f"Running {MC_RUNS} Monte Carlo simulations...")
-    sim_results = simulate_race(entries, race_distance=58, artifacts=artifacts)
+    race_distance = get_race_distance(season, round_, circuit)
+    step(f"Running {MC_RUNS} Monte Carlo simulations over {race_distance} laps...")
+    sim_results = simulate_race(entries, race_distance=race_distance, artifacts=artifacts)
     step("  Simulations complete")
 
     step("Computing final predictions...")

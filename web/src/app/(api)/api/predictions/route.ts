@@ -3,7 +3,7 @@ import { neon } from '@neondatabase/serverless'
 
 const sql = neon(process.env.NEON_DATABASE_URL!)
 
-const RACES_PER_SEASON = 24
+const RACES_PER_SEASON = 22
 
 export type DriverPrediction = {
   driver_code:        string
@@ -217,8 +217,12 @@ export async function GET(request: Request) {
     // nDone = number of race rounds completed (not sprint sessions —
     // we don't want to double-count rounds that have both R and S)
     const nDoneRow = await sql`
-      SELECT COUNT(DISTINCT round)::int AS n FROM sessions
-      WHERE season = ${targetSeason} AND session_type = 'R' AND date <= NOW()
+      SELECT COUNT(DISTINCT s.round)::int AS n
+      FROM sessions s
+      JOIN results r ON r.session_id = s.id
+      WHERE s.season = ${targetSeason}
+        AND s.session_type = 'R'
+        AND r.finish_position IS NOT NULL
     `
 
     const nDone      = nDoneRow[0]?.n ?? 0
