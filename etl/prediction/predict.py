@@ -326,6 +326,8 @@ def load_artifacts() -> dict:
     with open(FEATURES_DIR / 'constructor_strength.json') as f: artifacts['constructor'] = json.load(f)
     with open(FEATURES_DIR / 'circuit_profiles.json')     as f: artifacts['circuits']    = json.load(f)
     with open(FEATURES_DIR / 'feature_meta.json')         as f: artifacts['meta']        = json.load(f)
+    elo_hist_path = FEATURES_DIR / 'elo_history.csv'
+    artifacts['elo_history'] = pd.read_csv(elo_hist_path) if elo_hist_path.exists() else pd.DataFrame()
     artifacts['regulation_config'] = artifacts['meta'].get('regulation_config', REGULATION_CONFIG)
     for fname, key in [
         ('circuit_elo.json',    'circuit_elo'),
@@ -873,9 +875,37 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
             q1_to_q3 = np.nan
             q2_to_q3 = np.nan
 
-        celo_map        = artifacts.get('circuit_elo', {})
-        celo_val        = celo_map.get(f"{driver}|{circuit}", elo.get(driver, 1400))
-        blended_elo_val = 0.70 * elo.get(driver, 1400) + 0.30 * celo_val
+        # Use pre-race ELO from history to avoid leaking post-race updates
+        elo_hist = artifacts.get('elo_history', pd.DataFrame())
+        elo_hist_row = elo_hist[
+            (elo_hist['driver_code'] == driver) &
+            (elo_hist['season'] == season) &
+            (elo_hist['round'] == round_) &
+            (elo_hist['session_type'] == 'R')
+        ]
+        if not elo_hist_row.empty:
+            driver_elo = float(elo_hist_row.iloc[0]['elo_before'])
+            celo_val   = float(elo_hist_row.iloc[0]['circuit_elo_before'])
+        else:
+            # fall back to most recent pre-race entry in history
+            prev_hist = elo_hist[
+                (elo_hist['driver_code'] == driver) &
+                (elo_hist['session_type'] == 'R') &
+                (
+                    (elo_hist['season'] < season) |
+                    ((elo_hist['season'] == season) & (elo_hist['round'] < round_))
+                )
+            ]
+            if not prev_hist.empty:
+                latest = prev_hist.sort_values(['season', 'round']).iloc[-1]
+                driver_elo = float(latest['elo_after'])
+                celo_map   = artifacts.get('circuit_elo', {})
+                celo_val   = celo_map.get(f"{driver}|{circuit}", driver_elo)
+            else:
+                driver_elo = elo.get(driver, 1400)
+                celo_map   = artifacts.get('circuit_elo', {})
+                celo_val   = celo_map.get(f"{driver}|{circuit}", driver_elo)
+        blended_elo_val = 0.70 * driver_elo + 0.30 * celo_val
 
         dnf_surv = artifacts.get('dnf_survival', {}).get(driver, {'dnf_rate':0.10,'shape':0.8,'scale':60.0})
 
