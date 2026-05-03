@@ -1077,8 +1077,8 @@ def bayesian_prior(entries: list[dict]) -> dict[str, float]:
         )
         scores[e['driver_code']] = composite
 
-    total  = sum(np.exp(s * 5) for s in scores.values())
-    priors = {d: np.exp(s * 5) / total for d, s in scores.items()}
+    total  = sum(np.exp(s * 3) for s in scores.values())
+    priors = {d: np.exp(s * 3) / total for d, s in scores.items()}
     return priors
 
 # ─────────────────────────────────────────────────────────────
@@ -1398,6 +1398,15 @@ def compute_predictions(
             'is_upset_pick':      is_upset,
             'upset_score':        round(float(upset_score), 3),
         })
+
+    # Minimum win floor: top-10 starters always get at least some signal
+    grid_to_entry = {e['driver_code']: e['grid_position'] for e in entries}
+    for p in predictions:
+        grid = grid_to_entry.get(p['driver_code'], 20)
+        if grid <= 10 and p['win_probability'] < 0.004:
+            p['win_probability'] = 0.004
+        elif grid <= 5 and p['win_probability'] < 0.008:
+            p['win_probability'] = 0.008
 
     total_win = sum(p['win_probability'] for p in predictions)
     if total_win > 0:
