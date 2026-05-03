@@ -205,6 +205,12 @@ def race_actuals_available(season: int, round_: int) -> bool:
     """, (season, round_))
     return not actuals.empty
 
+def prediction_confidence(season: int, completed_2026_races: int) -> float:
+    evidence_ratio = min(max(completed_2026_races / RACES_PER_SEASON, 0.0), 1.0)
+    if season >= 2026:
+        return min(0.40 + (evidence_ratio ** 0.60) * 0.48, 0.88)
+    return min(0.46 + (evidence_ratio ** 0.60) * 0.49, 0.95)
+
 def get_race_distance(season: int, round_: int, circuit: str) -> int:
     try:
         row = query("""
@@ -686,10 +692,7 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
         step("  No sprint points yet for this season")
 
     n_2026_races = count_completed_races(2026)
-    if season >= 2026:
-        confidence = min(0.24 + (n_2026_races / RACES_PER_SEASON) * 0.64, 0.88)
-    else:
-        confidence = min(0.30 + (n_2026_races / RACES_PER_SEASON) * 0.65, 0.95)
+    confidence = prediction_confidence(season, n_2026_races)
 
     entries = []
     all_drivers = latest_results['driver_code'].tolist() if not latest_results.empty else []

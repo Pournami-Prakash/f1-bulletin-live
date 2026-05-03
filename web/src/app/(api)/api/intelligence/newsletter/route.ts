@@ -79,6 +79,45 @@ type SessionTopThree = {
   }[]
 }
 
+type TeamRaceReport = {
+  team: string
+  rounds: {
+    round: number
+    gpName: string
+    circuit: string
+    eventDate: string | null
+    fp: string | null
+    qualifying: string | null
+    sprint: string | null
+    race: string | null
+    summary: string
+    wentWrong: string[]
+  }[]
+}
+
+type TeamRaceReportRow = {
+  team: string
+  round: number
+  gp_name: string
+  circuit: string
+  event_date: string | null
+  fp_summary: string | null
+  quali_summary: string | null
+  sprint_summary: string | null
+  race_summary: string | null
+  fp_best_rank: string | number | null
+  fp_sessions: string | number | null
+  quali_best_pos: string | number | null
+  quali_avg_pos: string | number | null
+  sprint_best_pos: string | number | null
+  sprint_points: string | number | null
+  race_best_pos: string | number | null
+  race_points: string | number | null
+  race_avg_grid: string | number | null
+  race_avg_finish: string | number | null
+  race_statuses: string | null
+}
+
 type LiveTimingSession = {
   Type?: string
   Name?: string
@@ -163,6 +202,111 @@ function mapStory(row: StoryRow): NewsletterStory {
     isBreaking: Boolean(row.is_breaking),
     majorScore: majorScore(row),
   }
+}
+
+function num(value: string | number | null | undefined) {
+  if (value === null || value === undefined) return null
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function formatPos(value: number | null) {
+  return value ? `P${Math.round(value)}` : 'no mark'
+}
+
+function teamWeekendNarrative(row: TeamRaceReportRow) {
+  const fpBest = num(row.fp_best_rank)
+  const fpSessions = num(row.fp_sessions) ?? 0
+  const qualiBest = num(row.quali_best_pos)
+  const qualiAvg = num(row.quali_avg_pos)
+  const sprintBest = num(row.sprint_best_pos)
+  const sprintPts = num(row.sprint_points)
+  const raceBest = num(row.race_best_pos)
+  const racePts = num(row.race_points)
+  const raceGrid = num(row.race_avg_grid)
+  const raceFinish = num(row.race_avg_finish)
+  const statuses = String(row.race_statuses ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+
+  const phases: string[] = []
+  if (fpBest) {
+    phases.push(`practice pace peaked at ${formatPos(fpBest)} across ${fpSessions || 1} FP session${fpSessions === 1 ? '' : 's'}`)
+  } else {
+    phases.push('practice data was not loaded')
+  }
+  if (qualiBest) {
+    phases.push(`qualifying topped out at ${formatPos(qualiBest)} with a ${formatPos(qualiAvg)} team average`)
+  } else {
+    phases.push('qualifying is still missing')
+  }
+  if (sprintBest) {
+    phases.push(`sprint best was ${formatPos(sprintBest)} for ${Math.round(sprintPts ?? 0)} pts`)
+  }
+  if (raceBest) {
+    phases.push(`race best was ${formatPos(raceBest)} for ${Math.round(racePts ?? 0)} pts`)
+  } else {
+    phases.push('race result has not landed yet')
+  }
+
+  const wentWrong: string[] = []
+  if (fpBest && qualiBest && qualiBest - fpBest >= 6) {
+    wentWrong.push(`FP speed did not convert to qualifying: best session rank ${formatPos(fpBest)} became ${formatPos(qualiBest)} on the grid.`)
+  }
+  if (qualiAvg && qualiAvg > 12) {
+    wentWrong.push(`Both cars started too deep on average (${formatPos(qualiAvg)}), leaving the weekend dependent on recovery drives.`)
+  }
+  if (sprintBest && sprintBest > 8) {
+    wentWrong.push(`The sprint missed points, with the best car only ${formatPos(sprintBest)}.`)
+  }
+  if (raceBest && racePts !== null && racePts <= 0) {
+    wentWrong.push(`Sunday produced no points despite a classified best finish of ${formatPos(raceBest)}.`)
+  }
+  if (raceGrid && raceFinish && raceFinish - raceGrid >= 3) {
+    wentWrong.push(`Race execution slipped backwards: average finish ${formatPos(raceFinish)} from an average grid of ${formatPos(raceGrid)}.`)
+  }
+  const troubleStatuses = statuses.filter((s) => !/^(finished|\+\d+ laps?)$/i.test(s))
+  if (troubleStatuses.length) {
+    wentWrong.push(`Result statuses flagged trouble: ${[...new Set(troubleStatuses)].join(', ')}.`)
+  }
+  if (!wentWrong.length) {
+    if (!raceBest) wentWrong.push('No main race read yet, so the full weekend diagnosis is incomplete.')
+    else if ((racePts ?? 0) >= 20) wentWrong.push('Very little went wrong in the headline result; this was mainly execution and points conversion.')
+    else wentWrong.push('No single failure signal stands out; the loss was mostly cumulative pace and position ceiling.')
+  }
+
+  return {
+    summary: `${row.gp_name.replace(' Grand Prix', ' GP')}: ${phases.join('; ')}.`,
+    wentWrong,
+  }
+}
+
+function mapTeamRaceReports(rows: TeamRaceReportRow[]): TeamRaceReport[] {
+  const grouped = new Map<string, TeamRaceReport>()
+  for (const row of rows) {
+    const team = row.team || 'Unknown'
+    if (!grouped.has(team)) grouped.set(team, { team, rounds: [] })
+    const narrative = teamWeekendNarrative(row)
+    grouped.get(team)!.rounds.push({
+      round: Number(row.round) || 0,
+      gpName: row.gp_name,
+      circuit: row.circuit,
+      eventDate: row.event_date,
+      fp: row.fp_summary,
+      qualifying: row.quali_summary,
+      sprint: row.sprint_summary,
+      race: row.race_summary,
+      summary: narrative.summary,
+      wentWrong: narrative.wentWrong,
+    })
+  }
+  return [...grouped.values()]
+    .map((report) => ({
+      ...report,
+      rounds: report.rounds.sort((a, b) => b.round - a.round),
+    }))
+    .sort((a, b) => a.team.localeCompare(b.team))
 }
 
 function dedupe(rows: StoryRow[]) {
@@ -376,7 +520,7 @@ export async function GET(req: Request) {
 
   try {
     const sql = neon(process.env.NEON_DATABASE_URL!)
-    const [rows, qualiRows, practiceRows, standings] = await Promise.all([
+    const [rows, qualiRows, practiceRows, teamRaceRows, standings] = await Promise.all([
       sql`
       SELECT
         story_id,
@@ -432,6 +576,139 @@ export async function GET(req: Request) {
         WHERE pl.best_lap_ms IS NOT NULL
         ORDER BY pl.best_lap_ms ASC
         LIMIT 3
+      `,
+      sql`
+        WITH selected_rounds AS (
+          SELECT season, round, MAX(gp_name) AS gp_name, MAX(circuit) AS circuit, MAX(date) AS event_date
+          FROM sessions
+          WHERE season = 2026
+            AND date <= CURRENT_DATE + INTERVAL '2 days'
+          GROUP BY season, round
+          ORDER BY round DESC
+          LIMIT 3
+        ),
+        team_pool AS (
+          SELECT DISTINCT team
+          FROM predictions
+          WHERE season = 2026 AND team IS NOT NULL
+          UNION
+          SELECT DISTINCT r.team
+          FROM results r
+          JOIN sessions s ON s.id = r.session_id
+          WHERE s.season = 2026 AND r.team IS NOT NULL
+        ),
+        latest_team AS (
+          SELECT DISTINCT ON (r.driver_code) r.driver_code, r.team
+          FROM results r
+          JOIN sessions s ON s.id = r.session_id
+          WHERE r.team IS NOT NULL
+          ORDER BY r.driver_code, s.season DESC, s.round DESC
+        ),
+        practice_ranked AS (
+          SELECT s.season, s.round, COALESCE(lt.team, 'Unknown') AS team,
+                 pl.fp_session, pl.driver_code, pl.best_lap_ms,
+                 RANK() OVER (
+                   PARTITION BY s.season, s.round, pl.fp_session
+                   ORDER BY pl.best_lap_ms ASC NULLS LAST
+                 ) AS session_rank
+          FROM practice_laps pl
+          JOIN sessions s ON s.id = pl.session_id
+          LEFT JOIN latest_team lt ON lt.driver_code = pl.driver_code
+          JOIN selected_rounds sr ON sr.season = s.season AND sr.round = s.round
+          WHERE pl.best_lap_ms IS NOT NULL
+        ),
+        practice_best AS (
+          SELECT DISTINCT ON (season, round, team, fp_session)
+                 season, round, team, fp_session, driver_code, session_rank
+          FROM practice_ranked
+          ORDER BY season, round, team, fp_session, session_rank ASC
+        ),
+        practice_agg AS (
+          SELECT season, round, team,
+                 STRING_AGG(
+                   fp_session || ' P' || session_rank || ' ' || driver_code,
+                   ', '
+                   ORDER BY CASE fp_session WHEN 'FP1' THEN 1 WHEN 'FP2' THEN 2 WHEN 'FP3' THEN 3 ELSE 4 END
+                 ) AS fp_summary,
+                 MIN(session_rank) AS fp_best_rank,
+                 COUNT(DISTINCT fp_session) AS fp_sessions
+          FROM practice_best
+          GROUP BY season, round, team
+        ),
+        quali_ranked AS (
+          SELECT s.season, s.round, COALESCE(lt.team, 'Unknown') AS team,
+                 q.driver_code, q.grid_position, q.best_ms
+          FROM qualifying_laps q
+          JOIN sessions s ON s.id = q.session_id
+          LEFT JOIN latest_team lt ON lt.driver_code = q.driver_code
+          JOIN selected_rounds sr ON sr.season = s.season AND sr.round = s.round
+          WHERE q.grid_position IS NOT NULL
+        ),
+        quali_agg AS (
+          SELECT DISTINCT ON (season, round, team)
+                 season, round, team,
+                 'best P' || grid_position || ' ' || driver_code ||
+                   ', avg P' || ROUND(AVG(grid_position) OVER (PARTITION BY season, round, team)::numeric, 1) AS quali_summary,
+                 grid_position AS quali_best_pos,
+                 ROUND(AVG(grid_position) OVER (PARTITION BY season, round, team)::numeric, 1) AS quali_avg_pos
+          FROM quali_ranked
+          ORDER BY season, round, team, grid_position ASC, best_ms ASC NULLS LAST
+        ),
+        result_ranked AS (
+          SELECT s.season, s.round, s.session_type, r.team, r.driver_code,
+                 r.grid_position, r.finish_position, r.points, r.status
+          FROM results r
+          JOIN sessions s ON s.id = r.session_id
+          JOIN selected_rounds sr ON sr.season = s.season AND sr.round = s.round
+          WHERE s.session_type IN ('S', 'R')
+            AND r.finish_position IS NOT NULL
+        ),
+        result_agg AS (
+          SELECT DISTINCT ON (season, round, team, session_type)
+                 season, round, team, session_type,
+                 CASE
+                   WHEN session_type = 'S' THEN
+                     'best P' || finish_position || ' ' || driver_code ||
+                     ', ' || ROUND(SUM(points) OVER (PARTITION BY season, round, team, session_type)::numeric, 1) || ' pts'
+                   ELSE
+                     'best P' || finish_position || ' ' || driver_code ||
+                     ', ' || ROUND(SUM(points) OVER (PARTITION BY season, round, team, session_type)::numeric, 1) || ' pts'
+                 END AS result_summary,
+                 finish_position AS best_pos,
+                 ROUND(SUM(points) OVER (PARTITION BY season, round, team, session_type)::numeric, 1) AS total_points,
+                 ROUND(AVG(grid_position) OVER (PARTITION BY season, round, team, session_type)::numeric, 1) AS avg_grid,
+                 ROUND(AVG(finish_position) OVER (PARTITION BY season, round, team, session_type)::numeric, 1) AS avg_finish,
+                 STRING_AGG(COALESCE(status, 'Unknown'), ', ') OVER (PARTITION BY season, round, team, session_type) AS statuses
+          FROM result_ranked
+          ORDER BY season, round, team, session_type, finish_position ASC
+        )
+        SELECT tp.team, sr.round, sr.gp_name, sr.circuit, sr.event_date,
+               pa.fp_summary,
+               pa.fp_best_rank,
+               pa.fp_sessions,
+               qa.quali_summary,
+               qa.quali_best_pos,
+               qa.quali_avg_pos,
+               sa.result_summary AS sprint_summary,
+               sa.best_pos AS sprint_best_pos,
+               sa.total_points AS sprint_points,
+               ra.result_summary AS race_summary,
+               ra.best_pos AS race_best_pos,
+               ra.total_points AS race_points,
+               ra.avg_grid AS race_avg_grid,
+               ra.avg_finish AS race_avg_finish,
+               ra.statuses AS race_statuses
+        FROM team_pool tp
+        CROSS JOIN selected_rounds sr
+        LEFT JOIN practice_agg pa ON pa.season = sr.season AND pa.round = sr.round AND pa.team = tp.team
+        LEFT JOIN quali_agg qa ON qa.season = sr.season AND qa.round = sr.round AND qa.team = tp.team
+        LEFT JOIN result_agg sa ON sa.season = sr.season AND sa.round = sr.round AND sa.team = tp.team AND sa.session_type = 'S'
+        LEFT JOIN result_agg ra ON ra.season = sr.season AND ra.round = sr.round AND ra.team = tp.team AND ra.session_type = 'R'
+        WHERE pa.fp_summary IS NOT NULL
+           OR qa.quali_summary IS NOT NULL
+           OR sa.result_summary IS NOT NULL
+           OR ra.result_summary IS NOT NULL
+        ORDER BY tp.team ASC, sr.round DESC
       `,
       fetchStandings().catch(() => ({ drivers: [], constructors: [] })),
     ])
@@ -502,6 +779,7 @@ export async function GET(req: Request) {
           }
         : null
     const resolvedSessionTopThree = liveTimingSession ?? sessionTopThree
+    const teamRaceReports = mapTeamRaceReports(teamRaceRows as unknown as TeamRaceReportRow[])
 
     const payload = {
       title: 'The Paddock Month in Review',
@@ -526,6 +804,7 @@ export async function GET(req: Request) {
       headlineRollup,
       standings,
       sessionTopThree: resolvedSessionTopThree,
+      teamRaceReports,
     }
 
     return ok(payload, { count: stories.length })

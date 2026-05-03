@@ -56,6 +56,14 @@ type Newsletter = {
     session: string; gpName: string; date: string | null
     rows: { position: number; driver: string; team?: string | null; timeMs?: number | null; gapMs?: number | null }[]
   } | null
+  teamRaceReports?: {
+    team: string
+    rounds: {
+      round: number; gpName: string; circuit: string; eventDate: string | null
+      fp: string | null; qualifying: string | null; sprint: string | null; race: string | null
+      summary: string; wentWrong: string[]
+    }[]
+  }[]
 }
 type SummaryEntity = {
   driverName: string; mentions: number; sentimentAvg: number; sentimentDelta: number
@@ -1463,6 +1471,62 @@ function NewsletterContextPanel({ newsletter }: { newsletter: Newsletter }) {
   )
 }
 
+function NewsletterTeamRaceReport({ newsletter }: { newsletter: Newsletter }) {
+  const reports = newsletter.teamRaceReports ?? []
+  if (!reports.length) return null
+
+  return (
+    <section>
+      <SectionHead label="Team race log" count={reports.length} accent="#f59e0b"/>
+      <div className="newsletter-team-log" style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:12}}>
+        {reports.map(report => {
+          const c = col(report.team)
+          return (
+            <article key={report.team} style={{border:'1px solid rgba(255,255,255,.08)',borderRadius:16,background:'rgba(0,0,0,.22)',overflow:'hidden'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'12px 14px',borderBottom:'1px solid rgba(255,255,255,.06)',background:`linear-gradient(90deg,${c}18,rgba(0,0,0,.08))`}}>
+                <h3 style={{fontFamily:'var(--font-bebas)',fontSize:22,lineHeight:1,letterSpacing:'.05em',margin:0,color:'#fff'}}>{report.team}</h3>
+                <span style={{width:9,height:9,borderRadius:9,background:c,boxShadow:`0 0 14px ${c}80`,flexShrink:0}}/>
+              </div>
+              <div style={{display:'grid'}}>
+                {report.rounds.map(round => (
+                  <div key={`${report.team}-${round.round}`} style={{display:'grid',gridTemplateColumns:'74px 1fr',gap:12,padding:'12px 14px',borderBottom:'1px solid rgba(255,255,255,.045)'}}>
+                    <div>
+                      <div style={{fontFamily:'var(--font-bebas)',fontSize:20,lineHeight:1,color:c}}>R{round.round}</div>
+                      <div style={{fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.08em',lineHeight:1.35,color:'rgba(255,255,255,.35)',textTransform:'uppercase'}}>{round.gpName.replace(' Grand Prix',' GP')}</div>
+                    </div>
+                    <div style={{display:'grid',gap:6}}>
+                      <p style={{margin:'0 0 2px',fontSize:11,lineHeight:1.55,color:'rgba(255,255,255,.76)'}}>{round.summary}</p>
+                      {[
+                        ['FP', round.fp],
+                        ['Q', round.qualifying],
+                        ['S', round.sprint],
+                        ['R', round.race],
+                      ].map(([label, value]) => (
+                        <div key={`${round.round}-${label}`} style={{display:'grid',gridTemplateColumns:'26px 1fr',gap:8,alignItems:'baseline'}}>
+                          <span style={{fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.1em',color:value ? c : 'rgba(255,255,255,.18)'}}>{label}</span>
+                          <span style={{fontSize:10,lineHeight:1.35,color:value ? 'rgba(255,255,255,.72)' : 'rgba(255,255,255,.24)'}}>{value || 'not loaded yet'}</span>
+                        </div>
+                      ))}
+                      <div style={{marginTop:2,display:'grid',gap:4}}>
+                        {round.wentWrong.slice(0,2).map((item, i) => (
+                          <div key={`${round.round}-issue-${i}`} style={{display:'grid',gridTemplateColumns:'26px 1fr',gap:8}}>
+                            <span style={{fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.1em',color:'rgba(245,158,11,.72)'}}>{i === 0 ? 'WHY' : ''}</span>
+                            <span style={{fontSize:10,lineHeight:1.45,color:'rgba(255,255,255,.5)'}}>{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 function NewsletterIssue({ newsletter, loading }: { newsletter: Newsletter | null; loading: boolean }) {
   if (loading) {
     return (
@@ -1537,6 +1601,7 @@ function NewsletterIssue({ newsletter, loading }: { newsletter: Newsletter | nul
       )}
 
       <NewsletterContextPanel newsletter={newsletter}/>
+      <NewsletterTeamRaceReport newsletter={newsletter}/>
 
       {newsletter.awards.length>0&&(
         <section>
@@ -1666,7 +1731,7 @@ const CSS = `
 
     /* Layouts: single column */
     .row-main,.row-2{grid-template-columns:1fr!important;gap:12px!important}
-    .newsletter-grid,.newsletter-hero,.newsletter-awards,.newsletter-sections,.newsletter-context{grid-template-columns:1fr!important}
+    .newsletter-grid,.newsletter-hero,.newsletter-awards,.newsletter-sections,.newsletter-context,.newsletter-team-log{grid-template-columns:1fr!important}
     .newsletter-hero{padding:22px 18px!important}
     .newsletter-stats{grid-template-columns:1fr 1fr!important}
 
