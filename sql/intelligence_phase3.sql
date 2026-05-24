@@ -90,10 +90,13 @@ USING (
     CURRENT_DATE() = rc.race_date                                 AS race_today,
     CASE
       WHEN CURRENT_DATE() = rc.race_date                         THEN 'RACE'
-      WHEN CURRENT_DATE() = rc.sprint_date                       THEN 'SPRINT'
+      WHEN CURRENT_DATE() = rc.sprint_date
+        AND rc.sprint_date != rc.quali_date                      THEN 'SPRINT'
+      WHEN CURRENT_DATE() = rc.quali_date
+        AND rc.sprint_date = rc.quali_date                       THEN 'SPRINT / QUALIFYING'
       WHEN CURRENT_DATE() = rc.quali_date                        THEN 'QUALIFYING'
       WHEN CURRENT_DATE() = rc.fp3_date                          THEN 'FP3'
-      WHEN CURRENT_DATE() = rc.fp2_date                          THEN 'FP2'
+      WHEN CURRENT_DATE() = rc.sprint_quali_date                 THEN 'SPRINT QUALIFYING'
       WHEN CURRENT_DATE() = rc.fp1_date                          THEN 'FP1'
       WHEN DATEDIFF('day', CURRENT_DATE(), rc.race_date) <= 5    THEN 'RACE_WEEK'
       ELSE NULL

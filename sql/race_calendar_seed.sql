@@ -62,7 +62,7 @@ USING (
 
   -- R2: China  Mar 13-15  (race Sun Mar 15)  SPRINT
   (2,'Chinese Grand Prix','Shanghai International Circuit','Shanghai','China','CN','🇨🇳',
-   '2026-03-13'::DATE,'2026-03-13'::DATE,NULL,'2026-03-14'::DATE,'2026-03-13'::DATE,'2026-03-14'::DATE,'2026-03-15'::DATE,
+   '2026-03-13'::DATE,NULL,NULL,'2026-03-14'::DATE,'2026-03-13'::DATE,'2026-03-14'::DATE,'2026-03-15'::DATE,
    '2026-03-15 07:00:00 +00:00'::TIMESTAMP_TZ,5.451,56,'1:24.108','Leclerc',2024,2,TRUE,TRUE,2026),
 
   -- R3: Japan  Mar 27-29  (race Sun Mar 29)
@@ -72,13 +72,14 @@ USING (
 
   -- R4: Miami  May 1-3  (race Sun May 3)  SPRINT
   (4,'Miami Grand Prix','Miami International Autodrome','Miami','United States','US','🇺🇸',
-   '2026-05-01'::DATE,'2026-05-01'::DATE,NULL,'2026-05-02'::DATE,'2026-05-01'::DATE,'2026-05-02'::DATE,'2026-05-03'::DATE,
+   '2026-05-01'::DATE,NULL,NULL,'2026-05-02'::DATE,'2026-05-01'::DATE,'2026-05-02'::DATE,'2026-05-03'::DATE,
    '2026-05-03 17:00:00 +00:00'::TIMESTAMP_TZ,5.412,57,'1:29.708','Verstappen',2023,3,TRUE,FALSE,2026),
 
   -- R5: Canada  May 22-24  (race Sun May 24)  SPRINT
+  -- race 20:00 UTC = 16:00 EDT (confirmed F1.com article)
   (5,'Canadian Grand Prix','Circuit Gilles Villeneuve','Montreal','Canada','CA','🇨🇦',
-   '2026-05-22'::DATE,'2026-05-22'::DATE,NULL,'2026-05-23'::DATE,'2026-05-22'::DATE,'2026-05-23'::DATE,'2026-05-24'::DATE,
-   '2026-05-24 18:00:00 +00:00'::TIMESTAMP_TZ,4.361,70,'1:13.078','Bottas',2019,2,TRUE,FALSE,2026),
+   '2026-05-22'::DATE,NULL,NULL,'2026-05-23'::DATE,'2026-05-22'::DATE,'2026-05-23'::DATE,'2026-05-24'::DATE,
+   '2026-05-24 20:00:00 +00:00'::TIMESTAMP_TZ,4.361,70,'1:13.078','Bottas',2019,2,TRUE,FALSE,2026),
 
   -- R6: Monaco  Jun 5-7  (race Sun Jun 7)
   (6,'Monaco Grand Prix','Circuit de Monaco','Monte Carlo','Monaco','MC','🇲🇨',
@@ -97,7 +98,7 @@ USING (
 
   -- R9: Great Britain  Jul 3-5  (race Sun Jul 5)  SPRINT
   (9,'British Grand Prix','Silverstone Circuit','Silverstone','United Kingdom','GB','🇬🇧',
-   '2026-07-03'::DATE,'2026-07-03'::DATE,NULL,'2026-07-04'::DATE,'2026-07-03'::DATE,'2026-07-04'::DATE,'2026-07-05'::DATE,
+   '2026-07-03'::DATE,NULL,NULL,'2026-07-04'::DATE,'2026-07-03'::DATE,'2026-07-04'::DATE,'2026-07-05'::DATE,
    '2026-07-05 14:00:00 +00:00'::TIMESTAMP_TZ,5.891,52,'1:27.097','Hamilton',2020,2,TRUE,FALSE,2026),
 
   -- R10: Belgium  Jul 17-19  (race Sun Jul 19)
@@ -112,7 +113,7 @@ USING (
 
   -- R12: Netherlands  Aug 21-23  (race Sun Aug 23)  SPRINT — final Dutch GP
   (12,'Dutch Grand Prix','Circuit Zandvoort','Zandvoort','Netherlands','NL','🇳🇱',
-   '2026-08-21'::DATE,'2026-08-21'::DATE,NULL,'2026-08-22'::DATE,'2026-08-21'::DATE,'2026-08-22'::DATE,'2026-08-23'::DATE,
+   '2026-08-21'::DATE,NULL,NULL,'2026-08-22'::DATE,'2026-08-21'::DATE,'2026-08-22'::DATE,'2026-08-23'::DATE,
    '2026-08-23 13:00:00 +00:00'::TIMESTAMP_TZ,4.259,72,'1:11.097','Verstappen',2021,2,TRUE,FALSE,2026),
 
   -- R13: Italy (Monza)  Sep 4-6  (race Sun Sep 6)
@@ -132,7 +133,7 @@ USING (
 
   -- R16: Singapore  Oct 9-11  (race Sun Oct 11)  SPRINT
   (16,'Singapore Grand Prix','Marina Bay Street Circuit','Singapore','Singapore','SG','🇸🇬',
-   '2026-10-09'::DATE,'2026-10-09'::DATE,NULL,'2026-10-10'::DATE,'2026-10-09'::DATE,'2026-10-10'::DATE,'2026-10-11'::DATE,
+   '2026-10-09'::DATE,NULL,NULL,'2026-10-10'::DATE,'2026-10-09'::DATE,'2026-10-10'::DATE,'2026-10-11'::DATE,
    '2026-10-11 12:00:00 +00:00'::TIMESTAMP_TZ,4.940,62,'1:35.867','Leclerc',2023,3,TRUE,FALSE,2026),
 
   -- R17: United States  Oct 23-25  (race Sun Oct 25)

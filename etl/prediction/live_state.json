@@ -1,32 +1,9 @@
 {
   "season": 2026,
-  "round": 4,
-  "current_lap": 38,
-  "total_laps": 57,
+  "round": 5,
+  "current_lap": null,
+  "total_laps": 70,
   "safety_car_active": false,
-  "note": "~Lap 38. Post-SC medium runners still on original SC tyres (~28 laps old). VER/RUS/LEC pitted to Hard. LEC just pitted, very fresh Hards. STR on fresh Softs.",
-  "positions": [
-    {"driver_code": "NOR", "position": 1,  "tyre": "MEDIUM", "tyre_age": 28, "dnf": false},
-    {"driver_code": "ANT", "position": 2,  "tyre": "MEDIUM", "tyre_age": 28, "dnf": false},
-    {"driver_code": "PIA", "position": 3,  "tyre": "MEDIUM", "tyre_age": 28, "dnf": false},
-    {"driver_code": "HAM", "position": 4,  "tyre": "MEDIUM", "tyre_age": 28, "dnf": false},
-    {"driver_code": "VER", "position": 5,  "tyre": "HARD",   "tyre_age": 28, "dnf": false},
-    {"driver_code": "COL", "position": 6,  "tyre": "MEDIUM", "tyre_age": 28, "dnf": false},
-    {"driver_code": "SAI", "position": 7,  "tyre": "MEDIUM", "tyre_age": 28, "dnf": false},
-    {"driver_code": "ALB", "position": 8,  "tyre": "MEDIUM", "tyre_age": 28, "dnf": false},
-    {"driver_code": "BEA", "position": 9,  "tyre": "MEDIUM", "tyre_age": 28, "dnf": false},
-    {"driver_code": "RUS", "position": 10, "tyre": "HARD",   "tyre_age": 15, "dnf": false},
-    {"driver_code": "LEC", "position": 11, "tyre": "HARD",   "tyre_age": 3,  "dnf": false},
-    {"driver_code": "OCO", "position": 12, "tyre": "MEDIUM", "tyre_age": 28, "dnf": false},
-    {"driver_code": "BOR", "position": 13, "tyre": "MEDIUM", "tyre_age": 28, "dnf": false},
-    {"driver_code": "LIN", "position": 14, "tyre": "MEDIUM", "tyre_age": 28, "dnf": false},
-    {"driver_code": "PER", "position": 15, "tyre": "MEDIUM", "tyre_age": 28, "dnf": false},
-    {"driver_code": "ALO", "position": 16, "tyre": "MEDIUM", "tyre_age": 28, "dnf": false},
-    {"driver_code": "BOT", "position": 17, "tyre": "MEDIUM", "tyre_age": 10, "dnf": false},
-    {"driver_code": "STR", "position": 18, "tyre": "SOFT",   "tyre_age": 5,  "dnf": false},
-    {"driver_code": "HUL", "position": 19, "tyre": null,     "tyre_age": 0,  "dnf": true},
-    {"driver_code": "LAW", "position": 20, "tyre": null,     "tyre_age": 0,  "dnf": true},
-    {"driver_code": "GAS", "position": 21, "tyre": null,     "tyre_age": 0,  "dnf": true},
-    {"driver_code": "HAD", "position": 22, "tyre": null,     "tyre_age": 0,  "dnf": true}
-  ]
+  "note": "Pre-race snapshot — use live_repredict.py --season 2026 --round 5 to fetch live from OpenF1",
+  "positions": []
 }

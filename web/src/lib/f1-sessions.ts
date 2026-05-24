@@ -31,10 +31,11 @@ export const SESSION_TIMES: Record<number, {
       { n: 'RACE',       et: 'SUN 4 MAY · 3:00 PM ET',   utcOffset: 'T19:00:00Z'   },
     ],
     5: [
-      { n: 'FP1',        et: 'FRI 23 MAY · 1:30 PM ET',  utcOffset: '-2T17:30:00Z' },
-      { n: 'FP2',        et: 'FRI 23 MAY · 5:00 PM ET',  utcOffset: '-2T21:00:00Z' },
-      { n: 'QUALIFYING', et: 'SAT 24 MAY · 10:00 AM ET', utcOffset: '-1T14:00:00Z' },
-      { n: 'RACE',       et: 'SUN 25 MAY · 9:00 AM ET',  utcOffset: 'T13:00:00Z'   },
+      { n: 'FP1',          et: 'FRI 22 MAY · 12:30 PM ET', utcOffset: '-2T16:30:00Z' },
+      { n: 'SPRINT QUALI', et: 'FRI 22 MAY · 4:30 PM ET',  utcOffset: '-2T20:30:00Z' },
+      { n: 'SPRINT',       et: 'SAT 23 MAY · 12:00 PM ET', utcOffset: '-1T16:00:00Z' },
+      { n: 'QUALIFYING',   et: 'SAT 23 MAY · 4:00 PM ET',  utcOffset: '-1T20:00:00Z' },
+      { n: 'RACE',         et: 'SUN 24 MAY · 4:00 PM ET',  utcOffset: 'T20:00:00Z'   },
     ],
     // R6–R24: add as confirmed. Races shown with date only until filled in.
   }

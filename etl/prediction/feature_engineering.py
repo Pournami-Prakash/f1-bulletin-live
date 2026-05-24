@@ -68,7 +68,7 @@ PU_PRIOR = {
     'Ferrari':        0.65,
     'Mercedes':       0.70,
     'Honda':          0.60,
-    'Ford':           0.50,
+    'Ford':           0.53,
     'Renault':        0.45,
     'Audi':           0.40,
     'General Motors': 0.35,

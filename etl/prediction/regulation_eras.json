@@ -4,29 +4,43 @@
     "active_aero": false,
     "ers_power_kw": 120,
     "recharge_limit_mj": 8.5,
+    "race_recharge_limit_mj": 8.5,
     "race_boost_cap_kw": 120,
     "qualifying_superclip_power_kw": 120,
     "wet_ers_deploy_factor": 1.0,
     "start_assist_factor": 0.0,
     "historical_weight_multiplier": 1.0,
     "constructor_prior_reliability": 1.0,
-    "live_weekend_weight": 0.35
+    "live_weekend_weight": 0.35,
+    "overtake_mode_bonus_mj": 0.0,
+    "overtake_mode_proximity_s": 0.0,
+    "x_mode_drag_reduction": 0.0,
+    "mgu_k_non_accel_cap_kw": 120
   },
   "2026": {
     "regulation_era": 1,
     "active_aero": true,
     "ers_power_kw": 350,
     "recharge_limit_mj": 7.0,
+    "race_recharge_limit_mj": 8.0,
     "race_boost_cap_kw": 150,
     "qualifying_superclip_power_kw": 350,
-    "wet_ers_deploy_factor": 0.62,
+    "wet_ers_deploy_factor": 0.42,
     "start_assist_factor": 0.35,
     "historical_weight_multiplier": 0.55,
     "constructor_prior_reliability": 0.62,
     "live_weekend_weight": 0.72,
+    "mgu_k_non_accel_cap_kw": 250,
+    "overtake_mode_bonus_mj": 0.5,
+    "overtake_mode_proximity_s": 1.0,
+    "x_mode_drag_reduction": 0.55,
     "source_notes": [
-      "FIA 2026 regulation refinements agreed 2026-04-20: recharge limit reduced to 7MJ, peak superclip power 350kW, race boost capped at +150kW, wet ERS deployment reduced.",
-      "F1 2026 terminology: active aero, overtake mode, boost mode, and 350kW MGU-K define the regulation era."
+      "FIA 2026 regulation refinements agreed 2026-04-20: recharge limit reduced to 7MJ, peak superclip power 350kW, race boost capped at +150kW.",
+      "Post-Miami zone restriction: MGU-K capped at 250kW outside corner-exit/braking zones; 350kW locked to acceleration zones only.",
+      "Post-Miami wet-weather update: Boost Mode fully banned in wet conditions, wet_ers_deploy_factor reduced from 0.62 to 0.42.",
+      "Race recharge limit 8.5→8.0 MJ/lap from Melbourne; qualifying recharge limit cut to 7.0 MJ/lap from Miami.",
+      "Overtake Mode: +0.5MJ energy override when within 1s of car ahead at activation point; lead car tapers above 290km/h.",
+      "Straight Mode (formerly X-mode, now official terminology): wing flaps open in designated zones, ~55% drag reduction."
     ]
   },
   "circuit_energy_overrides": {

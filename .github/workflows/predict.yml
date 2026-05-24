@@ -1,9 +1,10 @@
 name: F1 Race Predictions
 
 on:
-  # Run every Saturday at 20:00 UTC (after qualifying in all timezones)
+  # Run every Saturday at 23:00 UTC — qualifying ends ~21:00 UTC in most TZs,
+  # then FastF1 needs ~30-60 min to publish data, so 23:00 UTC is safe.
   schedule:
-    - cron: '0 20 * * 6'
+    - cron: '0 23 * * 6'
   # Also allow manual trigger with custom round
   workflow_dispatch:
     inputs:
@@ -15,7 +16,7 @@ on:
       round:
         description: 'Round number'
         required: true
-        default: '3'
+        default: '5'
         type: string
       score_round:
         description: 'Round to score (leave empty to skip)'
