@@ -756,7 +756,8 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
     ctype = cp.get('circuit_type', 'permanent')
     reg = regulation_profile(season)
     energy_demand = cp.get('energy_demand_index', circuit_energy_demand(circuit, ctype))
-    n_2026_races = min(count_completed_races(2026), round_ - 1)
+    _raw_2026 = count_completed_races(2026)
+    n_2026_races = min(_raw_2026, round_ - 1) if season == 2026 else _raw_2026
     memory_w = historical_signal_weight(season, n_2026_races)
     structural_w = historical_signal_weight(season, n_2026_races, base=0.65)
     cm_adj = {
@@ -1665,7 +1666,8 @@ def main():
     season, round_, gp_name, circuit = get_target_race(args.season, args.round_)
     step(f"Target: {season} R{round_} — {gp_name} ({circuit})")
 
-    n_2026_races = min(count_completed_races(2026), round_ - 1)
+    _raw_2026 = count_completed_races(2026)
+    n_2026_races = min(_raw_2026, round_ - 1) if season == 2026 else _raw_2026
     step(f"2026 races in DB: {n_2026_races} / {XGB_TRIGGER_RACES} needed for XGBoost")
 
     if XGBOOST_AVAILABLE and n_2026_races >= XGB_TRIGGER_RACES:
