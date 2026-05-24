@@ -230,9 +230,8 @@ def load_sprint(season: int, round_number: int, conn) -> None:
     """, (season, round_number, gp_name, circuit, date))
     sprint_session_id = cur.fetchone()[0]
 
-    # Clear existing sprint results + laps for this session
+    # Clear existing sprint results only — laps are wiped later, only if new laps load successfully
     cur.execute("DELETE FROM results WHERE session_id = %s", (sprint_session_id,))
-    cur.execute("DELETE FROM laps    WHERE session_id = %s", (sprint_session_id,))
     conn.commit()
 
     # Results
@@ -280,6 +279,8 @@ def load_sprint(season: int, round_number: int, conn) -> None:
                 ms(row.get("PitInTime")), ms(row.get("PitOutTime")),
                 safe_int(row.get("Position")),
             ))
+        # Safe to wipe old laps now — replacement data is ready
+        cur.execute("DELETE FROM laps WHERE session_id = %s", (sprint_session_id,))
         for i in range(0, len(lap_rows), 500):
             cur.executemany("""
                 INSERT INTO laps
@@ -335,8 +336,9 @@ def load_qualifying(season: int, round_number: int, conn) -> None:
         RETURNING id
     """, (season, round_number, gp_name, circuit, date))
     q_session_id = cur.fetchone()[0]
-    cur.execute("DELETE FROM qualifying_laps WHERE session_id = %s", (q_session_id,))
-    conn.commit()
+    # Do NOT delete existing qualifying_laps yet — only wipe when we have
+    # confirmed replacement data. If FastF1 raises DataNotLoadedError below,
+    # the old rows stay intact and predict.py can still use them.
 
     laps = q_session.laps.copy()
     if laps.empty:
@@ -384,6 +386,8 @@ def load_qualifying(season: int, round_number: int, conn) -> None:
             print(f"  ✗ Qualifying rows incomplete and no live timing fallback available")
 
     if rows:
+        # Safe to wipe now — we have good data to replace it with
+        cur.execute("DELETE FROM qualifying_laps WHERE session_id = %s", (q_session_id,))
         cur.executemany("""
             INSERT INTO qualifying_laps
               (session_id, driver_code, q1_ms, q2_ms, q3_ms,
