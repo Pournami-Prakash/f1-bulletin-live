@@ -48,6 +48,17 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
+      - name: Cache FastF1 data
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/fastf1
+          # New key each run so fresh data is always saved.
+          # restore-keys falls back to the most recent run's cache,
+          # so previously loaded sessions are reused when FastF1 API is slow.
+          key: fastf1-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            fastf1-${{ runner.os }}-
+
       - name: Install dependencies
         run: |
           pip install fastf1 pandas numpy scikit-learn psycopg2-binary python-dotenv pyarrow
