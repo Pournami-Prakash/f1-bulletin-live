@@ -70,7 +70,7 @@ PU_MANUFACTURERS = {
 }
 PU_PRIOR = {
     'Ferrari': 0.65, 'Mercedes': 0.70, 'Honda': 0.60,
-    'Ford': 0.50,    'Renault': 0.45,  'Audi': 0.40, 'General Motors': 0.35,
+    'Ford': 0.53,    'Renault': 0.45,  'Audi': 0.40, 'General Motors': 0.35,
 }
 POINTS_MAP = {1:25, 2:18, 3:15, 4:12, 5:10, 6:8, 7:6, 8:4, 9:2, 10:1}
 
@@ -756,7 +756,7 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
     ctype = cp.get('circuit_type', 'permanent')
     reg = regulation_profile(season)
     energy_demand = cp.get('energy_demand_index', circuit_energy_demand(circuit, ctype))
-    n_2026_races = count_completed_races(2026)
+    n_2026_races = min(count_completed_races(2026), round_ - 1)
     memory_w = historical_signal_weight(season, n_2026_races)
     structural_w = historical_signal_weight(season, n_2026_races, base=0.65)
     cm_adj = {
@@ -802,18 +802,21 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
 
     fp_pace: dict[str, float] = {}
     if not fp_data.empty:
-        for fp_name, fp_w in FP_SESSION_WEIGHTS.items():
+        present_fp_weights = {
+            name: w for name, w in FP_SESSION_WEIGHTS.items()
+            if not fp_data[fp_data['fp_session'] == name].dropna(subset=['median_lap_ms']).empty
+        }
+        total_fp_w = sum(present_fp_weights.values()) or 1.0
+        for fp_name, fp_w in present_fp_weights.items():
             fp_session_data = fp_data[fp_data['fp_session'] == fp_name].dropna(subset=['median_lap_ms'])
-            if fp_session_data.empty:
-                continue
             fp_best = fp_session_data['median_lap_ms'].min()
             for _, row in fp_session_data.iterrows():
                 d       = row['driver_code']
                 gap_ms  = float(row['median_lap_ms']) - float(fp_best)
-                adj     = -min(gap_ms / 5000.0, 0.2) * fp_w
+                adj     = -min(gap_ms / 5000.0, 0.2) * (fp_w / total_fp_w)
                 fp_pace[d] = fp_pace.get(d, 0.0) + adj
         if fp_pace:
-            step(f"  FP pace signal: {len(fp_pace)} drivers ({fp_data['fp_session'].nunique()} sessions)")
+            step(f"  FP pace signal: {len(fp_pace)} drivers ({len(present_fp_weights)} sessions, normalized)")
 
     # Sprint points lookup — used as entry-level feature signal
     # Fetch last 3 rounds' sprint results per driver before this round
@@ -1021,7 +1024,7 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
 # ─────────────────────────────────────────────────────────────
 # BAYESIAN PRIOR
 # ─────────────────────────────────────────────────────────────
-def bayesian_prior(entries: list[dict]) -> dict[str, float]:
+def bayesian_prior(entries: list[dict], n_2026_races: int = 0) -> dict[str, float]:
     scores        = {}
     overtaking_idx = entries[0].get('overtaking_index', 0.30) if entries else 0.30
     grid_volatility = entries[0].get('grid_volatility', 3.0) if entries else 3.0
@@ -1056,7 +1059,8 @@ def bayesian_prior(entries: list[dict]) -> dict[str, float]:
         pu_score      = e.get('pu_strength_adjusted', e['pu_strength'])
 
         team = e.get('team', '')
-        extra_discount = CONSTRUCTOR_2026_DISCOUNT.get(team, 0.0)
+        era_discount_scale = max(0.0, 1.0 - n_2026_races / XGB_TRIGGER_RACES) if reg_era >= 1 else 0.0
+        extra_discount = CONSTRUCTOR_2026_DISCOUNT.get(team, 0.0) * era_discount_scale
         if extra_discount > 0:
             team_score = team_score * (1 - extra_discount)
             pu_score   = pu_score   * (1 - extra_discount * 0.5)
@@ -1312,16 +1316,17 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
 # COMPUTE PREDICTIONS
 # ─────────────────────────────────────────────────────────────
 def compute_predictions(
-    entries:     list[dict],
-    sim_results: dict[str, list[int]],
-    priors:      dict[str, float],
-    season:      int,
-    round_:      int,
-    gp_name:     str,
-    ridge_preds: dict[str, float] | None = None,
-    rf_preds:    dict[str, float] | None = None,
+    entries:      list[dict],
+    sim_results:  dict[str, list[int]],
+    priors:       dict[str, float],
+    season:       int,
+    round_:       int,
+    gp_name:      str,
+    ridge_preds:  dict[str, float] | None = None,
+    rf_preds:     dict[str, float] | None = None,
+    n_2026_races: int = 0,
 ) -> list[dict]:
-    n_2026       = count_completed_races(2026)
+    n_2026       = n_2026_races
     reg_era      = entries[0].get('regulation_era', 0) if entries else 0
     live_w       = entries[0].get('live_weekend_weight', 0.35) if entries else 0.35
     data_weight  = min(n_2026 / 10.0, 0.9)
@@ -1660,7 +1665,7 @@ def main():
     season, round_, gp_name, circuit = get_target_race(args.season, args.round_)
     step(f"Target: {season} R{round_} — {gp_name} ({circuit})")
 
-    n_2026_races = count_completed_races(2026)
+    n_2026_races = min(count_completed_races(2026), round_ - 1)
     step(f"2026 races in DB: {n_2026_races} / {XGB_TRIGGER_RACES} needed for XGBoost")
 
     if XGBOOST_AVAILABLE and n_2026_races >= XGB_TRIGGER_RACES:
@@ -1708,7 +1713,7 @@ def main():
                   f"  ({int(row['races_remaining'])} races left)")
 
     step("Computing Bayesian prior...")
-    priors = bayesian_prior(entries)
+    priors = bayesian_prior(entries, min(n_2026_races, round_ - 1))
 
     race_distance = get_race_distance(season, round_, circuit)
     mc_seed = args.seed if args.seed is not None else DEFAULT_MC_SEED + season * 100 + round_
@@ -1720,7 +1725,7 @@ def main():
     step("Computing final predictions...")
     predictions = compute_predictions(
         entries, sim_results, priors, season, round_, gp_name,
-        ridge_preds=ridge_preds, rf_preds=rf_preds,
+        ridge_preds=ridge_preds, rf_preds=rf_preds, n_2026_races=n_2026_races,
     )
     predictions = apply_calibration(predictions, calibrator)
 
