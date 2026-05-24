@@ -837,6 +837,26 @@ for (season, round_), race in results.groupby(['season','round']):
         rolling_dnf_rate     = driver_prev['is_dnf'].mean()          if len(driver_prev) > 0 else 0.12
         race_points_last3    = driver_prev['points'].sum()           if len(driver_prev) > 0 else 0.0
 
+        # ── 2026 grid-delta (places gained/lost, current era only) ───────────
+        # Positive = driver gains places (starts P5, finishes P3 → delta +2).
+        # Filtered to clean finishes only; shrunk toward 0 by sample size so
+        # a single race can't dominate.
+        prev_2026_clean = prev[
+            (prev['season'] == 2026) &
+            (prev['driver_code'] == driver) &
+            (~prev['is_dnf'].astype(bool)) &
+            prev['grid_position'].notna() &
+            prev['finish_position'].notna()
+        ]
+        if len(prev_2026_clean) >= 1:
+            raw_delta = float(
+                (prev_2026_clean['grid_position'] - prev_2026_clean['finish_position']).mean()
+            )
+            n_clean = len(prev_2026_clean)
+            avg_grid_delta_2026 = raw_delta * n_clean / (n_clean + 8)
+        else:
+            avg_grid_delta_2026 = 0.0
+
         # ── Sprint points (last 3 rounds that had a sprint) ───
         driver_sprint_prev   = sprint_prev[sprint_prev['driver_code']==driver].sort_values(['season','round']).tail(3)
         sprint_points_last3  = driver_sprint_prev['points'].sum() if not driver_sprint_prev.empty else 0.0
@@ -955,6 +975,7 @@ for (season, round_), race in results.groupby(['season','round']):
             'sprint_points_last3':     round(sprint_points_last3, 1),  # sprint only
             'circuit_affinity':        round(circuit_affinity, 2),
             'driver_overperformance':  round(driver_overperformance, 3),
+            'avg_grid_delta_2026':     round(avg_grid_delta_2026, 3),
             # Team features
             'team_strength':           round(team_strength_live, 3),
             'pu_manufacturer':         pu_manufacturer,
@@ -1104,6 +1125,9 @@ prediction_features = [
     'sprint_points_last3',     # sprint-only signal
     'team_strength', 'pu_strength_adjusted',
     'circuit_affinity', 'driver_overperformance',
+    # avg_grid_delta_2026 is exported in the feature dict but used only as a
+    # Bayesian prior adjustment in predict.py, not as an ML model input.
+    # Excluded here to avoid inconsistency with RIDGE_FEATURES / XGB_FEATURES.
     'sc_probability',
     'overtaking_index', 'arw_effectiveness',
     'tyre_deg_rate', 'ers_circuit_factor',

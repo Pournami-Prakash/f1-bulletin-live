@@ -838,6 +838,34 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
     else:
         step("  No sprint points yet for this season")
 
+    # 2026 grid-delta: places gained (+) or lost (-) per driver in clean finishes.
+    # Only computed for 2026 predictions — avoids leaking 2026 behavior into backtests.
+    # Shrunk toward 0 by sample size so a single race can't dominate.
+    grid_delta_map: dict[str, float] = {}
+    if season == 2026:
+        gd_rows = query("""
+            SELECT r.driver_code,
+                   AVG(r.grid_position - r.finish_position) AS raw_delta,
+                   COUNT(*) AS n_clean
+            FROM results r
+            JOIN sessions s ON s.id = r.session_id
+            WHERE s.season = 2026
+              AND s.session_type = 'R'
+              AND s.round < %s
+              AND COALESCE(r.status, '') NOT IN ('Retired', 'Disqualified', 'Did not start')
+              AND r.grid_position IS NOT NULL
+              AND r.finish_position IS NOT NULL
+            GROUP BY r.driver_code
+        """, (round_,))
+        if not gd_rows.empty:
+            for _, gd_row in gd_rows.iterrows():
+                raw_d = float(gd_row['raw_delta'])
+                n_c   = int(gd_row['n_clean'])
+                grid_delta_map[gd_row['driver_code']] = raw_d * n_c / (n_c + 8)
+            step(f"  2026 grid-delta loaded for {len(grid_delta_map)} drivers")
+        else:
+            step("  No 2026 clean-finish data yet for grid-delta")
+
     confidence = prediction_confidence(season, n_2026_races)
 
     entries = []
@@ -966,6 +994,7 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
             'circuit_affinity':   circuit_aff,
             'driver_overperformance': driver_overperformance,
             'sprint_points_last3': sprint_pts,  # sprint form signal
+            'avg_grid_delta_2026': grid_delta_map.get(driver, 0.0),  # 2026 places gained/lost
             'q1_to_q3_ms':         q1_to_q3,   # Q1→Q3 improvement
             'q2_to_q3_ms':         q2_to_q3,   # Q2→Q3 improvement
             'sc_probability':     cp.get('sc_probability', 0.35),
@@ -1051,7 +1080,13 @@ def bayesian_prior(entries: list[dict], n_2026_races: int = 0) -> dict[str, floa
 
     for e in entries:
         n = len(entries)
-        grid_score    = 1 - (e['grid_position'] - 1) / max(n - 1, 1)
+        # Only apply 2026 grid-delta in the 2026 era — prevents leakage into backtests
+        if reg_era >= 1:
+            grid_delta = e.get('avg_grid_delta_2026', 0.0)
+            effective_grid = max(1.0, min(float(n), e['grid_position'] - grid_delta))
+        else:
+            effective_grid = float(e['grid_position'])
+        grid_score    = 1 - (effective_grid - 1) / max(n - 1, 1)
         elo_score     = max(0, min(1, (e['elo_rating'] - 1300) / 400))
         team_score    = max(0, min(1, 1 - (e['team_strength'] - 1) / max(20 - 1, 1)))
         gap_score     = 1 - min(e['gap_to_pole_sec'] / 5.0, 1)
