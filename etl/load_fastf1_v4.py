@@ -797,7 +797,18 @@ def load_session(
     # ── Sprint ────────────────────────────────────────────────────────────────
     # Always attempt sprint unless explicitly excluded modes
     if not replay_only and not extras_only and not fp_only and not quali_only:
-        load_sprint(season, round_number, conn)
+        try:
+            load_sprint(season, round_number, conn)
+        except Exception as e:
+            print(f"  ✗ Sprint load failed (non-fatal): {e}")
+            # Reconnect so the race load can still proceed
+            try:
+                conn.close()
+            except Exception:
+                pass
+            import psycopg2, os
+            conn = psycopg2.connect(os.environ["NEON_DATABASE_URL"])
+            cur = conn.cursor()
 
     # ── Stop here if fp-only / quali-only / sprint-only ───────────────────────
     if fp_only or quali_only or sprint_only:
