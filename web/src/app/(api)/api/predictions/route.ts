@@ -28,7 +28,6 @@ export async function GET(request: Request) {
                s.gp_name, s.circuit
         FROM prediction_accuracy pa
         JOIN sessions s ON s.season = pa.season AND s.round = pa.round AND s.session_type = 'R'
-        WHERE pa.model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'}
         ORDER BY pa.season DESC, pa.round DESC, pa.evaluated_at DESC
         LIMIT 50
       `
@@ -42,8 +41,9 @@ export async function GET(request: Request) {
       const latest_row = await sql`
         SELECT season, round
         FROM predictions
-        WHERE model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'}
-        ORDER BY predicted_at DESC
+        ORDER BY
+          CASE WHEN model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'} THEN 0 ELSE 1 END,
+          predicted_at DESC
         LIMIT 1
       `
       if (latest_row.length === 0) {
@@ -64,8 +64,11 @@ export async function GET(request: Request) {
           FROM predictions
           WHERE season = ${targetSeason}
             AND round  = ${targetRound}
-            AND model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'}
-          ORDER BY predicted_at DESC
+          GROUP BY model_version
+          ORDER BY
+            CASE WHEN model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'} THEN 0 ELSE 1 END,
+            MAX(predicted_at) DESC,
+            model_version DESC
           LIMIT 1
         `
 

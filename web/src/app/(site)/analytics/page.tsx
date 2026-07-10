@@ -3,7 +3,19 @@ import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 // ── Types ──────────────────────────────────────────────────────────────────────
-type Session  = { id: number; season: number; round: number; gp_name: string; circuit: string; date: string; session_type?: string }
+type Session  = {
+  id: number
+  season: number
+  round: number
+  gp_name: string
+  circuit: string
+  date: string
+  session_type?: string
+  result_count?: number
+  lap_count?: number
+  stint_count?: number
+  replay_count?: number
+}
 type Result   = { driver_code: string; team: string; grid_position: number; finish_position: number; points: number; status: string; fastest_lap_ms: number | null }
 type Lap      = { driver_code: string; lap_number: number; lap_time_ms: number | null; s1_ms: number | null; s2_ms: number | null; s3_ms: number | null; compound: string | null; tyre_life: number | null; is_personal_best: boolean; position: number | null }
 type Stint    = { driver_code: string; stint_number: number; compound: string | null; start_lap: number; end_lap: number; lap_count: number }
@@ -1078,6 +1090,9 @@ export default function AnalyticsPage() {
   const seasons  = ([...new Set(sessions.map(s => Number(s.season)))] as number[]).sort((a, b) => b - a)
   const filtered = sessions.filter(s => Number(s.season) === season).sort((a, b) => Number(b.round) - Number(a.round))
   const selSess  = filtered.find(s => s.id === selId)
+  const hasLaps = (selSess?.lap_count ?? 0) > 0
+  const hasStrategy = (selSess?.stint_count ?? 0) > 0
+  const hasReplay = (selSess?.replay_count ?? 0) > 0
   const tabParam = activeTab === 'STRATEGY' ? 'strategy' : activeTab === 'REPLAY' ? 'overview' : 'laps'
   useEffect(() => {
     if (!selId) return
@@ -1092,11 +1107,21 @@ export default function AnalyticsPage() {
   }, [selId, tabParam])
   useEffect(() => {
     if (!sessions.length) return
-    const latest = sessions
+    const seasonSessions = sessions
       .filter(s => Number(s.season) === season)
-      .sort((a, b) => Number(b.round) - Number(a.round))[0]
+      .sort((a, b) => Number(b.round) - Number(a.round))
+    const latest = seasonSessions.find(s => (s.lap_count ?? 0) > 0) ?? seasonSessions[0]
     if (latest) setSelId(latest.id)
   }, [sessions, season])
+  useEffect(() => {
+    if (activeTab === 'LAP_PACE' && !hasLaps) setActiveTab('POSITIONS')
+    if (activeTab === 'SECTORS' && !hasLaps) setActiveTab('POSITIONS')
+    if (activeTab === 'STRATEGY' && !hasStrategy) setActiveTab('POSITIONS')
+    if (activeTab === 'REPLAY' && !hasReplay) setActiveTab('POSITIONS')
+  }, [activeTab, hasLaps, hasStrategy, hasReplay])
+  useEffect(() => {
+    if (selSess && !hasLaps) setShowOverview(true)
+  }, [selSess, hasLaps])
   const allDrivers  = raceData?.results.map(r => r.driver_code) ?? []
   const needDrivers = !['STRATEGY', 'REPLAY'].includes(activeTab)
   return (
@@ -1156,6 +1181,12 @@ export default function AnalyticsPage() {
               <span style={{ fontSize: 9, color: 'rgba(255,255,255,.25)', fontFamily: mono, letterSpacing: '.08em' }}>
                 {new Date(selSess.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase()}
               </span>
+              {!hasLaps && (
+                <>
+                  <span style={{ fontSize: 9, color: 'rgba(255,255,255,.15)', fontFamily: mono }}>·</span>
+                  <span style={{ fontSize: 9, color: '#F59E0B', fontFamily: mono, letterSpacing: '.08em' }}>RESULTS ONLY</span>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1181,17 +1212,21 @@ export default function AnalyticsPage() {
             <div style={{ border: '1px solid rgba(255,255,255,.07)', borderRadius: 10, overflow: 'hidden' }}>
               <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,.06)', background: 'rgba(0,0,0,.35)', overflowX: 'auto' }}>
                 <div style={{ width: 2, height: '100%', background: '#E10600', flexShrink: 0 }} />
-                {TABS.map(t => {
+              {TABS.map(t => {
                   const active = activeTab === t.id
+                  const disabled =
+                    ((t.id === 'LAP_PACE' || t.id === 'POSITIONS' || t.id === 'SECTORS') && !hasLaps) ||
+                    (t.id === 'STRATEGY' && !hasStrategy) ||
+                    (t.id === 'REPLAY' && !hasReplay)
                   return (
-                    <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+                    <button key={t.id} disabled={disabled} onClick={() => !disabled && setActiveTab(t.id)} style={{
                       background: 'transparent', border: 'none',
                       borderBottom: active ? '2px solid #E10600' : '2px solid transparent',
-                      padding: '10px 16px', cursor: 'pointer',
+                      padding: '10px 16px', cursor: disabled ? 'not-allowed' : 'pointer',
                       fontFamily: mono, fontSize: 9, letterSpacing: '.14em',
-                      color: active ? '#fff' : 'rgba(255,255,255,.3)',
+                      color: disabled ? 'rgba(255,255,255,.12)' : active ? '#fff' : 'rgba(255,255,255,.3)',
                       whiteSpace: 'nowrap', transition: 'all .12s',
-                    }}>{t.label}</button>
+                    }}>{t.label}{disabled ? ' · NO DATA' : ''}</button>
                   )
                 })}
               </div>
@@ -1212,11 +1247,17 @@ export default function AnalyticsPage() {
                   })}
                 </div>
               )}
-              {activeTab === 'LAP_PACE'  && <TabLapPace  data={raceData} drivers={selDrivers} />}
-              {activeTab === 'POSITIONS' && <TabPositions data={raceData} drivers={selDrivers} />}
-              {activeTab === 'STRATEGY'  && <TabStrategy  data={raceData} drivers={selDrivers} />}
-              {activeTab === 'SECTORS'   && <TabSectors   data={raceData} drivers={selDrivers} />}
-              {activeTab === 'REPLAY'    && <TabReplay     sessionId={selId} results={raceData.results} />}
+              {!hasLaps ? (
+                <Empty msg="THIS RACE CURRENTLY HAS CLASSIFICATION RESULTS ONLY. LAP, SECTOR, STRATEGY, AND REPLAY DATA WILL APPEAR AFTER THE FASTF1 LOAD RUNS." />
+              ) : (
+                <>
+                  {activeTab === 'LAP_PACE'  && <TabLapPace  data={raceData} drivers={selDrivers} />}
+                  {activeTab === 'POSITIONS' && <TabPositions data={raceData} drivers={selDrivers} />}
+                  {activeTab === 'STRATEGY'  && <TabStrategy  data={raceData} drivers={selDrivers} />}
+                  {activeTab === 'SECTORS'   && <TabSectors   data={raceData} drivers={selDrivers} />}
+                  {activeTab === 'REPLAY'    && <TabReplay     sessionId={selId} results={raceData.results} />}
+                </>
+              )}
             </div>
           </div>
         ) : null}

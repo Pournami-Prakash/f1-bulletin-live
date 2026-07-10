@@ -8,17 +8,29 @@ export async function GET(request: Request) {
   try {
     const sql = getNeonSql()
     const rows = await sql`
-      SELECT
-        p.round,
-        p.gp_name,
-        p.circuit,
-        MAX(p.predicted_at) AS predicted_at,
-        BOOL_OR(p.actual_position IS NOT NULL) AS has_actuals
-      FROM predictions p
-      WHERE p.season = ${season}
-        AND p.model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'}
-      GROUP BY p.round, p.gp_name, p.circuit
-      ORDER BY p.round DESC
+      WITH ranked_models AS (
+        SELECT
+          p.round,
+          p.gp_name,
+          p.circuit,
+          p.model_version,
+          MAX(p.predicted_at) AS predicted_at,
+          BOOL_OR(p.actual_position IS NOT NULL) AS has_actuals,
+          ROW_NUMBER() OVER (
+            PARTITION BY p.round
+            ORDER BY
+              CASE WHEN p.model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'} THEN 0 ELSE 1 END,
+              MAX(p.predicted_at) DESC,
+              p.model_version DESC
+          ) AS rn
+        FROM predictions p
+        WHERE p.season = ${season}
+        GROUP BY p.round, p.gp_name, p.circuit, p.model_version
+      )
+      SELECT round, gp_name, circuit, model_version, predicted_at, has_actuals
+      FROM ranked_models
+      WHERE rn = 1
+      ORDER BY round DESC
     `
 
     return NextResponse.json({ season, rounds: rows })

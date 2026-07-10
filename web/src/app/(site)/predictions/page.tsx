@@ -24,6 +24,7 @@ type RacePrediction = {
   drivers: DriverPrediction[]; championship: ChampionshipRow[]
   accuracy: { mae_position: number | null; winner_correct: boolean | null; podium_hits: number | null; top5_hits: number | null; brier_score: number | null } | null
 }
+type PredictionRound = { round: number; gp_name: string; model_version?: string; has_actuals?: boolean }
 
 const TEAM_COLORS: Record<string, string> = {
   'Mercedes': '#27F4D2', 'Red Bull Racing': '#3671C6', 'Ferrari': '#E8002D',
@@ -290,7 +291,7 @@ export default function PredictionsPage() {
   const [mounted, setMounted]   = useState(false)
   const [useMock, setUseMock]   = useState(false)
   const [season]                = useState(2026)
-  const [availableRounds, setAvailableRounds] = useState<{ round: number; gp_name: string }[]>([])
+  const [availableRounds, setAvailableRounds] = useState<PredictionRound[]>([])
   const [selectedRound, setSelectedRound]     = useState<number | null>(null)
   const [accuracy, setAccuracy]               = useState<any[]>([])
   const [showHistory, setShowHistory]         = useState(false)
@@ -420,7 +421,9 @@ export default function PredictionsPage() {
               <div style={{ position: 'relative', minWidth: 0, flex: '1 1 180px', maxWidth: 260 }}>
                 <select value={selectedRound ?? ''} onChange={e => setSelectedRound(parseInt(e.target.value))} style={{ width: '100%', background: 'rgba(0,0,0,.4)', border: '1px solid rgba(225,6,0,.35)', borderRadius: 6, color: '#fff', padding: '7px 32px 7px 12px', fontFamily: mono, fontSize: 11, letterSpacing: '.04em', cursor: 'pointer', outline: 'none', appearance: 'none' }}>
                   {availableRounds.map((r, i) => (
-                    <option key={`${r.round}-${i}`} value={r.round}>R{r.round} · {r.gp_name.replace(' Grand Prix', ' GP')}</option>
+                    <option key={`${r.round}-${i}`} value={r.round}>
+                      R{r.round} · {r.gp_name.replace(' Grand Prix', ' GP')}{r.has_actuals ? ' · scored' : ''}
+                    </option>
                   ))}
                 </select>
                 <div style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'rgba(255,255,255,.3)', fontSize: 10 }}>▾</div>
