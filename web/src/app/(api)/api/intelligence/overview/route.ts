@@ -20,6 +20,17 @@ export async function GET() {
         ORDER BY is_spike DESC, momentum_score DESC NULLS LAST LIMIT 8
       `,
       sql`
+        WITH latest AS (
+          SELECT MAX(date) AS max_date
+          FROM driver_sentiment_daily
+          WHERE date >= ${cutoff30str}::date AND entity_type = 'driver'
+        ),
+        current_sentiment AS (
+          SELECT *
+          FROM driver_sentiment_daily
+          WHERE entity_type = 'driver'
+            AND date = (SELECT max_date FROM latest)
+        )
         SELECT driver_name,
           ROUND(AVG(sentiment_avg)::NUMERIC, 3) AS sentiment_avg,
           SUM(mention_count) AS total_mentions,
@@ -29,8 +40,7 @@ export async function GET() {
             WHEN AVG(sentiment_avg) < -0.15 THEN 'negative'
             ELSE 'neutral'
           END AS sentiment_label
-        FROM driver_sentiment_daily
-        WHERE date >= ${cutoff30str}::date AND entity_type = 'driver'
+        FROM current_sentiment
         GROUP BY driver_name HAVING SUM(mention_count) > 0
         ORDER BY total_mentions DESC LIMIT 10
       `,

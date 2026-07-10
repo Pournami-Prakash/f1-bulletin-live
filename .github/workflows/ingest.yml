@@ -71,6 +71,16 @@ jobs:
             -H "Authorization: Bearer $INGEST_KEY" \
             "$APP_BASE_URL/api/ingest/rss?tier=all"
 
+      - name: Refresh Neon intelligence
+        env:
+          INGEST_KEY: ${{ secrets.INGEST_KEY }}
+        run: |
+          test -n "$INGEST_KEY"
+          curl --fail-with-body --retry 2 --retry-delay 5 \
+            -X POST \
+            -H "Authorization: Bearer $INGEST_KEY" \
+            "$APP_BASE_URL/api/intelligence/refresh"
+
       - name: Summary
         if: always()
         run: echo "Neon RSS ingest completed with status ${{ job.status }}"
@@ -139,10 +149,11 @@ jobs:
   semantic_clustering:
     name: Semantic Clustering
     runs-on: ubuntu-latest
-    needs: phase1_intelligence
+    needs: [ingest, phase1_intelligence]
     if: |
       github.event.inputs.ingest_only != 'true' &&
-      github.event.inputs.skip_intelligence != 'true'
+      github.event.inputs.skip_intelligence != 'true' &&
+      needs.ingest.outputs.snowflake_available == 'true'
 
     steps:
 
@@ -172,10 +183,11 @@ jobs:
   phase2_intelligence:
     name: Phase 2 Intelligence
     runs-on: ubuntu-latest
-    needs: semantic_clustering
+    needs: [ingest, semantic_clustering]
     if: |
       github.event.inputs.ingest_only != 'true' &&
-      github.event.inputs.skip_intelligence != 'true'
+      github.event.inputs.skip_intelligence != 'true' &&
+      needs.ingest.outputs.snowflake_available == 'true'
 
     steps:
 
@@ -217,10 +229,11 @@ jobs:
   phase3_intelligence:
     name: Phase 3 Intelligence
     runs-on: ubuntu-latest
-    needs: phase2_intelligence
+    needs: [ingest, phase2_intelligence]
     if: |
       github.event.inputs.ingest_only != 'true' &&
-      github.event.inputs.skip_intelligence != 'true'
+      github.event.inputs.skip_intelligence != 'true' &&
+      needs.ingest.outputs.snowflake_available == 'true'
 
     steps:
 

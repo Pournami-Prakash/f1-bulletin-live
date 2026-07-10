@@ -32,12 +32,17 @@ export async function GET(request: Request) {
 
     const summary = entityType === 'all'
       ? await sql`
-          WITH ranked AS (
+          WITH latest AS (
+            SELECT MAX(date) AS max_date
+            FROM driver_sentiment_daily
+            WHERE date >= ${cutoffStr}::date
+          ),
+          ranked AS (
             SELECT driver_name, entity_type, date, sentiment_avg, sentiment_delta,
               mention_count, positive_count, negative_count, neutral_count, top_cluster,
               ROW_NUMBER() OVER (PARTITION BY driver_name, entity_type ORDER BY date DESC) AS rn
             FROM driver_sentiment_daily
-            WHERE date >= ${cutoffStr}::date
+            WHERE date = (SELECT max_date FROM latest)
           )
           SELECT driver_name, entity_type,
             ROUND(AVG(sentiment_avg)::NUMERIC, 3) AS sentiment_avg,
@@ -54,12 +59,18 @@ export async function GET(request: Request) {
           ORDER BY mentions DESC LIMIT 30
         `
       : await sql`
-          WITH ranked AS (
+          WITH latest AS (
+            SELECT MAX(date) AS max_date
+            FROM driver_sentiment_daily
+            WHERE date >= ${cutoffStr}::date
+              AND entity_type = ${entityType}
+          ),
+          ranked AS (
             SELECT driver_name, entity_type, date, sentiment_avg, sentiment_delta,
               mention_count, positive_count, negative_count, neutral_count, top_cluster,
               ROW_NUMBER() OVER (PARTITION BY driver_name, entity_type ORDER BY date DESC) AS rn
             FROM driver_sentiment_daily
-            WHERE date >= ${cutoffStr}::date
+            WHERE date = (SELECT max_date FROM latest)
               AND entity_type = ${entityType}
           )
           SELECT driver_name, entity_type,
