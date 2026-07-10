@@ -42,8 +42,8 @@ export async function GET(request: Request) {
         SELECT season, round
         FROM predictions
         ORDER BY
-          predicted_at DESC,
-          CASE WHEN model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'} THEN 0 ELSE 1 END
+          CASE WHEN model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'} THEN 0 ELSE 1 END,
+          predicted_at DESC
         LIMIT 1
       `
       if (latest_row.length === 0) {
@@ -66,8 +66,8 @@ export async function GET(request: Request) {
             AND round  = ${targetRound}
           GROUP BY model_version
           ORDER BY
-            MAX(predicted_at) DESC,
             CASE WHEN model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'} THEN 0 ELSE 1 END,
+            MAX(predicted_at) DESC,
             model_version DESC
           LIMIT 1
         `
