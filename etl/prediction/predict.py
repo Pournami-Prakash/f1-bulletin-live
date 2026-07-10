@@ -639,6 +639,16 @@ def get_target_race(season: int | None, round_: int | None) -> tuple[int, int, s
         if not row.empty:
             r = row.iloc[0]
             return int(r['season']), int(r['round']), r['gp_name'], r['circuit']
+        row = query("""
+            SELECT season, round, race_name AS gp_name, circuit_name AS circuit
+            FROM race_calendar
+            WHERE season=%s AND round=%s
+            ORDER BY updated_at DESC NULLS LAST
+            LIMIT 1
+        """, (season, round_))
+        if not row.empty:
+            r = row.iloc[0]
+            return int(r['season']), int(r['round']), r['gp_name'], r['circuit']
         import fastf1 as f1
         Path("cache").mkdir(exist_ok=True)
         f1.Cache.enable_cache("cache")
@@ -649,10 +659,10 @@ def get_target_race(season: int | None, round_: int | None) -> tuple[int, int, s
             raise RuntimeError(f"Cannot find race {season} R{round_}: {e}")
 
     upcoming = query("""
-        SELECT s.season, s.round, s.gp_name, s.circuit, s.date
-        FROM sessions s
-        WHERE s.session_type = 'R' AND s.date > NOW()
-        ORDER BY s.date ASC LIMIT 1
+        SELECT season, round, race_name AS gp_name, circuit_name AS circuit, race_start_utc
+        FROM race_calendar
+        WHERE race_start_utc > NOW()
+        ORDER BY race_start_utc ASC LIMIT 1
     """)
     if not upcoming.empty:
         r = upcoming.iloc[0]

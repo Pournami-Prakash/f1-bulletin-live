@@ -19,8 +19,8 @@ export async function GET(request: Request) {
           ROW_NUMBER() OVER (
             PARTITION BY p.round
             ORDER BY
-              CASE WHEN p.model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'} THEN 0 ELSE 1 END,
               MAX(p.predicted_at) DESC,
+              CASE WHEN p.model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'} THEN 0 ELSE 1 END,
               p.model_version DESC
           ) AS rn
         FROM predictions p
