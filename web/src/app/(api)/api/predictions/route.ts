@@ -43,6 +43,7 @@ export async function GET(request: Request) {
         FROM predictions
         ORDER BY
           CASE WHEN model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'} THEN 0 ELSE 1 END,
+          CASE WHEN circuit IS NULL OR LOWER(circuit) = 'unknown' THEN 1 ELSE 0 END,
           predicted_at DESC
         LIMIT 1
       `
@@ -67,6 +68,10 @@ export async function GET(request: Request) {
           GROUP BY model_version
           ORDER BY
             CASE WHEN model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'} THEN 0 ELSE 1 END,
+            CASE
+              WHEN BOOL_OR(circuit IS NOT NULL AND LOWER(circuit) <> 'unknown') THEN 0
+              ELSE 1
+            END,
             MAX(predicted_at) DESC,
             model_version DESC
           LIMIT 1

@@ -19,8 +19,12 @@ export async function GET(request: Request) {
           ROW_NUMBER() OVER (
             PARTITION BY p.round
             ORDER BY
-              MAX(p.predicted_at) DESC,
               CASE WHEN p.model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'} THEN 0 ELSE 1 END,
+              CASE
+                WHEN BOOL_OR(p.circuit IS NOT NULL AND LOWER(p.circuit) <> 'unknown') THEN 0
+                ELSE 1
+              END,
+              MAX(p.predicted_at) DESC,
               p.model_version DESC
           ) AS rn
         FROM predictions p

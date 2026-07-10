@@ -39,6 +39,8 @@ reel/miami-gp-2026/
 etl/cache/
 etl/*.sqlite
 data/*.sqlite
+etl/features_output/
+etl/prediction/features_output/
 
 # python artifacts
 *.egg-info/

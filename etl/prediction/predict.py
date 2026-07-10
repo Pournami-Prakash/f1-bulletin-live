@@ -162,7 +162,53 @@ RACE_LAPS_BY_CIRCUIT = {
     'Sao Paulo': 71,
     'Las Vegas': 50,
     'Lusail': 57,
+    'Madrid': 55,
     'Yas Island': 58,
+}
+
+CIRCUIT_ALIASES = {
+    'Albert Park Circuit': 'Melbourne',
+    'Shanghai International Circuit': 'Shanghai',
+    'Suzuka International Racing Course': 'Suzuka',
+    'Miami International Autodrome': 'Miami Gardens',
+    'Circuit Gilles Villeneuve': 'Montréal',
+    'Circuit de Monaco': 'Monaco',
+    'Circuit de Barcelona-Catalunya': 'Barcelona',
+    'Red Bull Ring': 'Spielberg',
+    'Silverstone Circuit': 'Silverstone',
+    'Circuit de Spa-Francorchamps': 'Spa-Francorchamps',
+    'Hungaroring': 'Budapest',
+    'Circuit Zandvoort': 'Zandvoort',
+    'Autodromo Nazionale Monza': 'Monza',
+    'Madrid Street Circuit': 'Madrid',
+    'Baku City Circuit': 'Baku',
+    'Marina Bay Street Circuit': 'Marina Bay',
+    'Circuit of The Americas': 'Austin',
+    'Autodromo Hermanos Rodriguez': 'Mexico City',
+    'Autodromo Jose Carlos Pace': 'São Paulo',
+    'Las Vegas Strip Circuit': 'Las Vegas',
+    'Lusail International Circuit': 'Lusail',
+    'Yas Marina Circuit': 'Yas Island',
+    'Spa': 'Spa-Francorchamps',
+    'Montreal': 'Montréal',
+    'Sao Paulo': 'São Paulo',
+}
+
+def canonical_circuit(circuit: str | None) -> str:
+    if not circuit:
+        return 'Unknown'
+    cleaned = str(circuit).strip()
+    return CIRCUIT_ALIASES.get(cleaned, cleaned)
+
+DEFAULT_CIRCUIT_PROFILES = {
+    'Madrid': {
+        'circuit_type': 'street_hybrid',
+        'sc_probability': 0.55,
+        'overtaking_index': 0.42,
+        'arw_effectiveness': 0.34,
+        'tyre_deg_soft_ms_per_lap': 95.0,
+        'energy_demand_index': 0.76,
+    },
 }
 
 PIT_CREW_SPEED = {
@@ -239,7 +285,7 @@ def get_race_distance(season: int, round_: int, circuit: str) -> int:
             return int(row.iloc[0]['race_laps'])
     except Exception:
         pass
-    return int(RACE_LAPS_BY_CIRCUIT.get(circuit, 58))
+    return int(RACE_LAPS_BY_CIRCUIT.get(canonical_circuit(circuit), 58))
 
 def section(t): print(f"\n{'='*55}\n  {t}\n{'='*55}")
 def step(t):    print(f"  → {t}")
@@ -707,7 +753,7 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
             quali = apply_grid_overrides(normalize_grid_positions(quali), season, round_)
             step(f"  Using qualifying data: {len(quali)} drivers")
     if quali.empty:
-        step(f"  No qualifying data for {season} R{round_} — estimating from Elo")
+        step(f"  No qualifying data for {season} R{round_} — using reference grid if available")
 
     race_results = query("""
         SELECT DISTINCT r.driver_code, r.team, r.grid_position AS result_grid_position
@@ -755,13 +801,25 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
         step(f"  Using latest {season} race driver list ({len(latest_results)} drivers)")
 
     circuit_row = query("""
-        SELECT circuit FROM sessions
+        SELECT circuit
+        FROM sessions
         WHERE season=%s AND round=%s
         ORDER BY CASE session_type WHEN 'R' THEN 1 WHEN 'Q' THEN 2 WHEN 'S' THEN 3 ELSE 4 END
         LIMIT 1
     """, (season, round_))
-    circuit = circuit_row.iloc[0]['circuit'] if not circuit_row.empty else 'Unknown'
-    cp = circuits.get(circuit, {})
+    if not circuit_row.empty and pd.notna(circuit_row.iloc[0]['circuit']):
+        circuit = circuit_row.iloc[0]['circuit']
+    else:
+        calendar_circuit = query("""
+            SELECT circuit_name AS circuit
+            FROM race_calendar
+            WHERE season=%s AND round=%s
+            ORDER BY updated_at DESC NULLS LAST
+            LIMIT 1
+        """, (season, round_))
+        circuit = calendar_circuit.iloc[0]['circuit'] if not calendar_circuit.empty else 'Unknown'
+    circuit = canonical_circuit(circuit)
+    cp = circuits.get(circuit, DEFAULT_CIRCUIT_PROFILES.get(circuit, {}))
     cm = artifacts.get('circuit_memory', {}).get(circuit, {})
     ctype = cp.get('circuit_type', 'permanent')
     reg = regulation_profile(season)
@@ -880,6 +938,10 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
 
     entries = []
     all_drivers = latest_results['driver_code'].tolist() if not latest_results.empty else []
+    has_reference_grid = (
+        'result_grid_position' in latest_results.columns and
+        latest_results['result_grid_position'].notna().any()
+    ) if not latest_results.empty else False
 
     for i, driver in enumerate(all_drivers):
         team_row = latest_results[latest_results['driver_code']==driver]
@@ -1058,7 +1120,7 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
             'confidence':         confidence,
         })
 
-    if not quali.empty:
+    if not quali.empty or has_reference_grid:
         entries.sort(key=lambda x: x['grid_position'])
     else:
         entries.sort(key=lambda x: x['elo_rating'], reverse=True)
@@ -1581,7 +1643,15 @@ def score_prediction(season: int, round_: int) -> None:
     version_row = query("""
         SELECT model_version FROM predictions
         WHERE season=%s AND round=%s
-        ORDER BY predicted_at DESC LIMIT 1
+        GROUP BY model_version
+        ORDER BY
+          CASE WHEN model_version LIKE 'prod_%%' THEN 0 ELSE 1 END,
+          CASE
+            WHEN BOOL_OR(circuit IS NOT NULL AND LOWER(circuit) <> 'unknown') THEN 0
+            ELSE 1
+          END,
+          MAX(predicted_at) DESC
+        LIMIT 1
     """, (season, round_))
     score_model_version = version_row.iloc[0]['model_version'] if not version_row.empty else MODEL_VERSION
 

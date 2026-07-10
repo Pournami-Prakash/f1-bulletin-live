@@ -25,6 +25,7 @@ type RacePrediction = {
   accuracy: { mae_position: number | null; winner_correct: boolean | null; podium_hits: number | null; top5_hits: number | null; brier_score: number | null } | null
 }
 type PredictionRound = { round: number; gp_name: string; model_version?: string; has_actuals?: boolean }
+type GridContext = { short: string; table: string; note: string }
 
 const TEAM_COLORS: Record<string, string> = {
   'Mercedes': '#27F4D2', 'Red Bull Racing': '#3671C6', 'Ferrari': '#E8002D',
@@ -37,6 +38,21 @@ const mono  = 'var(--font-mono)'
 const bebas = 'var(--font-bebas)'
 
 const CDN = 'https://media.formula1.com/image/upload/c_fill,w_720/q_auto/d_common:f1:2026:fallback:driver:2026fallbackdriverright.webp/v1740000000/common/f1/2026'
+
+function gridContext(data: RacePrediction | null): GridContext {
+  if (!data) return { short: 'GRID', table: 'GRID', note: 'Starting grid' }
+  if (data.has_actuals) return { short: 'START', table: 'START', note: 'Actual race start' }
+  const predictedAt = new Date(data.predicted_at).getTime()
+  const raceHasNotStarted = data.round >= 10 && Number.isFinite(predictedAt)
+  if (raceHasNotStarted) {
+    return {
+      short: 'REF GRID',
+      table: 'REF',
+      note: 'Reference grid until qualifying is loaded',
+    }
+  }
+  return { short: 'GRID', table: 'GRID', note: 'Qualifying grid' }
+}
 
 const DRIVER_IMAGES: Record<string, string> = {
   VER: `${CDN}/redbullracing/maxver01/2026redbullracingmaxver01right.webp`,
@@ -92,7 +108,7 @@ const MOCK: RacePrediction = {
   ]
 }
 
-function PodiumCard({ driver, position, mounted }: { driver: DriverPrediction; position: 1 | 2 | 3; mounted: boolean }) {
+function PodiumCard({ driver, position, mounted, gridLabel }: { driver: DriverPrediction; position: 1 | 2 | 3; mounted: boolean; gridLabel: string }) {
   const color    = teamColor(driver.team)
   const delays   = { 1: 100, 2: 200, 3: 300 }
   const imgSrc   = DRIVER_IMAGES[driver.driver_code]
@@ -144,7 +160,7 @@ function PodiumCard({ driver, position, mounted }: { driver: DriverPrediction; p
               <div style={{ fontFamily: bebas, fontSize: 20, color: 'rgba(255,255,255,.5)', lineHeight: 1 }}>{(driver.podium_probability * 100).toFixed(0)}%</div>
             </div>
             <div>
-              <div style={{ fontSize: 7, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.1em' }}>GRID</div>
+              <div style={{ fontSize: 7, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.1em' }}>{gridLabel}</div>
               <div style={{ fontFamily: bebas, fontSize: 20, color: 'rgba(255,255,255,.5)', lineHeight: 1 }}>P{driver.grid_position}</div>
             </div>
           </div>
@@ -342,6 +358,7 @@ export default function PredictionsPage() {
   const top3      = data?.drivers.slice(0, 3) ?? []
   const upsets    = data?.drivers.filter(d => d.is_upset_pick) ?? []
   const racesDone = data?.championship?.[0]?.races_done ?? 2
+  const gridInfo   = gridContext(data)
 
   return (
     <>
@@ -392,6 +409,9 @@ export default function PredictionsPage() {
                       ? <span style={{ fontSize: 9, color: '#4ADE80', fontFamily: mono, letterSpacing: '.1em', padding: '2px 8px', border: '1px solid rgba(74,222,128,.35)', borderRadius: 3, background: 'rgba(74,222,128,.08)' }}>✓ RACE COMPLETE</span>
                       : <span style={{ fontSize: 9, color: '#F59E0B', fontFamily: mono, letterSpacing: '.1em', padding: '2px 8px', border: '1px solid rgba(245,158,11,.25)', borderRadius: 3, background: 'rgba(245,158,11,.06)' }}>⏳ AWAITING RACE</span>
                     }
+                    {!data.has_actuals && (
+                      <span style={{ fontSize: 9, color: '#38BDF8', fontFamily: mono, letterSpacing: '.1em', padding: '2px 8px', border: '1px solid rgba(56,189,248,.25)', borderRadius: 3, background: 'rgba(56,189,248,.06)' }}>{gridInfo.note.toUpperCase()}</span>
+                    )}
                   </div>
                 )}
               </div>
@@ -508,9 +528,9 @@ export default function PredictionsPage() {
                 </div>
                 <div style={{ padding: '20px 20px 0', background: 'rgba(0,0,0,.15)' }}>
                   <div className="pred-podium-order" style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                    {top3[1] && <div style={{ flex: 1, alignSelf: 'flex-end' }}><PodiumCard driver={top3[1]} position={2} mounted={mounted} /></div>}
-                    {top3[0] && <div style={{ flex: 1 }}><PodiumCard driver={top3[0]} position={1} mounted={mounted} /></div>}
-                    {top3[2] && <div style={{ flex: 1, alignSelf: 'flex-end', marginTop: '48px' }}><PodiumCard driver={top3[2]} position={3} mounted={mounted} /></div>}
+                    {top3[1] && <div style={{ flex: 1, alignSelf: 'flex-end' }}><PodiumCard driver={top3[1]} position={2} mounted={mounted} gridLabel={gridInfo.short} /></div>}
+                    {top3[0] && <div style={{ flex: 1 }}><PodiumCard driver={top3[0]} position={1} mounted={mounted} gridLabel={gridInfo.short} /></div>}
+                    {top3[2] && <div style={{ flex: 1, alignSelf: 'flex-end', marginTop: '48px' }}><PodiumCard driver={top3[2]} position={3} mounted={mounted} gridLabel={gridInfo.short} /></div>}
                   </div>
                 </div>
               </div>
@@ -523,7 +543,7 @@ export default function PredictionsPage() {
                   <span style={{ fontSize: 9, color: 'rgba(255,255,255,.15)', fontFamily: mono, marginLeft: 'auto' }}>WIN% IS ABSOLUTE — not relative to leader</span>
                 </div>
                 <div className="pred-row-desktop" style={{ display: 'grid', gridTemplateColumns: '32px 44px 120px 1fr 130px 68px 52px', padding: '6px 16px', borderBottom: '1px solid rgba(255,255,255,.05)', background: 'rgba(0,0,0,.4)' }}>
-                  {['#', 'GRID', 'DRIVER', 'WIN / PODIUM PROBABILITY', 'EXP PTS', 'RESULT'].map(h => (
+                  {['#', gridInfo.table, 'DRIVER', 'WIN / PODIUM PROBABILITY', 'EXP PTS', 'RESULT'].map(h => (
                     <div key={h} style={{ fontSize: 8, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.1em' }}>{h}</div>
                   ))}
                 </div>
