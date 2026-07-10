@@ -8,7 +8,7 @@
 --               spike frequency + media attention volume
 --   → Output: MART.CONTROVERSY_INDEX
 --
--- STAGE 6: Daily AI Briefing Generator
+-- STAGE 6: Daily Briefing Generator
 --   → One generated briefing per day
 --   → Top clusters + sentiment shifts + what to watch
 --   → Uses Cortex llama3-8b
@@ -548,7 +548,7 @@ WHEN NOT MATCHED THEN INSERT (
 CREATE TABLE IF NOT EXISTS MART.DAILY_BRIEFINGS (
   briefing_date       DATE        NOT NULL PRIMARY KEY,
 
-  -- AI-generated content
+  -- Generated briefing content
   headline            VARCHAR,    -- one punchy headline for the day
   lead_paragraph      VARCHAR,    -- 3–4 sentence overview of the day
   top_story_summary   VARCHAR,    -- 2 sentences on the #1 cluster

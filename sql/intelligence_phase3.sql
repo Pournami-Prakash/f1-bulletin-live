@@ -525,7 +525,7 @@ CREATE TABLE IF NOT EXISTS MART.PRE_RACE_INTELLIGENCE (
   race_name             VARCHAR,
   race_date             DATE,
 
-  -- AI-generated sections
+  -- Generated briefing sections
   weekend_overview      VARCHAR,   -- what to expect this weekend
   regulatory_watchlist  VARCHAR,   -- who's at risk, why
   form_guide            VARCHAR,   -- who's hot/cold from 72h data

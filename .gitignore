@@ -37,10 +37,15 @@ reel/miami-gp-2026/
 
 # cache / data artifacts
 etl/cache/
+etl/etl/cache/
 etl/*.sqlite
 data/*.sqlite
 etl/features_output/
 etl/prediction/features_output/
+*.ff1pkl
+
+# private research workspace
+network-intelligence/
 
 # python artifacts
 *.egg-info/

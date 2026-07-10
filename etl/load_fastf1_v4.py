@@ -1,23 +1,21 @@
 """
-F1 Bulletin — FastF1 → Neon ETL v3
+F1 Bulletin - FastF1 to Neon ETL v4
 Loads race + qualifying + sprint sessions into Neon Postgres.
-New in v3:
-  - Qualifying laps (Q1/Q2/Q3 best times, grid position, gap to pole)
-  - Track status per race (SC / VSC / Red Flag lap ranges)
-  - Weather per lap (air temp, track temp, humidity, wind, rainfall)
-  - Distance-sampled telemetry replay (drivers spread around circuit)
-  - Sprint race results + laps (session_type = 'S')
+
+Includes:
+  - Qualifying laps with Q1/Q2/Q3 best times, grid position, and gap to pole
+  - Track status per race with safety car, virtual safety car, and red flag ranges
+  - Weather per lap
+  - Distance-sampled telemetry replay
+  - Sprint race results and sprint laps
+
 Usage:
-    python load_fastf1_v3.py                              # loads 2025 + 2026 (full)
-    python load_fastf1_v3.py --seasons 2025               # loads 2025 only
-    python load_fastf1_v3.py --seasons 2025 --round 1     # one race only
-    python load_fastf1_v3.py --from-round 22              # skip rounds 1-21
-    python load_fastf1_v3.py --replay-only                # only redo telemetry replay
-    python load_fastf1_v3.py --quali-only                 # only load qualifying data
-    python load_fastf1_v3.py --extras-only                # only load track status + weather
-    python load_fastf1_v3.py --no-replay                  # skip telemetry (much faster)
-    python load_fastf1_v3.py --fp-only                    # only load FP1/FP2/FP3
-    python load_fastf1_v3.py --sprint-only                # only load sprint results
+    python load_fastf1_v4.py
+    python load_fastf1_v4.py --seasons 2026
+    python load_fastf1_v4.py --seasons 2026 --round 8
+    python load_fastf1_v4.py --quali-only
+    python load_fastf1_v4.py --sprint-only
+    python load_fastf1_v4.py --no-replay
 """
 from __future__ import annotations
 import argparse

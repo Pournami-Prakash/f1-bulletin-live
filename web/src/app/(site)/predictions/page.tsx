@@ -535,7 +535,6 @@ export default function PredictionsPage() {
                 </div>
               </div>
 
-              {/* ── FULL FIELD TABLE ── */}
               <div style={{ border: '1px solid rgba(255,255,255,.07)', borderRadius: 10, overflow: 'hidden' }}>
                 <div style={{ padding: '10px 16px', background: 'rgba(0,0,0,.35)', borderBottom: '1px solid rgba(255,255,255,.06)', display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ width: 2, height: 14, background: '#E10600', borderRadius: 1 }} />
@@ -548,14 +547,13 @@ export default function PredictionsPage() {
                   ))}
                 </div>
                 <div className="pred-row-mobile" style={{ display: 'none', padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,.05)', background: 'rgba(0,0,0,.4)' }}>
-                  <span style={{ fontSize: 8, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.1em' }}># · GRID · DRIVER · WIN%</span>
+                  <span style={{ fontSize: 8, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.1em' }}># · {gridInfo.table} · DRIVER · WIN%</span>
                 </div>
                 {data.drivers.map((driver, i) => (
                   <DriverRow key={driver.driver_code} driver={driver} index={i} mounted={mounted} />
                 ))}
               </div>
 
-              {/* ── MODEL NOTES ── */}
               <div style={{ border: '1px solid rgba(255,255,255,.05)', borderRadius: 8, padding: '14px 18px', opacity: mounted ? 1 : 0, transition: 'opacity .4s ease .5s' }}>
                 <div style={{ fontSize: 9, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.14em', marginBottom: 12 }}>MODEL NOTES</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
@@ -575,7 +573,7 @@ export default function PredictionsPage() {
             </>
           ) : (
             <div style={{ padding: '80px 0', textAlign: 'center' }}>
-              <span style={{ fontSize: 9, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.18em' }}>NO PREDICTIONS AVAILABLE — RUN predict.py FIRST</span>
+              <span style={{ fontSize: 9, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.18em' }}>NO PREDICTIONS AVAILABLE YET</span>
             </div>
           )}
         </main>

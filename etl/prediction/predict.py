@@ -1808,8 +1808,8 @@ def main():
     entries = get_entry_list(season, round_, artifacts)
     step(f"  {len(entries)} drivers in entry list")
     if len(entries) == 0:
-        print("  ✗ No drivers found. Load qualifying data first:")
-        print("    python load_fastf1_v3.py --seasons 2026 --quali-only")
+        print("  No drivers found. Load qualifying data first:")
+        print("    python load_fastf1_v4.py --seasons 2026 --quali-only")
         return
 
     if ml_type == 'xgboost':

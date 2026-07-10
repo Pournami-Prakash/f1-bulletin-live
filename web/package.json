@@ -8,19 +8,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "cron": "ts-node src/scripts/local-cron.ts",
     "generate:circuits": "ts-node generate-circuits.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
-    "dotenv": "^17.3.1",
     "framer-motion": "^12.35.0",
     "lucide-react": "^0.577.0",
-    "next": "16.1.6",
-    "node-cron": "^4.2.1",
+    "next": "16.2.10",
     "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "snowflake-sdk": "^2.3.4"
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -28,9 +24,12 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
     "typescript": "^5"
+  },
+  "overrides": {
+    "postcss": "^8.5.16"
   }
 }

@@ -935,7 +935,7 @@ export default function CircuitPage() {
           )}
         </section>
 
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 1, border: '1px solid rgba(255,255,255,.07)', borderRadius: 8, overflow: 'hidden', background: 'rgba(255,255,255,.07)' }}>
+        <section className="circuit-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 1, border: '1px solid rgba(255,255,255,.07)', borderRadius: 8, overflow: 'hidden', background: 'rgba(255,255,255,.07)' }}>
           {[
             ['TYPE', profile.type],
             ['DOWNFORCE', profile.downforce],
@@ -973,7 +973,7 @@ export default function CircuitPage() {
             {topDrivers.length ? topDrivers.map((driver, index) => {
               const color = teamColor(driver.team)
               return (
-                <div key={driver.driver_code} style={{ display: 'grid', gridTemplateColumns: '34px 74px minmax(120px,1fr) minmax(110px,.8fr) 70px', gap: 10, alignItems: 'center', padding: '11px 16px', borderBottom: '1px solid rgba(255,255,255,.04)', background: index < 3 ? `${color}0A` : 'transparent' }} className="driver-row">
+                <div key={driver.driver_code} style={{ display: 'grid', gridTemplateColumns: '34px 64px 150px minmax(180px,1fr) 74px', gap: 10, alignItems: 'center', padding: '11px 16px', borderBottom: '1px solid rgba(255,255,255,.04)', background: index < 3 ? `${color}0A` : 'transparent' }} className="driver-row">
                   <span style={{ fontFamily: bebas, fontSize: 18, color: index === 0 ? '#F59E0B' : 'rgba(255,255,255,.32)' }}>{index + 1}</span>
                   <span style={{ fontFamily: bebas, fontSize: 22, color }}>{driver.driver_code}</span>
                   <span style={{ fontFamily: mono, fontSize: 10, color: 'rgba(255,255,255,.4)' }}>{driver.team}</span>
@@ -1008,6 +1008,14 @@ export default function CircuitPage() {
                 </div>
               </div>
             )}
+            <div style={{ marginTop: 'auto', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+              {profile.zones.map(item => (
+                <div key={item.label} style={{ minHeight: 82, border: '1px solid rgba(255,255,255,.07)', borderRadius: 6, padding: 10, background: 'rgba(255,255,255,.025)' }}>
+                  <div style={{ fontFamily: mono, fontSize: 7, color: 'rgba(255,255,255,.24)', letterSpacing: '.12em', marginBottom: 8 }}>{item.label.toUpperCase()}</div>
+                  <div style={{ fontFamily: bebas, fontSize: 20, lineHeight: .95, color: item.label.toLowerCase().includes('risk') ? '#E10600' : item.label.toLowerCase().includes('pass') ? '#F59E0B' : 'rgba(255,255,255,.82)' }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -1100,6 +1108,9 @@ export default function CircuitPage() {
           .race-dna {
             grid-template-columns: 1fr !important;
           }
+          .circuit-stat-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
         }
         @media (max-width: 560px) {
           main {
@@ -1110,6 +1121,9 @@ export default function CircuitPage() {
             min-width: 100% !important;
           }
           .winner-wall {
+            grid-template-columns: 1fr !important;
+          }
+          .circuit-stat-grid {
             grid-template-columns: 1fr !important;
           }
         }
