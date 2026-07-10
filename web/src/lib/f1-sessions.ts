@@ -1,5 +1,4 @@
 // Static session times per round (ET strings)
-// /Users/pournami/Documents/Projects/f1-bulletin/web/src/lib/f1-sessions.ts
 // Snowflake owns dates/structure; this file owns display times only.
 export const SESSION_TIMES: Record<number, {
     n: string
@@ -37,5 +36,5 @@ export const SESSION_TIMES: Record<number, {
       { n: 'QUALIFYING',   et: 'SAT 23 MAY · 4:00 PM ET',  utcOffset: '-1T20:00:00Z' },
       { n: 'RACE',         et: 'SUN 24 MAY · 4:00 PM ET',  utcOffset: 'T20:00:00Z'   },
     ],
-    // R6–R24: add as confirmed. Races shown with date only until filled in.
+    // Add later rounds as confirmed. Races show date-only labels until filled in.
   }

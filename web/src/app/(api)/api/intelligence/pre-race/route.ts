@@ -1,14 +1,11 @@
-import { neon } from '@neondatabase/serverless'
 import { NextResponse } from 'next/server'
+import { getNeonSql } from '@/lib/neon'
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  if (!process.env.NEON_DATABASE_URL) {
-    return NextResponse.json({ ok: false, error: 'NEON_DATABASE_URL not configured' }, { status: 503 })
-  }
   try {
-    const sql = neon(process.env.NEON_DATABASE_URL!)
+    const sql = getNeonSql()
     const [weekendRows, preRaceRows, watchlistRows, chatterRows] = await Promise.all([
       sql`SELECT * FROM weekend_state WHERE id = 1 LIMIT 1`,
       sql`SELECT * FROM pre_race_intelligence ORDER BY race_date DESC NULLS LAST, generated_at DESC LIMIT 1`,

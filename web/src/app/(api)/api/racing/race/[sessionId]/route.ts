@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { neon } from '@neondatabase/serverless'
-
-const sql = neon(process.env.NEON_DATABASE_URL!)
+import { getNeonSql } from '@/lib/neon'
 
 export async function GET(
   req: NextRequest,
@@ -10,6 +8,7 @@ export async function GET(
   const { sessionId } = await params
   const id = parseInt(sessionId)
   const tab = req.nextUrl.searchParams.get('tab') ?? 'overview'
+  const sql = getNeonSql()
 
   // Always fetch session + results (needed for every tab)
   const [session, results] = await Promise.all([

@@ -2,10 +2,10 @@
 // Live session chatter — race week articles filtered by relevance
 // Only returns data during race week
 
-import { neon } from '@neondatabase/serverless'
 import { NextResponse } from 'next/server'
+import { getNeonSql } from '@/lib/neon'
 
-export const revalidate = 60   // 1 min — chatter is time-sensitive
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const limit   = parseInt(searchParams.get('limit') || '30')
     const round   = searchParams.get('round')
 
-    const sql = neon(process.env.NEON_DATABASE_URL!)
+    const sql = getNeonSql()
 
     // Get current race round if not specified
     const [stateRow] = await sql`

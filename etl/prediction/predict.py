@@ -974,10 +974,17 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
         pu_strength_adjusted = PU_PRIOR.get(PU_MANUFACTURERS.get(team, 'Unknown'), 0.50)
         pu_strength_adjusted = pu_strength_adjusted * (1 - ers_circuit_factor * 0.15) * (1 - uncertainty * 0.20)
 
+        # Effective grid position: grid shifted by 2026 observed delta (era-gated, shrunk).
+        # Used in MC sim starting positions — keeps grid_position raw for ML features.
+        _delta = grid_delta_map.get(driver, 0.0)
+        _n_drivers = len(all_drivers) or 20
+        eff_grid = int(round(max(1.0, min(float(_n_drivers), grid_pos - _delta)))) if _delta else grid_pos
+
         entries.append({
             'driver_code':        driver,
             'team':               team,
             'grid_position':      grid_pos,
+            'effective_grid_position': eff_grid,
             'gap_to_pole_sec':    gap_to_pole,
             'start_compound':     start_compound,
             'fp_pace_adj':        fp_pace.get(driver, 0.0),
@@ -1161,8 +1168,8 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
     quali_gap_weight = 0.42 if reg_era >= 1 else 0.62
 
     for run in range(MC_RUNS):
-        positions = {e['driver_code']: float(e['grid_position']) for e in entries}
-        start_pos = {e['driver_code']: e['grid_position'] for e in entries}
+        positions = {e['driver_code']: float(e.get('effective_grid_position', e['grid_position'])) for e in entries}
+        start_pos = {e['driver_code']: e.get('effective_grid_position', e['grid_position']) for e in entries}
         retired      = set()
         pace_ms      = {}
         tyre_age     = {e['driver_code']: 0 for e in entries}
@@ -1182,13 +1189,13 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
             noise   = np.random.normal(0, era_noise)
             # 2026: superclip at 350kW gives better energy recovery for backmarkers; reduce penalty vs original 4x
             energy_penalty_coeff = 2.0 if reg_era >= 1 else 4.0
-            energy_penalty = energy_demand * max(e['grid_position'] - 1, 0) * energy_penalty_coeff if active_aero else 0
+            energy_penalty = energy_demand * max(e.get('effective_grid_position', e['grid_position']) - 1, 0) * energy_penalty_coeff if active_aero else 0
             race_gap_ms = e['gap_to_pole_sec'] * 1000 * quali_gap_weight
             pace_ms[e['driver_code']] = race_gap_ms + elo_adj + team_adj + form_adj + overperf_adj + fp_adj + energy_penalty + noise
 
         lap1_risk = {e['driver_code']: (
-            0.01 if e['grid_position'] <= 3 else
-            0.03 if e['grid_position'] <= 10 else
+            0.01 if e.get('effective_grid_position', e['grid_position']) <= 3 else
+            0.03 if e.get('effective_grid_position', e['grid_position']) <= 10 else
             0.06
         ) for e in entries}
         for e in entries:

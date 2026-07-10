@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { motion, useScroll, useTransform, useSpring } from 'framer-motion'
 import Header from '@/components/Header'
@@ -237,7 +238,7 @@ function IntelPanel() {
             <motion.div key={src.name} initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 + i * 0.08, duration: 0.35, ease: [0.34, 1.56, 0.64, 1] }} title={src.name}
               style={{ width: 28, height: 28, borderRadius: 8, background: `${src.color}15`, border: `1px solid ${src.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'default', flexShrink: 0 }}
             >
-              <img
+              <Image
                 src={`https://www.google.com/s2/favicons?domain=${src.domain}&sz=32`}
                 width={16} height={16} alt={src.name}
                 style={{ borderRadius: 2, opacity: 0.9 }}
@@ -255,7 +256,7 @@ function IntelPanel() {
               <motion.div key={i} initial={{ opacity: 0, x: -12 }} animate={isVisible ? { opacity: 1, x: 0 } : { opacity: 0, x: -12 }} transition={{ duration: 0.35, ease: 'easeOut' }}
                 style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '7px 14px', background: isActive ? `${color}08` : 'transparent', borderLeft: `2px solid ${isActive ? color : 'transparent'}`, transition: 'background 0.3s,border-color 0.3s' }}>
                 <div style={{ width: 16, height: 16, flexShrink: 0, marginTop: 1 }}>
-                  <img
+                  <Image
                     src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`}
                     width={16} height={16} alt={h.source}
                     style={{ borderRadius: 2, opacity: 0.75 }}

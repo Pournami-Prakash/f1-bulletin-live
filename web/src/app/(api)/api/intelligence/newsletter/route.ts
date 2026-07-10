@@ -1,4 +1,3 @@
-import { neon } from '@neondatabase/serverless'
 import {
   clamp,
   err,
@@ -7,6 +6,8 @@ import {
   toErrorMessage,
   toInt,
 } from '@/lib/api'
+import { fetchJolpicaJson, standingsPath } from '@/lib/jolpica'
+import { getNeonSql } from '@/lib/neon'
 
 export const dynamic = 'force-dynamic'
 
@@ -737,14 +738,9 @@ function driverName(row: Record<string, unknown>) {
 }
 
 async function fetchStandings(): Promise<{ drivers: StandingItem[]; constructors: StandingItem[] }> {
-  const [driversRes, constructorsRes] = await Promise.all([
-    fetch('https://api.jolpi.ca/ergast/f1/current/driverStandings.json', { next: { revalidate: 3600 } }),
-    fetch('https://api.jolpi.ca/ergast/f1/current/constructorStandings.json', { next: { revalidate: 3600 } }),
-  ])
-
   const [driversJson, constructorsJson] = await Promise.all([
-    driversRes.ok ? driversRes.json() : null,
-    constructorsRes.ok ? constructorsRes.json() : null,
+    fetchJolpicaJson(standingsPath('current', 'drivers')).catch(() => null),
+    fetchJolpicaJson(standingsPath('current', 'constructors')).catch(() => null),
   ])
 
   const driverRows = driversJson?.MRData?.StandingsTable?.StandingsLists?.[0]?.DriverStandings ?? []
@@ -766,16 +762,12 @@ async function fetchStandings(): Promise<{ drivers: StandingItem[]; constructors
 }
 
 export async function GET(req: Request) {
-  if (!process.env.NEON_DATABASE_URL) {
-    return err('NEON_DATABASE_URL not configured', 503, 'CONFIG_ERROR')
-  }
-
   const { searchParams } = new URL(req.url)
   const days = clamp(toInt(searchParams.get('days'), 30), 1, 31)
   const limit = clamp(toInt(searchParams.get('limit'), 160), 24, 200)
 
   try {
-    const sql = neon(process.env.NEON_DATABASE_URL!)
+    const sql = getNeonSql()
     const [rows, qualiRows, practiceRows, teamRaceRows, teamIssueRows, standings] = await Promise.all([
       sql`
       SELECT

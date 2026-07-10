@@ -7,11 +7,11 @@
  *   limit   1–200              (default: 50)
  */
 
-import { neon } from "@neondatabase/serverless";
 import {
   ok, err, badRequest, methodNotAllowed, toErrorMessage,
   clamp, toInt, toString,
 } from "@/lib/api";
+import { getNeonSql } from "@/lib/neon";
 
 interface DriverStoryRow {
   story_id: string;
@@ -29,10 +29,6 @@ interface DriverStoryRow {
 export const revalidate = 120;
 
 export async function GET(req: Request) {
-  if (!process.env.NEON_DATABASE_URL) {
-    return err("NEON_DATABASE_URL not configured", 503, "CONFIG_ERROR");
-  }
-
   const { searchParams } = new URL(req.url);
   const driver = toString(searchParams.get("driver"));
   if (!driver) return badRequest("Missing required param: driver");
@@ -40,7 +36,7 @@ export async function GET(req: Request) {
   const limit = clamp(toInt(searchParams.get("limit"), 50), 1, 200);
 
   try {
-    const sql = neon(process.env.NEON_DATABASE_URL!);
+    const sql = getNeonSql();
     const rows = await sql`
       SELECT
         story_id,

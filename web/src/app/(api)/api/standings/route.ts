@@ -1,31 +1,13 @@
-// app/api/standings/route.ts
 import { NextRequest, NextResponse } from "next/server";
-
-const JOLPICA_BASE = "https://api.jolpi.ca/ergast/f1";
+import { fetchJolpicaJson, parseStandingType, standingsPath } from "@/lib/jolpica";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const season = searchParams.get("season") ?? "current";
-  const type = searchParams.get("type") ?? "drivers"; // "drivers" | "constructors"
+  const type = parseStandingType(searchParams.get("type"));
 
   try {
-    const endpoint =
-      type === "constructors"
-        ? `${JOLPICA_BASE}/${season}/constructorStandings.json`
-        : `${JOLPICA_BASE}/${season}/driverStandings.json`;
-
-    const res = await fetch(endpoint, {
-      next: { revalidate: 3600 }, // cache for 1 hour
-    });
-
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: "Failed to fetch standings" },
-        { status: res.status }
-      );
-    }
-
-    const data = await res.json();
+    const data = await fetchJolpicaJson(standingsPath(season, type));
     const lists = data?.MRData?.StandingsTable?.StandingsLists ?? [];
 
     if (lists.length === 0) {
@@ -38,7 +20,7 @@ export async function GET(req: NextRequest) {
         : lists[0].DriverStandings;
 
     return NextResponse.json({ standings, season: lists[0].season });
-  } catch (err) {
+  } catch {
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

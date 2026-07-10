@@ -1,17 +1,14 @@
-import { neon } from '@neondatabase/serverless'
 import { NextResponse } from 'next/server'
+import { getNeonSql } from '@/lib/neon'
 
 export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
-  if (!process.env.NEON_DATABASE_URL) {
-    return NextResponse.json({ ok: false, error: 'NEON_DATABASE_URL not configured' }, { status: 503 })
-  }
   try {
     const { searchParams } = new URL(request.url)
     const days = parseInt(searchParams.get('days') || '1')
     const type = searchParams.get('type') || 'all'
-    const sql = neon(process.env.NEON_DATABASE_URL!)
+    const sql = getNeonSql()
 
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - days)

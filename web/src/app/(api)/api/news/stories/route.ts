@@ -9,11 +9,11 @@
  *   limit    1–200                                  (default: 100)
  */
 
-import { neon } from "@neondatabase/serverless";
 import {
   ok, err, methodNotAllowed, toErrorMessage,
   clamp, toInt, toString,
 } from "@/lib/api";
+import { getNeonSql } from "@/lib/neon";
 
 interface StoryRow {
   story_id: string;
@@ -40,10 +40,6 @@ interface StoryRow {
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  if (!process.env.NEON_DATABASE_URL) {
-    return err("NEON_DATABASE_URL not configured", 503, "CONFIG_ERROR");
-  }
-
   const { searchParams } = new URL(req.url);
   const cluster = toString(searchParams.get("cluster")) || "all";
   const q = toString(searchParams.get("q"));
@@ -51,7 +47,7 @@ export async function GET(req: Request) {
   const limit = clamp(toInt(searchParams.get("limit"), 100), 1, 200);
 
   try {
-    const sql = neon(process.env.NEON_DATABASE_URL!);
+    const sql = getNeonSql();
     const rows = await sql`
       SELECT
         story_id,

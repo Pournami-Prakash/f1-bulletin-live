@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import Image from 'next/image'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/Header'
@@ -8,15 +9,6 @@ import Footer from '@/components/Footer'
 import BgCanvas from '@/components/BgCanvas'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-type DriverInfo = {
-  driverId?: string
-  givenName?: string
-  familyName?: string
-  permanentNumber?: string
-  nationality?: string
-  dateOfBirth?: string
-}
 
 type CareerStats = {
   races: number
@@ -37,15 +29,6 @@ type SeasonResult = {
   status: string
   constructor: string
   date: string
-}
-
-type CurrentSeason = {
-  year: number
-  races: number
-  wins: number
-  podiums: number
-  points: number
-  results: SeasonResult[]
 }
 
 type TimeseriesPoint = {
@@ -194,10 +177,6 @@ function dedupeStories(stories: Story[]): Story[] {
     seen.add(key)
     return true
   })
-}
-
-function storyHref(story: Story): string | null {
-  return story.latest_url ?? story.url ?? null
 }
 
 // ── SVG Sentiment Chart ───────────────────────────────────────────────────────
@@ -521,117 +500,6 @@ function readableCluster(cluster: string): string {
     STRATEGY:      'Strategy',
   }
   return map[cluster] ?? cluster.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-}
-
-// ── Story card ────────────────────────────────────────────────────────────────
-
-function StoryCard({ story, color }: { story: Story; color: string }) {
-  const srcType = getSourceType(story.latest_source)
-  const srcColor = srcType === 'reddit' ? '#FF6314' : srcType === 'official' ? '#27F4D2' : 'var(--blue)'
-  const narrative = inferNarrative(story.story_title ?? '')
-  const momentum = Math.min(100, safeNum(story.momentum_score))
-  const time = story.latest_event_ts ? timeAgo(story.latest_event_ts) : '—'
-  const isBreaking = story.is_breaking
-  const href = story.latest_url ?? story.url ?? null
-
-  const inner = (
-    <div style={{
-      border: `1px solid ${isBreaking ? 'rgba(225,6,0,.35)' : 'var(--b1)'}`,
-      borderRadius: 14,
-      background: isBreaking ? 'rgba(225,6,0,.04)' : 'rgba(255,255,255,.018)',
-      padding: '14px 16px',
-      display: 'flex', flexDirection: 'column', gap: 10,
-      position: 'relative', overflow: 'hidden',
-      minHeight: 110,
-      cursor: href ? 'pointer' : 'default',
-      transition: 'border-color .15s ease',
-    }}>
-      {/* Left accent */}
-      <div style={{
-        position: 'absolute', top: 0, left: 0, bottom: 0,
-        width: 2,
-        background: isBreaking ? 'var(--red)' : color,
-        opacity: 0.7,
-      }} />
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 10 }}>
-        <span style={{
-          fontSize: 8, color: color,
-          fontFamily: 'var(--font-mono)', letterSpacing: '.12em',
-          background: `${color}15`, padding: '2px 7px', borderRadius: 4,
-          border: `1px solid ${color}30`,
-        }}>
-          {narrative.toUpperCase()}
-        </span>
-        <span style={{
-          fontSize: 8, color: srcColor,
-          fontFamily: 'var(--font-mono)', letterSpacing: '.1em',
-          background: `${srcColor}12`, padding: '2px 7px', borderRadius: 4,
-          border: `1px solid ${srcColor}30`,
-        }}>
-          {srcType.toUpperCase()}
-        </span>
-        {isBreaking && (
-          <span style={{
-            fontSize: 8, color: 'var(--red)',
-            fontFamily: 'var(--font-mono)', letterSpacing: '.1em',
-            background: 'rgba(225,6,0,.1)', padding: '2px 7px', borderRadius: 4,
-            border: '1px solid rgba(225,6,0,.35)',
-          }}>
-            BREAKING
-          </span>
-        )}
-        <span style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--t3)' }}>{time}</span>
-      </div>
-
-      <div style={{
-        fontSize: 12.5, color: 'var(--t1)',
-        lineHeight: 1.5, paddingLeft: 10, paddingRight: 6,
-        display: '-webkit-box',
-        WebkitLineClamp: 3,
-        WebkitBoxOrient: 'vertical',
-        overflow: 'hidden',
-      } as CSSProperties}>
-        {story.story_title}
-        {href && (
-          <span style={{ marginLeft: 5, fontSize: 10, color, opacity: 0.6 }}>↗</span>
-        )}
-      </div>
-
-      <div style={{
-        display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingLeft: 10, marginTop: 'auto',
-      }}>
-        <span style={{ fontSize: 9, color: 'var(--t3)' }}>{story.latest_source}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <div style={{ width: 40, height: 2, background: 'var(--b1)', borderRadius: 2 }}>
-            <div style={{
-              height: '100%', width: `${momentum}%`,
-              background: isBreaking ? 'var(--red)' : color,
-              borderRadius: 2,
-            }} />
-          </div>
-          <span style={{ fontSize: 8, color: 'var(--t3)', fontFamily: 'var(--font-mono)' }}>
-            {momentum}
-          </span>
-        </div>
-      </div>
-    </div>
-  )
-
-  if (!href) return inner
-
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-    >
-      {inner}
-    </a>
-  )
 }
 
 // ── Coverage Intelligence ─────────────────────────────────────────────────────
@@ -1494,13 +1362,13 @@ export default function DriverProfilePage() {
             {/* Right — driver photo */}
             <div style={{ position: 'relative', overflow: 'hidden' }}>
               {!imgFailed && imgUrl ? (
-                <img
+                <Image
                   src={imgUrl}
                   alt={fullName}
+                  fill
+                  sizes="(max-width: 900px) 100vw, 42vw"
                   onError={() => setImgFailed(true)}
                   style={{
-                    position: 'absolute', inset: 0,
-                    width: '100%', height: '100%',
                     objectFit: 'cover', objectPosition: 'top center',
                   }}
                 />

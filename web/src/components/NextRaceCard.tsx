@@ -1,7 +1,7 @@
 'use client'
 // components/NextRaceCard.tsx
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 interface Props { weekend: any; loading: boolean }
 

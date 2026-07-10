@@ -1,5 +1,5 @@
-import { neon } from '@neondatabase/serverless'
 import { NextResponse } from 'next/server'
+import { getNeonSql } from '@/lib/neon'
 
 export const revalidate = 300
 
@@ -32,16 +32,30 @@ export interface RaceRound {
   updated_at:         string
 }
 
-export async function GET() {
-  if (!process.env.NEON_DATABASE_URL) {
-    return NextResponse.json({ error: 'NEON_DATABASE_URL not configured' }, { status: 503 })
-  }
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const season = Number.parseInt(searchParams.get('season') ?? '2026', 10)
+  const targetSeason = Number.isFinite(season) ? season : 2026
+
   try {
-    const sql = neon(process.env.NEON_DATABASE_URL!)
+    const sql = getNeonSql()
     const rows = await sql`
       SELECT *
-      FROM race_calendar
-      WHERE season = 2026
+      FROM (
+        SELECT DISTINCT ON (
+          season,
+          race_date,
+          LOWER(TRIM(circuit_name))
+        ) *
+        FROM race_calendar
+        WHERE season = ${targetSeason}
+        ORDER BY
+          season,
+          race_date,
+          LOWER(TRIM(circuit_name)),
+          round ASC,
+          updated_at DESC
+      ) normalized_calendar
       ORDER BY round
     `
     return NextResponse.json(rows)

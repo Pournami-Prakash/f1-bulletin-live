@@ -43,7 +43,6 @@ function DriverCard({ driver, rank }: { driver: any; rank: number }) {
   const teamColor = TEAM_COLORS[driver.driverName?.toUpperCase()] || 'var(--t3)'
   const sentColor = driver.sentimentLabel === 'positive' ? 'var(--green)'
     : driver.sentimentLabel === 'negative' ? 'var(--red)' : 'var(--t2)'
-  const deltaSign = (driver.sentimentDelta ?? 0) > 0 ? '+' : ''
   const arrow = (driver.sentimentDelta ?? 0) > 0.05 ? '↑'
     : (driver.sentimentDelta ?? 0) < -0.05 ? '↓' : '→'
   const arrowColor = (driver.sentimentDelta ?? 0) > 0.05 ? 'var(--green)'

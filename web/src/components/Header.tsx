@@ -5,14 +5,12 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 export default function Header({ onReset }: { onReset?: () => void }) {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
   const [menuOpen, setMenuOpen] = useState(false)
   const pathname = usePathname()
 
   useEffect(() => {
     const saved = localStorage.getItem('f1-theme') as 'dark' | 'light' | null
     if (saved) {
-      setTheme(saved)
       document.documentElement.setAttribute('data-theme', saved)
     }
   }, [])
@@ -30,6 +28,7 @@ export default function Header({ onReset }: { onReset?: () => void }) {
     { href: '/analytics',    label: 'ANALYTICS'    },
     { href: '/predictions',  label: 'PREDICTION'   },
     { href: '/standings',    label: 'STANDINGS'    },
+    { href: '/circuit',      label: 'CIRCUIT'      },
     { href: '/guide',        label: 'GUIDE'        },
   ]
 

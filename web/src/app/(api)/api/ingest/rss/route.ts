@@ -14,7 +14,7 @@
 import crypto from "crypto";
 import { createConnection, connectAsync, executeAsync, destroyAsync } from "@/lib/snowflake";
 import { ok, err, unauthorized, methodNotAllowed, toErrorMessage, validateIngestAuth } from "@/lib/api";
-import { parseRssFeed, extractFullText, EMPTY_FULL_TEXT, type FullTextResult } from "@/lib/text";
+import { parseRssFeed, EMPTY_FULL_TEXT, type FullTextResult } from "@/lib/text";
 import { fetchWithRetry } from "@/lib/fetch";
 
 // ---------------------------------------------------------------------------

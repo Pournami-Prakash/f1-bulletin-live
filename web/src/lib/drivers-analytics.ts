@@ -1,4 +1,4 @@
-// /Users/pournami/Documents/Projects/f1-bulletin/web/src/app/(api)/api/drivers/analytics/route.ts — Pure computation layer
+// Pure computation layer for driver analytics.
 // All functions are deterministic, side-effect free, and unit-testable.
 
 export type TimeseriesPoint = {

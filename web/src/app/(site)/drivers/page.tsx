@@ -184,7 +184,6 @@ function normCon(r: any): ControversyRaw {
   }
 }
 
-const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n))
 function nscore(vals: number[], v: number) { const mn = Math.min(...vals, 0), mx = Math.max(...vals, 1); return mx === mn ? 50 : ((v - mn) / (mx - mn)) * 100 }
 function classifyNarrative(c?: string | null) {
   const s = (c || '').toLowerCase()

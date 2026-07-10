@@ -141,7 +141,6 @@ function useCountdown(targetMs: number) {
       }
     }
     t(); const i = setInterval(t, 1000); return () => clearInterval(i)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetMs]); return v
 }
 function useInView() {
@@ -247,7 +246,7 @@ export default function BootScreen({ onEnter }: Props) {
   const [lights, setLights]       = useState(0)
   const [lightsOut, setLightsOut] = useState(false)
   const [stage, setStage]         = useState<'lights' | 'reveal'>('lights')
-  const [dark, setDark]           = useState(true)
+  const dark = true
   const [exiting, setExiting]     = useState(false)
   const [secTick, setSecTick]     = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)

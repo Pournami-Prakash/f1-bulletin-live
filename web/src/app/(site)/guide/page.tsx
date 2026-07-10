@@ -358,7 +358,7 @@ const CAR_ZONES_TOPDOWN = [
   },
 ]
 
-function InteractiveCar({ color = '#E8002D' }: { color?: string }) {
+function InteractiveCar() {
   const [active, setActive] = useState<string | null>(null)
   // Deduplicate active zone (left/right versions point to same data)
   const activeZone = CAR_ZONES_TOPDOWN.find(z => z.id === active)
@@ -970,7 +970,7 @@ export default function GuidePage() {
             }}>
               Every component on an F1 car is governed by the FIA Technical Regulations — a 400+ page document defining permitted dimensions, materials, and constructions. Hover the zones below to explore what the rules say about each part.
             </p>
-            <InteractiveCar color="#E8002D" />
+            <InteractiveCar />
           </section>
 
           {/* ── Pull quote 2 ── */}

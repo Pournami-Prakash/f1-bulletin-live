@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
 import Header from '@/components/Header'
-import Ticker from '@/components/Ticker'
 import Footer from '@/components/Footer'
 import BgCanvas from '@/components/BgCanvas'
 import {
@@ -420,7 +420,7 @@ function StoryCarousel({ stories, onDriverClick }: { stories: Story[]; onDriverC
                 </div>
                 <div style={{display:'flex',alignItems:'center',gap:12,marginTop:16}}>
                   <div style={{display:'flex',alignItems:'center',gap:7,background:'rgba(255,255,255,.04)',border:'1px solid rgba(255,255,255,.08)',padding:'4px 10px',borderRadius:6}}>
-                    {sourceFavicon(story.latest_source)&&<img src={sourceFavicon(story.latest_source)} width={14} height={14} alt="" style={{borderRadius:2,opacity:.9,flexShrink:0}}/>}
+                    {sourceFavicon(story.latest_source)&&<Image src={sourceFavicon(story.latest_source)!} width={14} height={14} alt="" style={{borderRadius:2,opacity:.9,flexShrink:0}}/>}
                     <span style={{fontSize:9,fontFamily:'var(--font-mono)',color:srcColor(srcT)}}>{story.latest_source}</span>
                   </div>
                   {story.driver&&<button onClick={e=>{e.stopPropagation();onDriverClick(story.driver!)}} style={{fontSize:8,fontFamily:'var(--font-mono)',color:col(story.driver),border:`1px solid ${col(story.driver)}40`,background:`${col(story.driver)}12`,padding:'3px 9px',borderRadius:5,cursor:'pointer'}}>{story.driver}</button>}
@@ -472,7 +472,7 @@ function StoryCarousel({ stories, onDriverClick }: { stories: Story[]; onDriverC
 }
 
 function StoryRow({ story, dim }: { story: Story; dim?: boolean }) {
-  const href=story.latest_url??null,srcT=getSourceType(story.latest_source),sc=srcColor(srcT)
+  const href=story.latest_url??null
   const time=story.latest_event_ts?timeAgo(story.latest_event_ts):'—'
   const momentum=Math.min(100,safeNum(story.momentum_score))
   const inner=(
@@ -483,7 +483,7 @@ function StoryRow({ story, dim }: { story: Story; dim?: boolean }) {
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <div style={{display:'flex',alignItems:'center',gap:5}}>
-            {sourceFavicon(story.latest_source)&&<img src={sourceFavicon(story.latest_source)} width={12} height={12} alt="" style={{borderRadius:2,opacity:.8}}/>}
+            {sourceFavicon(story.latest_source)&&<Image src={sourceFavicon(story.latest_source)!} width={12} height={12} alt="" style={{borderRadius:2,opacity:.8}}/>}
             <span style={{fontSize:9,color:'rgba(255,255,255,.35)'}}>{story.latest_source}</span>
           </div>
           <span style={{fontSize:9,color:'rgba(255,255,255,.25)'}}>{time}</span>
@@ -498,38 +498,6 @@ function StoryRow({ story, dim }: { story: Story; dim?: boolean }) {
   )
   if (!href) return inner
   return <a href={href} target="_blank" rel="noopener noreferrer" style={{textDecoration:'none',color:'inherit',display:'block'}}>{inner}</a>
-}
-
-function StoryClusterPanel({ cluster, driverSentiment, onDriverClick }: {
-  cluster: StoryCluster; driverSentiment: Record<string,SummaryEntity>; onDriverClick: (n:string)=>void
-}) {
-  const [expanded,setExpanded]=useState(false)
-  const lead=cluster.stories[0],rest=cluster.stories.slice(1)
-  return (
-    <div style={{border:'1px solid rgba(255,255,255,.07)',borderRadius:14,background:'rgba(0,0,0,.2)',overflow:'hidden'}}>
-      <div style={{padding:'12px 18px',borderBottom:'1px solid rgba(255,255,255,.05)',background:'rgba(255,255,255,.02)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-        <div style={{width:3,height:14,borderRadius:2,background:'var(--red)',flexShrink:0}}/>
-        <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'rgba(255,255,255,.7)',letterSpacing:'.12em'}}>{cluster.label.toUpperCase()}</span>
-        <span style={{fontSize:9,color:'rgba(255,255,255,.3)',fontFamily:'var(--font-mono)'}}>{cluster.stories.length} {cluster.stories.length===1?'story':'stories'}</span>
-        <div style={{display:'flex',gap:4}}>{Object.entries(cluster.srcCounts).map(([src,count])=><Pill key={src} color={srcColor(src)}>{src} {count}</Pill>)}</div>
-        {cluster.drivers.length>0&&(
-          <div style={{display:'flex',gap:5,marginLeft:'auto',flexWrap:'wrap'}}>
-            {cluster.drivers.map(name=>{
-              const c=col(name),sent=driverSentiment[name.toUpperCase()],d=safeNum(sent?.sentimentDelta)
-              return <button key={name} onClick={()=>onDriverClick(name)} style={{padding:'2px 8px',borderRadius:4,border:`1px solid ${c}40`,background:`${c}12`,color:c,fontSize:8,fontFamily:'var(--font-mono)',letterSpacing:'.08em',cursor:'pointer',display:'flex',alignItems:'center',gap:3}}>{name}{sent&&<span style={{color:d>0?'#22c55e':d<0?'#ef4444':'rgba(255,255,255,.3)'}}>{d>0?'↑':d<0?'↓':'→'}</span>}</button>
-            })}
-          </div>
-        )}
-        <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
-          <div style={{width:36,height:2,background:'rgba(255,255,255,.06)',borderRadius:2}}><div style={{height:'100%',width:`${Math.min(100,cluster.avgMomentum)}%`,background:'var(--red)',borderRadius:2}}/></div>
-          <span style={{fontSize:8,color:'rgba(255,255,255,.3)',fontFamily:'var(--font-mono)'}}>{cluster.avgMomentum}</span>
-        </div>
-      </div>
-      {lead&&<StoryRow story={lead}/>}
-      <AnimatePresence>{expanded&&rest.map((s,i)=><motion.div key={s.story_id??i} initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} transition={{duration:.18}} style={{overflow:'hidden'}}><StoryRow story={s} dim/></motion.div>)}</AnimatePresence>
-      {rest.length>0&&<button onClick={()=>setExpanded(e=>!e)} style={{width:'100%',padding:'8px 18px',background:'transparent',border:'none',borderTop:'1px solid rgba(255,255,255,.04)',color:'rgba(255,255,255,.3)',cursor:'pointer',fontSize:9,fontFamily:'var(--font-mono)',letterSpacing:'.12em',textAlign:'left',display:'flex',alignItems:'center',gap:6}}><span style={{transform:expanded?'rotate(90deg)':'none',transition:'transform .18s',display:'inline-block'}}>›</span>{expanded?'SHOW LESS':`${rest.length} MORE`}</button>}
-    </div>
-  )
 }
 
 function KpiCard({ label, value, color, sub }: { label:string; value:string|number; color:string; sub?:string }) {
@@ -1005,7 +973,7 @@ function ClusterGrid({ clusters, driverSentiment, onDriverClick }: {
       {rest.length>0&&(
         // ↓ cluster-two-col collapses to 1 col on mobile
         <div className="cluster-two-col" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-          {rest.map(cl=><CompactCluster key={cl.label} cluster={cl} driverSentiment={driverSentiment} onDriverClick={onDriverClick}/>)}
+          {rest.map(cl=><CompactCluster key={cl.label} cluster={cl} onDriverClick={onDriverClick}/>)}
         </div>
       )}
     </div>
@@ -1048,8 +1016,8 @@ function HeroCluster({ cluster, driverSentiment, onDriverClick }: {
   )
 }
 
-function CompactCluster({ cluster, driverSentiment, onDriverClick }: {
-  cluster:StoryCluster; driverSentiment:Record<string,SummaryEntity>; onDriverClick:(n:string)=>void
+function CompactCluster({ cluster, onDriverClick }: {
+  cluster:StoryCluster; onDriverClick:(n:string)=>void
 }) {
   const [expanded,setExpanded]=useState(false)
   const lead=cluster.stories[0],rest=cluster.stories.slice(1),href=lead?.latest_url??null

@@ -13,7 +13,6 @@ import { ok, err, methodNotAllowed, toErrorMessage, clamp, toInt, toString, toEn
 import { cleanSummary } from "@/lib/text";
 
 const SOURCE_TYPES = ["all", "news", "reddit", "official"] as const;
-type SourceType = (typeof SOURCE_TYPES)[number];
 
 // ---------------------------------------------------------------------------
 // Types

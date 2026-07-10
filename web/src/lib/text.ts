@@ -61,7 +61,7 @@ const FIA_FOOTER_MARKERS = [
 ];
 
 export function cleanFiaSummary(input: string): string {
-  let s = input;
+  const s = input;
   let cutAt = -1;
   for (const marker of FIA_FOOTER_MARKERS) {
     const idx = s.indexOf(marker);

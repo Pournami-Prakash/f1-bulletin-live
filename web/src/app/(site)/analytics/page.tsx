@@ -1,14 +1,12 @@
 'use client'
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import Header from '@/components/Header'
-import Ticker from '@/components/Ticker'
 import Footer from '@/components/Footer'
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Session  = { id: number; season: number; round: number; gp_name: string; circuit: string; date: string; session_type?: string }
 type Result   = { driver_code: string; team: string; grid_position: number; finish_position: number; points: number; status: string; fastest_lap_ms: number | null }
 type Lap      = { driver_code: string; lap_number: number; lap_time_ms: number | null; s1_ms: number | null; s2_ms: number | null; s3_ms: number | null; compound: string | null; tyre_life: number | null; is_personal_best: boolean; position: number | null }
 type Stint    = { driver_code: string; stint_number: number; compound: string | null; start_lap: number; end_lap: number; lap_count: number }
-type ReplayPt = { driver_code: string; frame: number; lap_number: number; x: string; y: string }
 type RaceData = { session: Session | null; results: Result[]; laps: Lap[] | null; stints: Stint[] | null; fastestLap: { driver_code: string; fastest_lap_ms: number } | null; lapCounts: { driver_code: string; lap_count: string }[] | null }
 type Tab      = 'LAP_PACE' | 'POSITIONS' | 'STRATEGY' | 'SECTORS' | 'REPLAY'
 // ── Palette ────────────────────────────────────────────────────────────────────
@@ -45,11 +43,10 @@ function formatDate(d: string) {
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).toUpperCase()
 }
 // ── DNF helper ────────────────────────────────────────────────────────────────
-// Handles both raw FastF1 strings (+1 Lap, Engine, Accident...)
-// AND ETL-normalised strings your DB may store (Lapped, Retired, etc.)
+// Handles both raw timing-status strings and normalized status labels.
 const CLASSIFIED_STATUSES = new Set([
-  'Finished', 'Lapped',           // ETL-normalised
-  '+1 Lap', '+2 Laps', '+3 Laps', // raw FastF1 lapped
+  'Finished', 'Lapped',
+  '+1 Lap', '+2 Laps', '+3 Laps',
   '+4 Laps', '+5 Laps', '+6 Laps',
 ])
 function isDnfStatus(status: string): boolean {
@@ -92,77 +89,12 @@ function Label({ children, dim = false }: { children: React.ReactNode; dim?: boo
 function Rule({ color = 'rgba(255,255,255,.06)' }: { color?: string }) {
   return <div style={{ height: 1, background: color }} />
 }
-function Annotation({ x, label, chartW, PL, PR }: { x: number; label: string; chartW: number; PL: number; PR: number }) {
-  return (
-    <g>
-      <line x1={x} x2={x} y1={16} y2={chartW - 24} stroke="rgba(255,255,255,.12)" strokeWidth={1} strokeDasharray="3,3" />
-      <text x={x + 4} y={26} fontSize={8} fill="rgba(255,255,255,.35)" fontFamily={mono}>{label}</text>
-    </g>
-  )
-}
-// ── Race timeline card ─────────────────────────────────────────────────────────
-function RaceCard({ session, active, onClick }: { session: Session; active: boolean; onClick: () => void }) {
-  return (
-    <button onClick={onClick} style={{
-      flexShrink: 0, width: 110,
-      background: active ? 'rgba(225,6,0,.1)' : 'rgba(255,255,255,.02)',
-      border: `1px solid ${active ? 'rgba(225,6,0,.45)' : 'rgba(255,255,255,.07)'}`,
-      borderRadius: 8, padding: '10px 12px', cursor: 'pointer', textAlign: 'left',
-      transition: 'all .15s',
-    }}>
-      <div style={{ fontSize: 8, letterSpacing: '.12em', color: active ? '#E10600' : 'rgba(255,255,255,.25)', fontFamily: mono, marginBottom: 5 }}>
-        R{session.round} · {formatDate(session.date)}
-      </div>
-      <div style={{ fontFamily: bebas, fontSize: 14, letterSpacing: '.04em', lineHeight: 1.1, color: active ? '#fff' : 'rgba(255,255,255,.55)' }}>
-        {session.gp_name.replace(' Grand Prix', '').replace('Grand Prix', '').trim()}
-      </div>
-      <div style={{ fontSize: 8, color: 'rgba(255,255,255,.2)', fontFamily: mono, marginTop: 4, letterSpacing: '.06em' }}>
-        {session.circuit}
-      </div>
-    </button>
-  )
-}
-// ── Broadcast lower-third ──────────────────────────────────────────────────────
-function LowerThird({ driver, position, team, points, color, isFastest }: {
-  driver: string; position: number; team: string; points: number; color: string; isFastest?: boolean
-}) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, overflow: 'hidden', borderRadius: 4 }}>
-      <div style={{
-        background: position <= 3
-          ? position === 1 ? 'rgba(245,158,11,.9)' : position === 2 ? 'rgba(180,180,180,.7)' : 'rgba(180,100,30,.7)'
-          : 'rgba(255,255,255,.08)',
-        padding: '4px 9px', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 28,
-      }}>
-        <span style={{ fontFamily: bebas, fontSize: 16, color: position <= 3 ? '#000' : 'rgba(255,255,255,.4)', lineHeight: 1 }}>
-          {position}
-        </span>
-      </div>
-      <div style={{ width: 3, background: color, flexShrink: 0 }} />
-      <div style={{ background: 'rgba(0,0,0,.55)', padding: '4px 10px', flex: 1 }}>
-        <div style={{ fontFamily: bebas, fontSize: 15, letterSpacing: '.04em', color: '#fff', lineHeight: 1 }}>{driver}</div>
-        <div style={{ fontSize: 8, color: 'rgba(255,255,255,.4)', fontFamily: mono, letterSpacing: '.06em' }}>{team}</div>
-      </div>
-      <div style={{ background: 'rgba(0,0,0,.4)', padding: '4px 8px', display: 'flex', alignItems: 'center' }}>
-        <span style={{ fontFamily: mono, fontSize: 10, color: points > 0 ? '#F59E0B' : 'rgba(255,255,255,.2)' }}>
-          {points > 0 ? `${points}P` : '—'}
-        </span>
-      </div>
-      {isFastest && (
-        <div style={{ background: 'rgba(167,139,250,.2)', padding: '4px 7px', display: 'flex', alignItems: 'center' }}>
-          <span style={{ fontSize: 9, color: '#A78BFA' }}>⚡</span>
-        </div>
-      )}
-    </div>
-  )
-}
 // ── Overview section ───────────────────────────────────────────────────────────
 function Overview({ data }: { data: RaceData }) {
   const { results, fastestLap, stints } = data
   const svgRef   = useRef<SVGSVGElement>(null)
   const rafRef   = useRef<number>(0)
   const [view, setView]         = useState<'sankey'|'table'>('sankey')
-  const [animated, setAnimated] = useState(false)
   const [showAll, setShowAll]   = useState(false)
   const DURATION = 2800
   const stintMap: Record<string, { pits: number; finalCompound: string | null }> = {}
@@ -321,18 +253,21 @@ function Overview({ data }: { data: RaceData }) {
     cancelAnimationFrame(rafRef.current)
     setView('sankey')
     const start = performance.now()
-    const fallback = setTimeout(() => { setAnimated(true) }, DURATION + 300)
+    const fallback = setTimeout(() => drawSankey(1), DURATION + 300)
     function frame(now: number) {
       const prog = (now - start) / DURATION
       drawSankey(prog)
       if (prog < 1) { rafRef.current = requestAnimationFrame(frame) }
-      else { drawSankey(1); clearTimeout(fallback); setTimeout(() => setAnimated(true), 0) }
+      else { drawSankey(1); clearTimeout(fallback) }
     }
     rafRef.current = requestAnimationFrame(frame)
   }
   useEffect(() => {
     const t = setTimeout(runAnim, 120)
     return () => { clearTimeout(t); cancelAnimationFrame(rafRef.current) }
+    // drawSankey/runAnim are SVG animation routines derived from the current race.
+    // Re-running on result changes keeps the animation deterministic without a render loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results])
   return (
     <div>
@@ -495,10 +430,9 @@ function Overview({ data }: { data: RaceData }) {
 // ── Lap pace chart ─────────────────────────────────────────────────────────────
 function TabLapPace({ data, drivers }: { data: RaceData; drivers: string[] }) {
   const { laps, results, stints } = data
-  if (!laps?.length) return <Empty />
   const series = useMemo(() => {
     const map: Record<string, { x: number; y: number; compound: string | null }[]> = {}
-    for (const l of laps) {
+    for (const l of laps ?? []) {
       if (!l.lap_time_ms || l.lap_time_ms > 300000 || l.lap_time_ms < 50000) continue
       if (!drivers.includes(l.driver_code)) continue
       if (!map[l.driver_code]) map[l.driver_code] = []
@@ -506,6 +440,7 @@ function TabLapPace({ data, drivers }: { data: RaceData; drivers: string[] }) {
     }
     return map
   }, [laps, drivers])
+  if (!laps?.length) return <Empty />
   const active = drivers.filter(d => series[d]?.length)
   if (!active.length) return <Empty msg="SELECT DRIVERS ABOVE" />
   const allMs   = active.flatMap(d => series[d].map(p => p.y))
@@ -869,13 +804,12 @@ function TabReplay({ sessionId, results }: { sessionId: number; results: Result[
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed]     = useState(1)
   const [selectedDriver, setSelectedDriver] = useState<string|null>(null)
-  const [lapEvents, setLapEvents] = useState<{lap:number; events:string[]}[]>([])
 
   const rafRef  = useRef<number>(0)
   const lastRef = useRef<number>(0)
   const eventsRef = useRef<HTMLDivElement>(null)
   const W = 420, H = 420, PAD = 32
-  const SPEEDS = [0.5, 1, 2, 4]
+  const SPEEDS = useMemo(() => [0.5, 1, 2, 4], [])
   const FRAMES_PER_LAP = 64
   const MS_PER_TICK = 180
 
@@ -922,22 +856,7 @@ function TabReplay({ sessionId, results }: { sessionId: number; results: Result[
         setDriverColors(cols)
         setLoaded(true)
       }).catch(() => setLoaded(true))
-  }, [sessionId])
-
-  useEffect(() => {
-    if (!results.length) return
-    const events: {lap:number; events:string[]}[] = []
-    for (let l = 1; l <= totalLaps; l++) {
-      const evs: string[] = []
-      if (l === 1) evs.push(`Race start — ${results[0]?.driver_code} leads from P${results[0]?.grid_position}`)
-      if (l === Math.round(totalLaps * 0.25)) evs.push('Quarter distance')
-      if (l === Math.round(totalLaps * 0.5))  evs.push('Half distance')
-      if (l === Math.round(totalLaps * 0.75)) evs.push('Three quarter distance')
-      if (l === totalLaps) evs.push(`Chequered flag — ${results[0]?.driver_code} wins`)
-      if (evs.length) events.push({ lap: l, events: evs })
-    }
-    setLapEvents(events)
-  }, [results, totalLaps])
+  }, [sessionId, results])
 
   useEffect(() => {
     if (!eventsRef.current) return
@@ -978,7 +897,7 @@ function TabReplay({ sessionId, results }: { sessionId: number; results: Result[
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [advance])
+  }, [advance, SPEEDS])
 
   if (!loaded) return <div style={{ padding:'60px 0', textAlign:'center' }}><Label dim>LOADING TELEMETRY…</Label></div>
   if (!frameMap.size) return <div style={{ padding:'40px 18px' }}><Label dim>NO TELEMETRY DATA — RE-RUN ETL WITH --replay-only</Label></div>
@@ -995,12 +914,6 @@ function TabReplay({ sessionId, results }: { sessionId: number; results: Result[
     : ''
   const selResult = selectedDriver ? results.find(r=>r.driver_code===selectedDriver) : null
   const selColor  = selectedDriver ? (driverColors[selectedDriver]??'#888') : '#888'
-  const posOrder = [...current].sort((a,b) => {
-    const ra = results.findIndex(r=>r.driver_code===a.driver)
-    const rb = results.findIndex(r=>r.driver_code===b.driver)
-    return ra-rb
-  })
-
   return (
     <div>
       <div style={{ padding:'10px 16px', display:'flex', alignItems:'center', gap:10, borderBottom:'1px solid rgba(255,255,255,.06)' }}>

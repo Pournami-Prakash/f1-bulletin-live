@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 
@@ -90,52 +91,6 @@ const MOCK: RacePrediction = {
   ]
 }
 
-function ConfidenceTimeline({ value, racesTotal = 24, racesDone = 2 }: {
-  value: number; racesTotal?: number; racesDone?: number
-}) {
-  const pct   = Math.round(value * 100)
-  const color = pct < 40 ? '#F59E0B' : pct < 70 ? '#38BDF8' : '#4ADE80'
-  const milestones = [
-    { race: 1,  label: 'R1',  note: 'Bayesian prior' },
-    { race: 8,  label: 'R8',  note: 'XGBoost active' },
-    { race: 16, label: 'R16', note: 'Calibration' },
-    { race: 24, label: 'R24', note: 'Full data' },
-  ]
-  return (
-    <div>
-      <div style={{ position: 'relative', height: 24, marginBottom: 6 }}>
-        <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 2, background: 'rgba(255,255,255,.06)', borderRadius: 1, transform: 'translateY(-50%)' }} />
-        <div style={{ position: 'absolute', top: '50%', left: 0, width: `${(racesDone / racesTotal) * 100}%`, height: 2, background: color, borderRadius: 1, transform: 'translateY(-50%)', transition: 'width .6s ease', boxShadow: `0 0 8px ${color}60` }} />
-        {milestones.map(m => {
-          const pos = ((m.race - 1) / (racesTotal - 1)) * 100
-          const isPast = racesDone >= m.race
-          const isCurrent = racesDone === m.race
-          return (
-            <div key={m.race} style={{ position: 'absolute', top: '50%', left: `${pos}%`, transform: 'translate(-50%, -50%)' }}>
-              <div style={{ width: isCurrent ? 10 : 6, height: isCurrent ? 10 : 6, borderRadius: '50%', background: isPast ? color : 'rgba(255,255,255,.1)', border: isCurrent ? `2px solid ${color}` : 'none', boxShadow: isCurrent ? `0 0 12px ${color}` : 'none', transition: 'all .3s' }} />
-            </div>
-          )
-        })}
-        <div style={{ position: 'absolute', top: '50%', left: `${((racesDone - 1) / (racesTotal - 1)) * 100}%`, transform: 'translate(-50%, -50%)', pointerEvents: 'none' }}>
-          <div style={{ width: 12, height: 12, borderRadius: '50%', background: color, boxShadow: `0 0 16px ${color}` }} />
-        </div>
-      </div>
-      <div style={{ position: 'relative', height: 28 }}>
-        {milestones.map(m => {
-          const pos = ((m.race - 1) / (racesTotal - 1)) * 100
-          const isPast = racesDone >= m.race
-          return (
-            <div key={m.race} style={{ position: 'absolute', left: `${pos}%`, transform: 'translateX(-50%)', textAlign: 'center' }}>
-              <div style={{ fontSize: 8, color: isPast ? color : 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.08em' }}>{m.label}</div>
-              <div style={{ fontSize: 7, color: 'rgba(255,255,255,.15)', fontFamily: mono, whiteSpace: 'nowrap' }}>{m.note}</div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 function PodiumCard({ driver, position, mounted }: { driver: DriverPrediction; position: 1 | 2 | 3; mounted: boolean }) {
   const color    = teamColor(driver.team)
   const delays   = { 1: 100, 2: 200, 3: 300 }
@@ -153,11 +108,12 @@ function PodiumCard({ driver, position, mounted }: { driver: DriverPrediction; p
         {/* ── Driver image: contain + bottom so full body shows ── */}
         <div style={{ position: 'relative', height: position === 1 ? 280 : position === 2 ? 240 : 220, marginLeft: -16, marginRight: -16, overflow: 'hidden', background: `${color}06` }}>
           {imgSrc ? (
-            <img
+            <Image
               src={imgSrc}
               alt={driver.driver_code}
+              fill
+              sizes="(max-width: 900px) 100vw, 33vw"
               style={{
-                width: '100%', height: '100%',
                 objectFit: 'cover', objectPosition: 'top center',
                 filter: position !== 1 ? 'brightness(0.75) saturate(0.8)' : 'none',
               }}
@@ -284,36 +240,6 @@ function AccuracyCard({ accuracy }: { accuracy: NonNullable<RacePrediction['accu
           <div style={{ fontFamily: bebas, fontSize: 26, color: k.color, lineHeight: 1 }}>{k.value}</div>
         </div>
       ))}
-    </div>
-  )
-}
-
-function ChampionshipStrip({ rows }: { rows: ChampionshipRow[] }) {
-  const top3 = rows.slice(0, 3)
-  const maxP = rows[0]?.projected_total ?? 1
-  return (
-    <div style={{ display: 'flex', gap: 8 }}>
-      {top3.map((row, i) => {
-        const color   = teamColor(row.team)
-        const medals  = ['#F59E0B', '#C0C0C0', '#CD7F32']
-        return (
-          <div key={row.driver_code} style={{ flex: 1, padding: '10px 14px', background: 'rgba(0,0,0,.3)', border: `1px solid ${color}25`, borderRadius: 8, borderTop: `2px solid ${color}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <span style={{ fontFamily: bebas, fontSize: 13, color: medals[i] }}>{i + 1}</span>
-              <div style={{ width: 2, height: 10, background: color, borderRadius: 1 }} />
-              <span style={{ fontFamily: bebas, fontSize: 14, color: '#fff', letterSpacing: '.04em' }}>{row.driver_code}</span>
-              <span style={{ fontSize: 7, color: 'rgba(255,255,255,.2)', fontFamily: mono, marginLeft: 'auto' }}>{row.team.split(' ')[0]}</span>
-            </div>
-            <div style={{ height: 3, background: 'rgba(255,255,255,.06)', borderRadius: 2, overflow: 'hidden', marginBottom: 6 }}>
-              <div style={{ width: `${(row.projected_total / maxP) * 100}%`, height: '100%', background: color, borderRadius: 2, transition: 'width .8s ease' }} />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 8, color: 'rgba(255,255,255,.3)', fontFamily: mono }}>{row.actual_points} pts now</span>
-              <span style={{ fontSize: 9, fontFamily: bebas, color, letterSpacing: '.02em' }}>~{row.projected_total}</span>
-            </div>
-          </div>
-        )
-      })}
     </div>
   )
 }

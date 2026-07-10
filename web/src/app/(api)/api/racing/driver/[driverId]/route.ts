@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-
-const JOLPICA = 'https://api.jolpi.ca/ergast/f1'
+import { jolpicaPath } from '@/lib/jolpica'
 const CURRENT_YEAR = new Date().getFullYear()
 
 export const revalidate = 3600
@@ -18,7 +17,7 @@ async function fetchJSON(url: string) {
 // Paginate through all races — Jolpica hard caps at 100 per page
 async function fetchAllRaces(driverId: string): Promise<any[]> {
   const first = await fetchJSON(
-    `${JOLPICA}/drivers/${driverId}/results.json?limit=100&offset=0`
+    jolpicaPath(`drivers/${driverId}/results.json?limit=100&offset=0`)
   )
   if (!first) return []
 
@@ -30,7 +29,7 @@ async function fetchAllRaces(driverId: string): Promise<any[]> {
   const rest = await Promise.all(
     Array.from({ length: pages - 1 }, (_, i) =>
       fetchJSON(
-        `${JOLPICA}/drivers/${driverId}/results.json?limit=100&offset=${(i + 1) * 100}`
+        jolpicaPath(`drivers/${driverId}/results.json?limit=100&offset=${(i + 1) * 100}`)
       )
     )
   )
@@ -56,7 +55,7 @@ async function countChampionships(
   const results = await Promise.all(
     completedSeasons.map(s =>
       fetchJSON(
-        `${JOLPICA}/${s.season}/drivers/${driverId}/driverstandings.json?limit=1`
+        jolpicaPath(`${s.season}/drivers/${driverId}/driverstandings.json?limit=1`)
       )
     )
   )
@@ -82,12 +81,12 @@ export async function GET(
       currentData,
       seasonsData,
     ] = await Promise.all([
-      fetchJSON(`${JOLPICA}/drivers/${driverId}/results/1.json?limit=1`),
-      fetchJSON(`${JOLPICA}/drivers/${driverId}/results.json?limit=1`),
-      fetchJSON(`${JOLPICA}/drivers/${driverId}/qualifying/1.json?limit=1`),
-      fetchJSON(`${JOLPICA}/drivers/${driverId}.json?limit=1`),
-      fetchJSON(`${JOLPICA}/current/drivers/${driverId}/results.json?limit=30`),
-      fetchJSON(`${JOLPICA}/drivers/${driverId}/seasons.json?limit=100`),
+      fetchJSON(jolpicaPath(`drivers/${driverId}/results/1.json?limit=1`)),
+      fetchJSON(jolpicaPath(`drivers/${driverId}/results.json?limit=1`)),
+      fetchJSON(jolpicaPath(`drivers/${driverId}/qualifying/1.json?limit=1`)),
+      fetchJSON(jolpicaPath(`drivers/${driverId}.json?limit=1`)),
+      fetchJSON(jolpicaPath(`current/drivers/${driverId}/results.json?limit=30`)),
+      fetchJSON(jolpicaPath(`drivers/${driverId}/seasons.json?limit=100`)),
     ])
 
     const driverInfo = driverData?.MRData?.DriverTable?.Drivers?.[0] ?? null

@@ -1,21 +1,16 @@
-// /Users/pournami/Documents/Projects/f1-bulletin/web/src/app/(api)/api/intelligence/drivers/route.ts
-
-import { neon } from '@neondatabase/serverless'
 import { NextResponse } from 'next/server'
+import { getNeonSql } from '@/lib/neon'
 
 export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
-  if (!process.env.NEON_DATABASE_URL) {
-    return NextResponse.json({ ok: false, error: 'NEON_DATABASE_URL not configured' }, { status: 503 })
-  }
   try {
     const { searchParams } = new URL(request.url)
     const driver     = searchParams.get('driver')
     const days       = parseInt(searchParams.get('days') || '30')
     const format     = searchParams.get('format') || 'summary'
     const entityType = searchParams.get('type')   || 'driver'
-    const sql = neon(process.env.NEON_DATABASE_URL!)
+    const sql = getNeonSql()
 
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - days)

@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useState } from 'react'
 import type { DriverStanding, ConstructorStanding } from '@/types/f1'
 
@@ -83,70 +84,6 @@ function constructorImageUrl(id: string): string | null {
   return CONSTRUCTOR_IMAGES[id] ?? null
 }
 
-// ── Driver avatar fallback ────────────────────────────────────────────────────
-
-function DriverAvatar({
-  code,
-  givenName,
-  familyName,
-  color,
-  size,
-}: {
-  code: string
-  givenName: string
-  familyName: string
-  color: string
-  size: number
-}) {
-  const [imgFailed, setImgFailed] = useState(false)
-  const initials = `${givenName.charAt(0)}${familyName.charAt(0)}`
-  const url = driverImageUrl(code)
-
-  if (imgFailed || !url) {
-    return (
-      <div style={{
-        width: size, height: size,
-        borderRadius: '50%',
-        background: `${color}20`,
-        border: `2.5px solid ${color}66`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        margin: '0 auto',
-        fontFamily: 'var(--font-bebas)',
-        fontSize: size * 0.32,
-        letterSpacing: '0.04em', color,
-      }}>
-        {initials}
-      </div>
-    )
-  }
-
-  return (
-    <div style={{
-      width: size, height: size,
-      borderRadius: '50%', overflow: 'hidden',
-      border: `2.5px solid ${color}66`,
-      background: `${color}15`,
-      margin: '0 auto', position: 'relative',
-    }}>
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: `radial-gradient(circle at bottom, ${color}35, transparent 65%)`,
-        zIndex: 1,
-      }} />
-      <img
-        src={url}
-        alt={`${givenName} ${familyName}`}
-        onError={() => setImgFailed(true)}
-        style={{
-          width: '100%', height: '100%',
-          objectFit: 'cover', objectPosition: 'top center',
-          position: 'relative', zIndex: 2,
-        }}
-      />
-    </div>
-  )
-}
-
 // ── Hero driver podium card ───────────────────────────────────────────────────
 
 function HeroPodiumCard({
@@ -179,13 +116,13 @@ function HeroPodiumCard({
     }}>
       {/* Full-bleed image */}
       {!imgFailed && url ? (
-        <img
+        <Image
           src={url}
           alt={`${standing.Driver.givenName} ${standing.Driver.familyName}`}
+          fill
+          sizes="(max-width: 900px) 100vw, 33vw"
           onError={() => setImgFailed(true)}
           style={{
-            position: 'absolute', inset: 0,
-            width: '100%', height: '100%',
             objectFit: 'cover', objectPosition: 'top center',
             zIndex: 0,
           }}
@@ -374,9 +311,11 @@ function HeroConstructorCard({
 
       {/* Car image as hero */}
       {!imgFailed && carUrl ? (
-        <img
+        <Image
           src={carUrl}
           alt={standing.Constructor.name}
+          width={1200}
+          height={420}
           onError={() => setImgFailed(true)}
           style={{
             position: 'absolute',

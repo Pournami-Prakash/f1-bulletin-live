@@ -5,7 +5,7 @@ import type { FeedItem } from "@/types/f1";
 import { matchEntities } from "@/lib/f1/text";
 import { formatTs, getItemTs } from "@/lib/f1/time";
 import { groupTimeline } from "@/lib/f1/grouping";
-import { cardClass, cn } from "@/lib/ui";
+import { cardClass } from "@/lib/ui";
 import { DRIVER_NAMES, TEAM_NAMES, TRACK_NAMES } from "@/config/f1";
 
 // ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 'use client'
 // components/StatsGrid.tsx
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 
 interface Props {
   overview: any
@@ -11,7 +11,7 @@ interface Props {
 export default function StatsGrid({ overview, loading }: Props) {
   const refs = useRef<(HTMLDivElement | null)[]>([])
 
-  const stats = [
+  const stats = useMemo(() => [
     {
       value: overview?.pipeline?.totalSignals ?? 0,
       label: 'SIGNALS TODAY',
@@ -36,7 +36,7 @@ export default function StatsGrid({ overview, loading }: Props) {
       sub: 'opener Melbourne Mar 16',
       color: 'var(--green)',
     },
-  ]
+  ], [overview])
 
   // Count-up animation
   useEffect(() => {
@@ -54,7 +54,7 @@ export default function StatsGrid({ overview, loading }: Props) {
         if (v >= target) clearInterval(iv)
       }, step)
     })
-  }, [loading, overview])
+  }, [loading, stats])
 
   return (
     <div style={{
