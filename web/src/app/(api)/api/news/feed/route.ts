@@ -12,11 +12,11 @@
  *   hours    1–720                 (default: 168 / 7 days)
  */
 
-import { query, normalizeRows } from "@/lib/snowflake";
 import {
   ok, err, methodNotAllowed, toErrorMessage,
   clamp, toInt, toString, toEnum,
 } from "@/lib/api";
+import { getNeonSql } from "@/lib/neon";
 import type { FeedItem } from "@/types/f1";
 
 const SOURCE_TYPES = ["all", "news", "reddit"] as const;
@@ -37,16 +37,16 @@ export async function GET(req: Request) {
   const binds: unknown[] = [];
 
   // Time window first — keeps the Snowflake scan small
-  where.push(`t.fetched_at >= DATEADD('hour', -?, CURRENT_TIMESTAMP())`);
+  where.push(`event_ts >= NOW() - ($${binds.length + 1} || ' hours')::interval`);
   binds.push(hours);
 
   if (source !== "all") {
-    where.push(`t.source_type = ?`);
+    where.push(`source_type = $${binds.length + 1}`);
     binds.push(source);
   }
 
   if (q) {
-    where.push(`(t.title ILIKE ? OR t.summary ILIKE ? OR t.source ILIKE ? OR t.url ILIKE ?)`);
+    where.push(`(title ILIKE $${binds.length + 1} OR summary ILIKE $${binds.length + 2} OR source ILIKE $${binds.length + 3} OR url ILIKE $${binds.length + 4})`);
     const like = `%${q}%`;
     binds.push(like, like, like, like);
   }
@@ -57,44 +57,27 @@ export async function GET(req: Request) {
   // as a clean column — it's inferred from url/source text.
   const sql = `
     SELECT
-      t.source_type,
-      t.source,
-      t.title,
-      t.url,
-      t.summary,
-      t.published_at_ts,
-      t.fetched_at,
-      t.content_hash,
-      t.event_type,
-      t.rn,
-      COALESCE(t.published_at_ts, t.fetched_at) AS event_ts
-    FROM (
-      SELECT
-        LOWER(
-          CASE
-            WHEN (url ILIKE '%reddit.com%' OR source ILIKE '%reddit%') THEN 'reddit'
-            ELSE 'news'
-          END
-        ) AS source_type,
-        source,
-        title,
-        url,
-        summary,
-        published_at_ts,
-        fetched_at,
-        content_hash,
-        event_type,
-        rn
-      FROM F1_BULLETIN.MART.V_EVENT_STREAM
-    ) t
+      COALESCE(content_hash, url) AS id,
+      source_type,
+      source,
+      NULL::text AS feed_url,
+      title,
+      url,
+      summary,
+      published_at_ts::text,
+      event_ts::text,
+      content_hash,
+      event_type,
+      rn
+    FROM event_f1_only
     ${whereSql}
-    ORDER BY COALESCE(t.fetched_at, t.published_at_ts) DESC
-    LIMIT ?
+    ORDER BY event_ts DESC NULLS LAST
+    LIMIT $${binds.length + 1}
   `;
 
   try {
-    const rows  = await query<Record<string, unknown>>(sql, [...binds, limit]);
-    const items = normalizeRows<FeedItem>(rows);
+    const db = getNeonSql();
+    const items = await db.query(sql, [...binds, limit]) as unknown as FeedItem[];
     return ok(items, { count: items.length });
   } catch (e) {
     return err(toErrorMessage(e));

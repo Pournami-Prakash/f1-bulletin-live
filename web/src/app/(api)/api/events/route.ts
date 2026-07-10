@@ -9,7 +9,7 @@
  *   cursor   opaque pagination token
  *   tier     all | P0 | P1 | P2 | P3          (default: all)
  *
- * v3: Reads from MART.V_EVENT_F1_ONLY instead of RAW.RSS_ITEMS.
+ * Reads from Neon event_f1_only.
  *     - F1-relevant content only (is_f1_relevant = TRUE)
  *     - Adds priority_score, priority_tier, topic_cluster from pipeline
  *     - event_type / rn already computed by DT chain, not inline
@@ -17,12 +17,12 @@
  */
 
 import { NextResponse } from "next/server";
-import { query, normalizeRows } from "@/lib/snowflake";
 import {
   err, methodNotAllowed, toErrorMessage,
   clamp, toInt, toString, toEnum,
   parseCursor, buildCursor,
 } from "@/lib/api";
+import { getNeonSql } from "@/lib/neon";
 import type { FeedItem } from "@/types/f1";
 
 const SOURCE_TYPES = ["all", "news", "reddit", "official"] as const;
@@ -45,27 +45,26 @@ export async function GET(req: Request) {
   const where: string[] = [];
   const binds: unknown[] = [];
 
-  // Time window — always first for scan efficiency
-  where.push(`e.event_ts >= DATEADD('hour', -?, CURRENT_TIMESTAMP())`);
+  // Time window first so the query stays small.
+  where.push(`e.event_ts >= NOW() - ($${binds.length + 1} || ' hours')::interval`);
   binds.push(hours);
 
   if (source !== "all") {
-    // source_type is a real column in V_EVENT_F1_ONLY (not extracted from PAYLOAD)
-    where.push(`LOWER(e.source_type) = ?`);
+    where.push(`LOWER(e.source_type) = $${binds.length + 1}`);
     binds.push(source);
   }
 
   if (tier !== "all") {
-    where.push(`e.priority_tier = ?`);
+    where.push(`e.priority_tier = $${binds.length + 1}`);
     binds.push(tier);
   }
 
   if (q) {
     where.push(`(
-      e.title   ILIKE ?
-      OR e.summary ILIKE ?
-      OR e.source  ILIKE ?
-      OR e.url     ILIKE ?
+      e.title   ILIKE $${binds.length + 1}
+      OR e.summary ILIKE $${binds.length + 2}
+      OR e.source  ILIKE $${binds.length + 3}
+      OR e.url     ILIKE $${binds.length + 4}
     )`);
     const like = `%${q}%`;
     binds.push(like, like, like, like);
@@ -74,8 +73,8 @@ export async function GET(req: Request) {
   // Keyset pagination on (event_ts DESC, content_hash DESC)
   if (cursor) {
     where.push(`(
-      e.event_ts < TO_TIMESTAMP_NTZ(?)
-      OR (e.event_ts = TO_TIMESTAMP_NTZ(?) AND e.content_hash < ?)
+      e.event_ts < $${binds.length + 1}::timestamptz
+      OR (e.event_ts = $${binds.length + 2}::timestamptz AND e.content_hash < $${binds.length + 3})
     )`);
     binds.push(cursor.tsIso, cursor.tsIso, cursor.id);
   }
@@ -86,18 +85,20 @@ export async function GET(req: Request) {
     SELECT
       e.source_type,
       e.source,
+      NULL::text AS feed_url,
+      COALESCE(e.content_hash, e.url) AS id,
       e.title,
       e.url,
       e.summary,
-      e.published_at_ts,
-      e.event_ts,
+      e.published_at_ts::text,
+      e.event_ts::text,
       e.content_hash,
       e.event_type,
       e.rn,
       e.priority_score,
       e.priority_tier,
       e.topic_cluster,
-      e.freshness_score,
+      e.freshness_minutes AS freshness_score,
       e.is_multi_source,
       e.source_count,
       e.n_10m,
@@ -106,20 +107,16 @@ export async function GET(req: Request) {
       e.is_f1_relevant,
       e.relevance_score,
       e.controversy_score
-    FROM F1_BULLETIN.MART.V_EVENT_F1_ONLY e
+    FROM event_f1_only e
     ${whereSql}
     ORDER BY e.event_ts DESC, e.content_hash DESC
-    LIMIT ?
+    LIMIT $${binds.length + 1}
   `;
 
   try {
-    const rows  = await query<Record<string, unknown>>(sql, [...binds, limit], {
-      schema:    "MART",
-      role:      "F1_APP_READ_ROLE",
-      warehouse: "F1_APP_WH",
-    });
-
-    const items = normalizeRows<FeedItem>(rows);
+    const db = getNeonSql();
+    const rows = await db.query(sql, [...binds, limit]);
+    const items = rows as unknown as FeedItem[];
 
     const nextCursor =
       items.length === limit

@@ -8,8 +8,8 @@
  *   limit        1–300                             (default: 100)
  */
 
-import { query, normalizeRows } from "@/lib/snowflake";
 import { ok, err, methodNotAllowed, toErrorMessage, clamp, toInt, toString, toEnum } from "@/lib/api";
+import { getNeonSql } from "@/lib/neon";
 import { cleanSummary } from "@/lib/text";
 
 const SOURCE_TYPES = ["all", "news", "reddit", "official"] as const;
@@ -47,12 +47,12 @@ export async function GET(req: Request) {
   const binds: unknown[] = [];
 
   if (source) {
-    where.push(`v.SOURCE = ?`);
+    where.push(`source = $${binds.length + 1}`);
     binds.push(source);
   }
 
   if (sourceType !== "all") {
-    where.push(`LOWER(v.PAYLOAD:"source_type"::string) = ?`);
+    where.push(`LOWER(source_type) = $${binds.length + 1}`);
     binds.push(sourceType);
   }
 
@@ -60,18 +60,17 @@ export async function GET(req: Request) {
   if (sourceType === "official" || source.toLowerCase() === "fia-news") {
     where.push(`
       (
-        LOWER(v.SOURCE) <> 'fia-news'
-        OR LOWER(v.TITLE) LIKE '%formula 1%'
-        OR LOWER(v.TITLE) LIKE '%f1%'
-        OR LOWER(v.URL)   LIKE '%formula-1%'
-        OR LOWER(v.URL)   LIKE '%/f1-%'
-        OR LOWER(v.PAYLOAD:"categories"::string) LIKE '%formula 1%'
+        LOWER(source) <> 'fia-news'
+        OR LOWER(title) LIKE '%formula 1%'
+        OR LOWER(title) LIKE '%f1%'
+        OR LOWER(url)   LIKE '%formula-1%'
+        OR LOWER(url)   LIKE '%/f1-%'
       )
     `);
   }
 
   if (q) {
-    where.push(`(v.TITLE ILIKE ? OR v.SUMMARY ILIKE ? OR v.URL ILIKE ?)`);
+    where.push(`(title ILIKE $${binds.length + 1} OR summary ILIKE $${binds.length + 2} OR url ILIKE $${binds.length + 3})`);
     const like = `%${q}%`;
     binds.push(like, like, like);
   }
@@ -80,31 +79,27 @@ export async function GET(req: Request) {
 
   const sql = `
     SELECT
-      v.ID,
-      v.SOURCE,
-      v.FEED_URL,
-      v.URL,
-      v.TITLE,
-      v.SUMMARY,
-      v.PUBLISHED_AT_RAW,
-      v.CONTENT_HASH,
-      v.PAYLOAD:"source_type"::string AS SOURCE_TYPE,
-      TO_VARCHAR(
-        CONVERT_TIMEZONE('UTC', COALESCE(v.CONTENT_FETCHED_AT, v.FETCHED_AT)),
-        'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"'
-      ) AS EVENT_TS
-    FROM F1_BULLETIN.MART.V_RSS_LATEST v
+      COALESCE(content_hash, url) AS id,
+      source,
+      source_type,
+      NULL::text AS feed_url,
+      url,
+      title,
+      summary,
+      published_at_ts::text AS published_at_raw,
+      event_ts::text,
+      content_hash
+    FROM event_f1_only
     ${whereSql}
-    ORDER BY COALESCE(v.CONTENT_FETCHED_AT, v.FETCHED_AT) DESC, v.ID DESC
-    LIMIT ?
+    ORDER BY event_ts DESC NULLS LAST, updated_at DESC NULLS LAST
+    LIMIT $${binds.length + 1}
   `;
 
   try {
-    const rows = await query<Record<string, unknown>>(sql, [...binds, limit], {
-      schema: "MART",
-    });
+    const db = getNeonSql();
+    const rows = await db.query(sql, [...binds, limit]) as unknown as LatestRow[];
 
-    const items = normalizeRows<LatestRow>(rows).map((r) => ({
+    const items = rows.map((r) => ({
       ...r,
       summary: cleanSummary(r.summary ?? "", r.source_type ?? ""),
     }));

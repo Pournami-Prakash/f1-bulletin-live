@@ -19,12 +19,10 @@ on:
         options: ['false', 'true']
 
 env:
-  SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-  SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-  SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
   SNOWFLAKE_WAREHOUSE: F1_APP_WH
   SNOWFLAKE_DATABASE: F1_BULLETIN
   SNOWFLAKE_ROLE: SYSADMIN
+  APP_BASE_URL: ${{ secrets.APP_URL || 'https://f1bulletin.vercel.app' }}
 
 jobs:
 
@@ -33,36 +31,49 @@ jobs:
 # ----------------------------------------------------
 
   ingest:
-    name: Ingest RSS to Snowflake
+    name: Ingest RSS to Neon
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    outputs:
+      snowflake_available: ${{ steps.snowflake-check.outputs.available }}
 
     steps:
 
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
+      - name: Probe Snowflake availability
+        id: snowflake-check
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
-          pip install --upgrade pip
-          pip install \
-            feedparser \
-            requests \
-            snowflake-connector-python \
-            python-dotenv
+          if [ -n "$SNOWFLAKE_ACCOUNT" ] && [ -n "$SNOWFLAKE_USER" ] && [ -n "$SNOWFLAKE_PASSWORD" ]; then
+            python3 -m pip install --quiet snowflake-connector-python
+            if python3 -c "import os, snowflake.connector as sf; conn = sf.connect(account=os.environ['SNOWFLAKE_ACCOUNT'], user=os.environ['SNOWFLAKE_USER'], password=os.environ['SNOWFLAKE_PASSWORD'], warehouse=os.environ.get('SNOWFLAKE_WAREHOUSE', 'F1_APP_WH'), database=os.environ.get('SNOWFLAKE_DATABASE', 'F1_BULLETIN'), role=os.environ.get('SNOWFLAKE_ROLE', 'SYSADMIN'), login_timeout=20, network_timeout=20); cur = conn.cursor(); cur.execute('SELECT 1'); cur.close(); conn.close()"; then
+              echo "available=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Snowflake unavailable, enrichment will be skipped"
+              echo "available=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Run RSS ingestion
+      - name: Run Neon RSS ingestion
+        env:
+          INGEST_KEY: ${{ secrets.INGEST_KEY }}
         run: |
-          python3 scripts/ingest_rss.py
+          test -n "$INGEST_KEY"
+          curl --fail-with-body --retry 2 --retry-delay 5 \
+            -X POST \
+            -H "Authorization: Bearer $INGEST_KEY" \
+            "$APP_BASE_URL/api/ingest/rss?tier=all"
 
       - name: Summary
         if: always()
-        run: echo "RSS ingest completed with status ${{ job.status }}"
+        run: echo "Neon RSS ingest completed with status ${{ job.status }}"
 
 
 # ----------------------------------------------------
@@ -74,6 +85,94 @@ jobs:
     runs-on: ubuntu-latest
     needs: ingest
 
+    if: |
+      github.event.inputs.ingest_only != 'true' &&
+      github.event.inputs.skip_intelligence != 'true' &&
+      needs.ingest.outputs.snowflake_available == 'true'
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install \
+            snowflake-connector-python \
+            psycopg2-binary \
+            python-dotenv
+
+      - name: Run Phase 1 SQL
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        run: |
+          python3 scripts/run_sql_file.py sql/intelligence_pipeline.sql
+
+      - name: Sync core content to Neon
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        run: |
+          python3 scripts/core_content_sync.py
+
+      - name: Sync Phase 1 intelligence
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        run: |
+          python3 scripts/intelligence_sync.py
+
+
+# ----------------------------------------------------
+# SEMANTIC CLUSTERING
+# ----------------------------------------------------
+
+  semantic_clustering:
+    name: Semantic Clustering
+    runs-on: ubuntu-latest
+    needs: phase1_intelligence
+    if: |
+      github.event.inputs.ingest_only != 'true' &&
+      github.event.inputs.skip_intelligence != 'true'
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install snowflake-connector-python
+
+      - name: Run clustering SQL
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        run: |
+          python3 scripts/run_sql_file.py sql/semantic_clustering.sql
+
+
+# ----------------------------------------------------
+# PHASE 2 INTELLIGENCE
+# ----------------------------------------------------
+
+  phase2_intelligence:
+    name: Phase 2 Intelligence
+    runs-on: ubuntu-latest
+    needs: semantic_clustering
     if: |
       github.event.inputs.ingest_only != 'true' &&
       github.event.inputs.skip_intelligence != 'true'
@@ -93,80 +192,20 @@ jobs:
             psycopg2-binary \
             python-dotenv
 
-      - name: Run Phase 1 SQL
-        run: |
-          python3 scripts/run_sql_file.py sql/intelligence_pipeline.sql
-
-      - name: Sync core content to Neon
-        env:
-          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
-        run: |
-          python3 scripts/core_content_sync.py
-
-      - name: Sync Phase 1 intelligence
-        env:
-          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
-        run: |
-          python3 scripts/intelligence_sync.py
-
-
-# ----------------------------------------------------
-# SEMANTIC CLUSTERING
-# ----------------------------------------------------
-
-  semantic_clustering:
-    name: Semantic Clustering
-    runs-on: ubuntu-latest
-    needs: phase1_intelligence
-
-    steps:
-
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          pip install snowflake-connector-python
-
-      - name: Run clustering SQL
-        run: |
-          python3 scripts/run_sql_file.py sql/semantic_clustering.sql
-
-
-# ----------------------------------------------------
-# PHASE 2 INTELLIGENCE
-# ----------------------------------------------------
-
-  phase2_intelligence:
-    name: Phase 2 Intelligence
-    runs-on: ubuntu-latest
-    needs: semantic_clustering
-
-    steps:
-
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          pip install \
-            snowflake-connector-python \
-            psycopg2-binary \
-            python-dotenv
-
       - name: Run Phase 2 SQL
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
           python3 scripts/run_sql_file.py sql/intelligence_phase2_completion.sql
 
       - name: Sync Phase 2 intelligence
         env:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
           python3 scripts/intelligence_sync_phase2.py
 
@@ -179,6 +218,9 @@ jobs:
     name: Phase 3 Intelligence
     runs-on: ubuntu-latest
     needs: phase2_intelligence
+    if: |
+      github.event.inputs.ingest_only != 'true' &&
+      github.event.inputs.skip_intelligence != 'true'
 
     steps:
 
@@ -196,12 +238,19 @@ jobs:
             python-dotenv
 
       - name: Run Phase 3 SQL
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
           python3 scripts/run_sql_file.py sql/intelligence_phase3.sql
 
       - name: Sync Phase 3 intelligence
         env:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
           python3 scripts/intelligence_sync_phase3.py
 
