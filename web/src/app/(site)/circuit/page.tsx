@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Image from 'next/image'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { CIRCUITS } from '@/components/circuit_paths'
@@ -46,6 +47,17 @@ type Prediction = {
   drivers: PredictionDriver[]
 }
 
+type CircuitWinner = {
+  season: number
+  round: number
+  gp_name: string
+  circuit: string
+  driver_code: string
+  team: string
+  grid_position: number | null
+  points: string | number | null
+}
+
 type CircuitProfile = {
   type: string
   downforce: string
@@ -80,6 +92,33 @@ const TEAM_COLORS: Record<string, string> = {
   'Haas F1 Team': '#B6BABD',
   Cadillac: '#C8A951',
   Audi: '#C8A951',
+}
+
+const CDN = 'https://media.formula1.com/image/upload/c_fill,w_720/q_auto/d_common:f1:2026:fallback:driver:2026fallbackdriverright.webp/v1740000000/common/f1/2026'
+
+const DRIVER_IMAGES: Record<string, string> = {
+  VER: `${CDN}/redbullracing/maxver01/2026redbullracingmaxver01right.webp`,
+  HAM: `${CDN}/ferrari/lewham01/2026ferrarilewham01right.webp`,
+  LEC: `${CDN}/ferrari/chalec01/2026ferrarichalec01right.webp`,
+  NOR: `${CDN}/mclaren/lannor01/2026mclarenlannor01right.webp`,
+  PIA: `${CDN}/mclaren/oscpia01/2026mclarenoscpia01right.webp`,
+  RUS: `${CDN}/mercedes/georus01/2026mercedesgeorus01right.webp`,
+  ANT: `${CDN}/mercedes/andant01/2026mercedesandant01right.webp`,
+  SAI: `${CDN}/williams/carsai01/2026williamscarsai01right.webp`,
+  ALO: `${CDN}/astonmartin/feralo01/2026astonmartinferalo01right.webp`,
+  STR: `${CDN}/astonmartin/lanstr01/2026astonmartinlanstr01right.webp`,
+  GAS: `${CDN}/alpine/piegas01/2026alpinepiegas01right.webp`,
+  OCO: `${CDN}/haasf1team/estoco01/2026haasf1teamestoco01right.webp`,
+  HAD: `${CDN}/redbullracing/isahad01/2026redbullracingisahad01right.webp`,
+  LAW: `${CDN}/racingbulls/lialaw01/2026racingbullslialaw01right.webp`,
+  ALB: `${CDN}/williams/alealb01/2026williamsalealb01right.webp`,
+  HUL: `${CDN}/audi/nichul01/2026audinichul01right.webp`,
+  BEA: `${CDN}/haasf1team/olibea01/2026haasf1teamolibea01right.webp`,
+  BOR: `${CDN}/audi/gabbor01/2026audigabbor01right.webp`,
+  COL: `${CDN}/alpine/fracol01/2026alpinefracol01right.webp`,
+  TSU: `${CDN}/racingbulls/yuktsu01/2026racingbullsyuktsu01right.webp`,
+  BOT: `${CDN}/cadillac/valbot01/2026cadillacvalbot01right.webp`,
+  LIN: `${CDN}/racingbulls/lialaw01/2026racingbullslialaw01right.webp`,
 }
 
 const FALLBACK_PROFILE: CircuitProfile = {
@@ -642,16 +681,105 @@ function clampPct(value: number) {
   return `${Math.max(4, Math.min(100, value))}%`
 }
 
+function parseIntensity(value: string) {
+  const v = value.toLowerCase()
+  if (v.includes('very high') || v.includes('maximum') || v.includes('extreme')) return 92
+  if (v.includes('high')) return 78
+  if (v.includes('medium')) return 58
+  if (v.includes('low')) return 32
+  return 50
+}
+
 const panel = {
   border: '1px solid rgba(255,255,255,.075)',
   borderRadius: 8,
   background: 'rgba(0,0,0,.28)',
 } as const
 
+function RaceDna({ profile }: { profile: CircuitProfile }) {
+  const values = [
+    { label: 'DOWNFORCE', value: parseIntensity(profile.downforce), color: '#E10600' },
+    { label: 'OVERTAKE', value: parseIntensity(profile.overtaking), color: '#F59E0B' },
+    { label: 'TYRES', value: parseIntensity(profile.tyreStress), color: '#A78BFA' },
+  ]
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '132px 1fr', gap: 18, alignItems: 'center' }} className="race-dna">
+      <div style={{ width: 132, height: 132, borderRadius: '50%', position: 'relative', display: 'grid', placeItems: 'center', background: `conic-gradient(${values[0].color} ${values[0].value * 1.2}deg, ${values[1].color} 0 ${values[1].value * 2.4}deg, ${values[2].color} 0 360deg)`, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.08)' }}>
+        <div style={{ width: 82, height: 82, borderRadius: '50%', background: '#080A0D', display: 'grid', placeItems: 'center', border: '1px solid rgba(255,255,255,.08)' }}>
+          <span style={{ fontFamily: bebas, fontSize: 27, color: '#fff', letterSpacing: '.04em' }}>DNA</span>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {values.map(item => (
+          <div key={item.label}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+              <span style={{ fontFamily: mono, fontSize: 8, color: 'rgba(255,255,255,.35)', letterSpacing: '.12em' }}>{item.label}</span>
+              <span style={{ fontFamily: mono, fontSize: 9, color: item.color }}>{item.value}</span>
+            </div>
+            <div style={{ height: 5, background: 'rgba(255,255,255,.07)', borderRadius: 999, overflow: 'hidden' }}>
+              <div style={{ width: `${item.value}%`, height: '100%', background: item.color }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function WinnerWall({ winners }: { winners: CircuitWinner[] }) {
+  return (
+    <section style={{ ...panel, padding: 18, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+        <div>
+          <div style={{ fontFamily: mono, fontSize: 9, color: 'rgba(255,255,255,.3)', letterSpacing: '.14em', marginBottom: 6 }}>RECENT WINNERS</div>
+          <div style={{ fontFamily: bebas, fontSize: 32, lineHeight: .9, letterSpacing: '.03em' }}>{winners.length ? 'CIRCUIT MEMORY' : 'NO WINNER MEMORY YET'}</div>
+        </div>
+        <span style={{ fontFamily: mono, fontSize: 9, color: 'rgba(255,255,255,.28)', letterSpacing: '.1em' }}>FROM LOADED RACE RESULTS</span>
+      </div>
+      {winners.length ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1.15fr repeat(3, minmax(140px,.72fr))', gap: 10 }} className="winner-wall">
+          {winners.slice(0, 4).map((winner, index) => {
+            const color = teamColor(winner.team)
+            const img = DRIVER_IMAGES[winner.driver_code]
+            return (
+              <div key={`${winner.season}-${winner.driver_code}-${winner.round}`} style={{ minHeight: index === 0 ? 278 : 210, position: 'relative', overflow: 'hidden', border: `1px solid ${color}44`, borderRadius: 8, background: `linear-gradient(160deg, ${color}24, rgba(0,0,0,.42))`, padding: 14, display: 'grid', alignContent: 'end' }}>
+                {img && (
+                  <Image
+                    src={img}
+                    alt={winner.driver_code}
+                    fill
+                    sizes={index === 0 ? '(max-width: 900px) 100vw, 38vw' : '(max-width: 900px) 50vw, 18vw'}
+                    style={{ objectFit: 'cover', objectPosition: 'top center', opacity: index === 0 ? .82 : .58, mixBlendMode: 'screen' }}
+                  />
+                )}
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 28%, rgba(0,0,0,.84) 100%)' }} />
+                <div style={{ position: 'relative' }}>
+                  <div style={{ fontFamily: mono, fontSize: 9, color: 'rgba(255,255,255,.48)', letterSpacing: '.14em', marginBottom: 8 }}>{winner.season}</div>
+                  <div style={{ fontFamily: bebas, fontSize: index === 0 ? 62 : 42, lineHeight: .82, color }}>{winner.driver_code}</div>
+                  <div style={{ marginTop: 8, fontFamily: mono, fontSize: 10, color: 'rgba(255,255,255,.58)' }}>{winner.team}</div>
+                  <div style={{ marginTop: 8, fontFamily: mono, fontSize: 9, color: 'rgba(255,255,255,.34)' }}>
+                    {winner.grid_position ? `Started P${winner.grid_position}` : 'Grid unknown'} · {Number(winner.points || 0).toFixed(0)} pts
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div style={{ border: '1px dashed rgba(255,255,255,.12)', borderRadius: 8, padding: 20, fontFamily: mono, fontSize: 10, color: 'rgba(255,255,255,.34)', letterSpacing: '.08em' }}>
+          This circuit has no loaded winner rows yet. It will populate automatically once race results exist in Neon.
+        </div>
+      )}
+    </section>
+  )
+}
+
 export default function CircuitPage() {
   const [calendar, setCalendar] = useState<CalendarRace[]>([])
   const [selectedRound, setSelectedRound] = useState<number | null>(null)
   const [prediction, setPrediction] = useState<Prediction | null>(null)
+  const [winners, setWinners] = useState<CircuitWinner[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -683,6 +811,17 @@ export default function CircuitPage() {
 
   const circuitKey = race ? keyForCircuit(race.circuit_name) : 'default'
   const profile = CIRCUIT_PROFILES[circuitKey] ?? FALLBACK_PROFILE
+
+  useEffect(() => {
+    if (!circuitKey || circuitKey === 'default') {
+      setWinners([])
+      return
+    }
+    fetch(`/api/racing/circuit-history?circuitKey=${circuitKey}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setWinners(Array.isArray(data?.winners) ? data.winners : []))
+      .catch(() => setWinners([]))
+  }, [circuitKey])
 
   const track = useMemo(() => {
     if (!race) return null
@@ -814,6 +953,17 @@ export default function CircuitPage() {
           ))}
         </section>
 
+        <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.25fr) minmax(320px,.75fr)', gap: 18 }} className="circuit-grid">
+          <WinnerWall winners={winners} />
+          <div style={{ ...panel, padding: 18, display: 'grid', alignContent: 'center', gap: 18 }}>
+            <div>
+              <div style={{ fontFamily: mono, fontSize: 9, color: 'rgba(255,255,255,.3)', letterSpacing: '.14em', marginBottom: 10 }}>RACE DNA</div>
+              <div style={{ fontFamily: bebas, fontSize: 40, lineHeight: .92, letterSpacing: '.03em' }}>{profile.rhythm.toUpperCase()}</div>
+            </div>
+            <RaceDna profile={profile} />
+          </div>
+        </section>
+
         <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(320px,.72fr)', gap: 18 }} className="circuit-grid">
           <div style={{ ...panel, overflow: 'hidden' }}>
             <div style={{ padding: '12px 16px', background: 'rgba(0,0,0,.36)', borderBottom: '1px solid rgba(255,255,255,.06)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -862,17 +1012,17 @@ export default function CircuitPage() {
         </section>
 
         <section style={{ display: 'grid', gridTemplateColumns: 'minmax(280px,.8fr) minmax(0,1.2fr) minmax(280px,.8fr)', gap: 18 }} className="circuit-grid">
-          <div style={{ ...panel, padding: 18 }}>
-            <div style={{ fontFamily: mono, fontSize: 9, color: 'rgba(255,255,255,.3)', letterSpacing: '.14em', marginBottom: 15 }}>SETUP PRIORITIES</div>
-            <div style={{ display: 'grid', gap: 14 }}>
+          <div style={{ ...panel, padding: 18, background: 'linear-gradient(180deg, rgba(225,6,0,.08), rgba(0,0,0,.28))' }}>
+            <div style={{ fontFamily: mono, fontSize: 9, color: 'rgba(255,255,255,.3)', letterSpacing: '.14em', marginBottom: 18 }}>SETUP PRIORITIES</div>
+            <div style={{ display: 'grid', gap: 18 }}>
               {profile.priorities.map(item => (
-                <div key={item.label}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 7 }}>
-                    <span style={{ fontFamily: mono, fontSize: 10, color: 'rgba(255,255,255,.6)' }}>{item.label}</span>
-                    <span style={{ fontFamily: mono, fontSize: 10, color: 'rgba(255,255,255,.35)' }}>{item.note}</span>
+                <div key={item.label} style={{ display: 'grid', gridTemplateColumns: '52px 1fr', gap: 12, alignItems: 'center' }}>
+                  <div style={{ width: 52, height: 52, borderRadius: '50%', display: 'grid', placeItems: 'center', border: '1px solid rgba(255,255,255,.1)', background: `conic-gradient(${item.value > 85 ? '#E10600' : item.value > 70 ? '#F59E0B' : 'rgba(255,255,255,.55)'} ${item.value * 3.6}deg, rgba(255,255,255,.08) 0deg)` }}>
+                    <div style={{ width: 34, height: 34, borderRadius: '50%', display: 'grid', placeItems: 'center', background: '#080A0D', fontFamily: bebas, fontSize: 18 }}>{item.value}</div>
                   </div>
-                  <div style={{ height: 6, borderRadius: 999, background: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
-                    <div style={{ width: clampPct(item.value), height: '100%', background: item.value > 85 ? '#E10600' : item.value > 70 ? '#F59E0B' : 'rgba(255,255,255,.55)' }} />
+                  <div>
+                    <div style={{ fontFamily: bebas, fontSize: 24, lineHeight: .95, letterSpacing: '.03em' }}>{item.label}</div>
+                    <div style={{ marginTop: 6, fontFamily: mono, fontSize: 10, color: 'rgba(255,255,255,.42)' }}>{item.note}</div>
                   </div>
                 </div>
               ))}
@@ -944,6 +1094,12 @@ export default function CircuitPage() {
           .dossier-cols {
             grid-template-columns: 1fr !important;
           }
+          .winner-wall {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+          .race-dna {
+            grid-template-columns: 1fr !important;
+          }
         }
         @media (max-width: 560px) {
           main {
@@ -952,6 +1108,9 @@ export default function CircuitPage() {
           }
           select {
             min-width: 100% !important;
+          }
+          .winner-wall {
+            grid-template-columns: 1fr !important;
           }
         }
       `}</style>
