@@ -26,15 +26,6 @@ snowflake.log
 .DS_Store
 .vscode/
 
-# Claude / agent tooling
-.claude/
-.agents/
-skills-lock.json
-
-# reel assets (videos / generated renders)
-reel/videos/
-reel/miami-gp-2026/
-
 # cache / data artifacts
 etl/cache/
 etl/etl/cache/
