@@ -1,60 +1,44 @@
 # F1 Bulletin
 
-F1 Bulletin started as "let me see how F1 analytics works" and slowly turned into a live Formula 1 data product: part news hub, part race analytics notebook, part prediction experiment.
+F1 Bulletin is a Formula 1 data product that combines race analytics, news intelligence, circuit context, standings, and prediction workflows in one race-weekend dashboard.
 
-## Why I Built It
+## Background
 
-Last December, I was trying to finish all seven seasons of *Drive to Survive* and kept hearing people say, "I have the data." That sent me into the FastF1 API, where I started with a small Python and Streamlit app for lap analysis, strategy, sector times, and circuit replay.
+The project began as an exploration of FastF1 data after watching *Drive to Survive*. It started with a small Python and Streamlit app for lap analysis, strategy, sector times, and circuit replay.
 
-This season, I picked it back up with a simpler idea: scrape F1 news into one place. I also wanted to try Snowflake and Next.js on a real project, so the app grew from a news feed into a fuller race weekend dashboard.
-
-Snowflake became the data engineering layer for shaping raw motorsport and news data into something useful. Neon became the app-facing database so the frontend could stay fast.
-
-## Project Highlights
-
-- Built an end-to-end F1 data product from ingestion to frontend
-- Used Snowflake and Snowflake Cortex for story grouping, clustering, and sentiment
-- Processed race and session data with Python and FastF1
-- Synced processed data into Neon for fast app reads
-- Built prediction outputs that can be scored after race results arrive
-- Designed a Next.js interface around race context, analytics, circuits, standings, and predictions
+I later rebuilt it around a broader question: what would it look like to connect race data, F1 news, model predictions, and circuit-specific context in one product? Snowflake became the data engineering layer for the news intelligence work, while Next.js became the public interface.
 
 ## What It Does
 
-- News feed with similar stories grouped across sources
-- Driver and constructor sentiment from article text
-- Race predictions using Bayesian priors, current-season data, and Monte Carlo simulations
-- Lap pace, tyre strategy, sector times, and race analytics
-- Circuit profiles and weekend context
-- Live standings and calendar views
+- Groups similar F1 stories across sources
+- Tracks driver and constructor sentiment from article text
+- Produces race predictions with Bayesian priors, current-season weighting, and Monte Carlo simulations
+- Shows lap pace, tyre strategy, sector times, and race analytics
+- Adds circuit-specific context for each race weekend
+- Displays standings and calendar views
 
-## Technical Breakdown
+## Architecture
 
-**News Intelligence**
-
-The news side started as a simple scraper, then became a pipeline for grouping similar F1 stories across sources. Snowflake handles the heavier transformation work, including clustering and sentiment-style analysis over article text.
-
-**Race Analytics**
-
-FastF1 powers the race/session data workflow. The analytics views focus on practical race-weekend questions: lap pace, stint shape, tyre strategy, sector comparisons, and replay-style circuit context.
-
-**Predictions**
-
-The prediction model starts from priors early in the season, then shifts toward current-season evidence as more races are completed. Simulations estimate win probability, podium probability, and expected points, then predictions are scored once actual race results are available.
-
-**Circuit Context**
-
-The circuit page is built around the idea that every track changes how a result should be read. It combines circuit characteristics, historical context, model outlook, and recent race-weekend data instead of treating every Grand Prix the same.
+```mermaid
+flowchart LR
+  A["Race/session data"] --> B["Python + FastF1 ETL"]
+  C["Motorsport news sources"] --> D["Snowflake + Cortex"]
+  D --> E["Story grouping, clustering, sentiment"]
+  B --> F["Race analytics + prediction features"]
+  E --> G["Neon Postgres"]
+  F --> G
+  G --> H["Next.js F1 Bulletin app"]
+```
 
 ## Methods and Design Choices
 
 **Warehouse-to-app data flow**
 
-I used Snowflake for the heavier data work because the news intelligence layer needed repeatable transformations across many sources: ingesting articles, grouping similar stories, extracting entities, and building sentiment-style signals. Neon is used as the app-facing database because the frontend needs fast reads, not warehouse-style processing on every page load.
+Snowflake handles the heavier transformation work: article ingestion, story grouping, entity extraction, clustering, and sentiment-style signals. Neon stores app-ready data so the frontend can serve fast reads without running warehouse-style processing on page load.
 
 **Current-season weighting**
 
-For predictions, I did not want the model to overtrust history when the season context changes. The model starts with historical priors, then increases the weight of current-season race evidence as more 2026 results become available.
+The prediction workflow starts with historical priors, then increases the weight of current-season race evidence as more results become available. This keeps early-season predictions anchored while allowing the model to adapt as the season develops.
 
 **Simulation over single-point ranking**
 
@@ -62,7 +46,7 @@ Instead of only ranking drivers from P1 to P20, the prediction workflow uses sim
 
 **Scored predictions**
 
-Predictions are meant to be checked after the race, not just displayed before it. Once actual results are available, the workflow can score position error, podium hits, winner accuracy, and probability quality. That feedback loop is important because it shows whether the model is improving or just looking convincing.
+Predictions are scored after actual race results are available. The workflow tracks position error, podium hits, winner accuracy, and probability quality, creating a feedback loop for model evaluation.
 
 **Circuit-specific context**
 
@@ -71,14 +55,6 @@ The circuit layer exists because track characteristics change how form should be
 ## What Makes It Different
 
 Most F1 dashboards show results, standings, or news in isolation. I wanted F1 Bulletin to connect those layers: what happened on track, what the model expected, what the circuit tends to reward, and what the news cycle is emphasizing.
-
-## What I Learned
-
-- Working with real motorsport data is messy: missing sessions, delayed timing data, changing grids, and circuit naming inconsistencies all matter.
-- Prediction quality changes a lot once current-season evidence starts to outweigh historical assumptions.
-- Snowflake is useful when the work is more than storing rows: clustering, enrichment, and repeatable transformation logic fit naturally there.
-- Keeping the frontend fast means not making the UI wait on heavy data processing.
-- A public portfolio project needs different cleanup than a private working repo: generated data, caches, and experimental branches need clear boundaries.
 
 ## Data Sources
 
