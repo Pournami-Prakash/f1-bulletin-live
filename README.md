@@ -21,13 +21,53 @@ I later rebuilt it around a broader question: what would it look like to connect
 
 ```mermaid
 flowchart LR
-  A["Race/session data"] --> B["Python + FastF1 ETL"]
-  C["Motorsport news sources"] --> D["Snowflake + Cortex"]
-  D --> E["Story grouping, clustering, sentiment"]
-  B --> F["Race analytics + prediction features"]
-  E --> G["Neon Postgres"]
-  F --> G
-  G --> H["Next.js F1 Bulletin app"]
+  subgraph Sources["Data Sources"]
+    A["FastF1<br/>laps, stints, telemetry, qualifying"]
+    B["Motorsport news feeds"]
+    C["F1 calendar + standings"]
+  end
+
+  subgraph Orchestration["Orchestration"]
+    D["GitHub Actions<br/>scheduled + manual runs"]
+  end
+
+  subgraph Processing["Processing + Intelligence"]
+    E["Python ETL<br/>race sessions + replay data"]
+    F["Prediction workflow<br/>features, priors, simulations, scoring"]
+    G["Snowflake + Cortex<br/>story grouping, clustering, sentiment"]
+    H["Sync + refresh jobs<br/>app-ready summaries"]
+  end
+
+  subgraph AppData["App Data Layer"]
+    I["Neon Postgres<br/>public app tables"]
+  end
+
+  subgraph Product["Next.js Product"]
+    J["News intelligence"]
+    K["Race analytics"]
+    L["Predictions + scoring"]
+    M["Circuit context"]
+    N["Standings + calendar"]
+  end
+
+  D --> E
+  D --> F
+  D --> G
+  D --> H
+  B --> G
+  B --> H
+  A --> E
+  E --> F
+  E --> I
+  F --> I
+  G --> H
+  H --> I
+  C --> I
+  I --> J
+  I --> K
+  I --> L
+  I --> M
+  I --> N
 ```
 
 ## Methods and Design Choices
