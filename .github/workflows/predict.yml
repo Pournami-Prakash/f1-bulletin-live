@@ -61,7 +61,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install fastf1 pandas numpy scikit-learn psycopg2-binary python-dotenv pyarrow
+          pip install fastf1 pandas numpy scikit-learn xgboost psycopg2-binary python-dotenv pyarrow
 
       - name: Create .env.local
         run: |
