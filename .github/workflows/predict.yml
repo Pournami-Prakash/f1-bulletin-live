@@ -30,6 +30,7 @@ on:
 
 env:
   NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+  FASTF1_RATE_LIMIT_WAIT_SECONDS: '30'
 
 jobs:
   predict:

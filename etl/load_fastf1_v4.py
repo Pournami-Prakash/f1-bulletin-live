@@ -42,6 +42,7 @@ f1.Cache.enable_cache(str(CACHE_DIR))
 
 REPLAY_FRAMES_PER_LAP = 64
 REPLAY_CHUNK_SIZE     = 500
+RATE_LIMIT_WAIT_SECONDS = max(1, int(os.environ.get("FASTF1_RATE_LIMIT_WAIT_SECONDS", "60")))
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
 def get_conn():
@@ -191,8 +192,8 @@ def load_sprint(season: int, round_number: int, conn) -> None:
         except Exception as e:
             err = str(e)
             if "500 calls/h" in err or "RateLimitExceeded" in err:
-                wait = 3600 if attempt == 0 else 1800
-                print(f"  ⏳ Sprint rate limit. Waiting {wait//60} min before retry {attempt+1}/3...")
+                wait = RATE_LIMIT_WAIT_SECONDS
+                print(f"  ⏳ Sprint rate limit. Waiting {wait}s before retry {attempt+1}/3...")
                 time.sleep(wait)
             elif any(x in err.lower() for x in ["does not exist", "not yet available", "failed to load", "no sprint"]):
                 print(f"  → No sprint session this round — skipping")
@@ -308,8 +309,8 @@ def load_qualifying(season: int, round_number: int, conn) -> None:
         except Exception as e:
             err = str(e)
             if "500 calls/h" in err or "RateLimitExceeded" in err:
-                wait = 3600 if attempt == 0 else 1800
-                print(f"  ⏳ Quali rate limit. Waiting {wait//60} min before retry {attempt+1}/3...")
+                wait = RATE_LIMIT_WAIT_SECONDS
+                print(f"  ⏳ Quali rate limit. Waiting {wait}s before retry {attempt+1}/3...")
                 time.sleep(wait)
             else:
                 print(f"  ✗ Qualifying skipped: {e}")
@@ -424,7 +425,7 @@ def load_practice(season: int, round_number: int, conn) -> None:
             except Exception as e:
                 err = str(e)
                 if "500 calls/h" in err or "RateLimitExceeded" in err:
-                    _time.sleep(3600)
+                    _time.sleep(RATE_LIMIT_WAIT_SECONDS)
                 elif "does not exist" in err or "not yet available" in err.lower() or "Failed to load" in err:
                     print(f"  ✗ {fp_name} skipped: {e}")
                     fp_session = None
@@ -834,7 +835,7 @@ def load_session(
         except Exception as e:
             err = str(e)
             if "500 calls/h" in err or "RateLimitExceeded" in err:
-                wait = 3600 if attempt == 0 else 1800
+                wait = RATE_LIMIT_WAIT_SECONDS
                 print(f"  ⏳ Rate limit. Waiting {wait//60} min before retry {attempt+1}/3...")
                 time.sleep(wait)
             else:
@@ -994,8 +995,8 @@ def load_season(
             break
         except Exception as e:
             if "500 calls/h" in str(e) or "RateLimitExceeded" in str(e):
-                wait = 3600 if attempt == 0 else 1800
-                print(f"  ⏳ Schedule rate limit. Waiting {wait//60} min...")
+                wait = RATE_LIMIT_WAIT_SECONDS
+                print(f"  ⏳ Schedule rate limit. Waiting {wait}s...")
                 time.sleep(wait)
             else:
                 print(f"  ✗ Cannot get schedule for {season}: {e}")
