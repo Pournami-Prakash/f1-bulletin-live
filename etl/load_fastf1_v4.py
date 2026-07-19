@@ -338,7 +338,16 @@ def load_qualifying(season: int, round_number: int, conn) -> None:
     # confirmed replacement data. If FastF1 raises DataNotLoadedError below,
     # the old rows stay intact and predict.py can still use them.
 
-    laps = q_session.laps.copy()
+    try:
+        laps = q_session.laps.copy()
+    except Exception as e:
+        # FastF1 can return the schedule/results shell while its timing API is
+        # temporarily unavailable. Let the workflow verifier decide whether a
+        # complete persisted qualifying session is already safe to use.
+        conn.rollback()
+        print(f"  ✗ Qualifying timing data unavailable: {e}")
+        cur.close()
+        return
     if laps.empty:
         print(f"  ✗ No qualifying laps found")
         cur.close()

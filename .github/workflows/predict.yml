@@ -139,10 +139,12 @@ jobs:
       - name: Load practice data
         run: |
           for attempt in 1 2 3; do
-            python load_fastf1_v4.py \
+            if ! python load_fastf1_v4.py \
               --seasons ${{ steps.vars.outputs.season }} \
               --round ${{ steps.vars.outputs.round }} \
-              --fp-only
+              --fp-only; then
+              echo "Practice loader attempt $attempt failed; verifying persisted data"
+            fi
             if python verify_session_data.py \
               --season ${{ steps.vars.outputs.season }} \
               --round ${{ steps.vars.outputs.round }} \
@@ -158,10 +160,12 @@ jobs:
       - name: Load qualifying data
         run: |
           for attempt in 1 2 3; do
-            python load_fastf1_v4.py \
+            if ! python load_fastf1_v4.py \
               --seasons ${{ steps.vars.outputs.season }} \
               --round ${{ steps.vars.outputs.round }} \
-              --quali-only
+              --quali-only; then
+              echo "Qualifying loader attempt $attempt failed; verifying persisted data"
+            fi
             if python verify_session_data.py \
               --season ${{ steps.vars.outputs.season }} \
               --round ${{ steps.vars.outputs.round }} \
