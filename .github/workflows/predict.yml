@@ -84,15 +84,19 @@ jobs:
           next_round = None
           latest_completed_round = None
           for _, event in schedule.iterrows():
-              event_date = event['EventDate']
-              if hasattr(event_date, 'tzinfo') and event_date.tzinfo is None:
-                  event_date = pd.Timestamp(event_date).tz_localize('UTC')
+              race_date = event.get('Session5DateUtc', event['EventDate'])
+              if pd.isna(race_date):
+                  race_date = event['EventDate']
+              if hasattr(race_date, 'tzinfo') and race_date.tzinfo is None:
+                  race_date = pd.Timestamp(race_date).tz_localize('UTC')
               else:
-                  event_date = pd.Timestamp(event_date)
+                  race_date = pd.Timestamp(race_date)
 
-              if event_date < pd.Timestamp(now):
+              # EventDate is often midnight UTC. Wait until six hours after
+              # the actual race start before marking a round complete.
+              if race_date + pd.Timedelta(hours=6) < pd.Timestamp(now):
                   latest_completed_round = int(event['RoundNumber'])
-              elif event_date > pd.Timestamp(now) and next_round is None:
+              elif next_round is None:
                   next_round = int(event['RoundNumber'])
 
           if next_round:
@@ -131,14 +135,43 @@ jobs:
           echo "No upcoming round detected, skipping prediction run"
           exit 0
 
+      # ── Load practice data for upcoming race ─────────────────────────────
+      - name: Load practice data
+        run: |
+          for attempt in 1 2 3; do
+            python load_fastf1_v4.py \
+              --seasons ${{ steps.vars.outputs.season }} \
+              --round ${{ steps.vars.outputs.round }} \
+              --fp-only
+            if python verify_session_data.py \
+              --season ${{ steps.vars.outputs.season }} \
+              --round ${{ steps.vars.outputs.round }} \
+              --session practice; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then sleep 300; fi
+          done
+          echo "Practice data was still incomplete after 3 attempts"
+          exit 1
+
       # ── Load qualifying data for upcoming race ────────────────────────────
       - name: Load qualifying data
         run: |
-          python load_fastf1_v4.py \
-            --seasons ${{ steps.vars.outputs.season }} \
-            --round ${{ steps.vars.outputs.round }} \
-            --quali-only
-        continue-on-error: true   # quali may not be available yet
+          for attempt in 1 2 3; do
+            python load_fastf1_v4.py \
+              --seasons ${{ steps.vars.outputs.season }} \
+              --round ${{ steps.vars.outputs.round }} \
+              --quali-only
+            if python verify_session_data.py \
+              --season ${{ steps.vars.outputs.season }} \
+              --round ${{ steps.vars.outputs.round }} \
+              --session qualifying; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then sleep 300; fi
+          done
+          echo "Qualifying data was still incomplete after 3 attempts"
+          exit 1
 
       # ── Load sprint data for sprint weekends ──────────────────────────────
       - name: Load sprint data
@@ -191,7 +224,8 @@ jobs:
         run: |
           python prediction/predict.py \
             --season ${{ steps.vars.outputs.season }} \
-            --round ${{ steps.vars.outputs.round }}
+            --round ${{ steps.vars.outputs.round }} \
+            --production
 
       # ── Summary ───────────────────────────────────────────────────────────
       - name: Print summary

@@ -1764,6 +1764,8 @@ def main():
                         help="Monte Carlo seed. Defaults to a stable season/round seed.")
     parser.add_argument("--score",          action="store_true")
     parser.add_argument("--dry-run",        action="store_true")
+    parser.add_argument("--production",     action="store_true",
+                        help="Publish under the prod_ model namespace used by the site")
     parser.add_argument("--fit-calibrator", action="store_true")
     args = parser.parse_args()
 
@@ -1802,7 +1804,8 @@ def main():
         ml_type  = 'ridge'
 
     global MODEL_VERSION
-    MODEL_VERSION = f"v4_regaware_{'xgb' if ml_type == 'xgboost' else 'ridge'}_mc"
+    model_prefix = "prod_" if args.production else ""
+    MODEL_VERSION = f"{model_prefix}v4_regaware_{'xgb' if ml_type == 'xgboost' else 'ridge'}_mc"
 
     step("Building entry list...")
     entries = get_entry_list(season, round_, artifacts)
