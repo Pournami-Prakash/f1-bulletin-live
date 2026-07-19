@@ -22,7 +22,9 @@ env:
   SNOWFLAKE_WAREHOUSE: F1_APP_WH
   SNOWFLAKE_DATABASE: F1_BULLETIN
   SNOWFLAKE_ROLE: SYSADMIN
-  APP_BASE_URL: ${{ secrets.APP_URL || 'https://f1bulletin.vercel.app' }}
+  # Use the canonical deployment directly. A redirecting APP_URL previously
+  # returned "Redirecting..." with a successful status without running POST.
+  APP_BASE_URL: https://f1bulletin.vercel.app
 
 jobs:
 
@@ -66,20 +68,28 @@ jobs:
           INGEST_KEY: ${{ secrets.INGEST_KEY }}
         run: |
           test -n "$INGEST_KEY"
-          curl --fail-with-body --retry 2 --retry-delay 5 \
+          curl --silent --show-error --fail-with-body --retry 2 --retry-delay 5 \
             -X POST \
             -H "Authorization: Bearer $INGEST_KEY" \
-            "$APP_BASE_URL/api/ingest/rss?tier=all"
+            "$APP_BASE_URL/api/ingest/rss?tier=all" \
+            -o /tmp/rss-ingest-response.json
+          jq -e '.ok == true' /tmp/rss-ingest-response.json
+          jq '{ok, attempted: .data.attempted, inserted: .data.inserted, updated: .data.updated}' \
+            /tmp/rss-ingest-response.json
 
       - name: Refresh Neon intelligence
         env:
           INGEST_KEY: ${{ secrets.INGEST_KEY }}
         run: |
           test -n "$INGEST_KEY"
-          curl --fail-with-body --retry 2 --retry-delay 5 \
+          curl --silent --show-error --fail-with-body --retry 2 --retry-delay 5 \
             -X POST \
             -H "Authorization: Bearer $INGEST_KEY" \
-            "$APP_BASE_URL/api/intelligence/refresh"
+            "$APP_BASE_URL/api/intelligence/refresh" \
+            -o /tmp/intelligence-response.json
+          jq -e '.ok == true' /tmp/intelligence-response.json
+          jq '{ok, articlesProcessed: .data.articlesProcessed, clustersSummarized: .data.clustersSummarized, driversUpdated: .data.driversUpdated}' \
+            /tmp/intelligence-response.json
 
       - name: Summary
         if: always()
