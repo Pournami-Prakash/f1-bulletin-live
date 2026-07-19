@@ -59,7 +59,7 @@ export async function GET(request: Request) {
         sc.race_name,
         sc.circuit_name,
         -- Enrich with article intelligence if available
-        ai.embedding IS NOT NULL  AS has_embedding
+        (ai.local_embedding IS NOT NULL OR ai.embedding IS NOT NULL) AS has_embedding
       FROM session_chatter sc
       LEFT JOIN article_intelligence ai USING (guid)
       WHERE sc.race_round = ${targetRound}

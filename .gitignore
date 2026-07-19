@@ -27,6 +27,7 @@ snowflake.log
 .vscode/
 
 # cache / data artifacts
+.cache/
 etl/cache/
 etl/etl/cache/
 etl/*.sqlite

@@ -1,0 +1,4 @@
+fastembed==0.7.3
+numpy>=1.26,<3
+psycopg2-binary>=2.9,<3
+python-dotenv>=1,<2

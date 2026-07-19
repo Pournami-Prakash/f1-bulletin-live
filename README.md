@@ -34,8 +34,8 @@ flowchart LR
   subgraph Processing["Processing + Intelligence"]
     E["Python ETL<br/>race sessions + replay data"]
     F["Prediction workflow<br/>features, priors, simulations, scoring"]
-    G["Snowflake + Cortex<br/>story grouping, clustering, sentiment"]
-    H["Sync + refresh jobs<br/>app-ready summaries"]
+    G["Neon-native intelligence<br/>local embeddings, clustering, sentiment"]
+    H["SQL + deterministic refresh<br/>momentum, risk, weekend summaries"]
   end
 
   subgraph AppData["App Data Layer"]
@@ -72,9 +72,9 @@ flowchart LR
 
 ## Methods and Design Choices
 
-**Warehouse-to-app data flow**
+**Incremental intelligence flow**
 
-Snowflake handles the heavier transformation work: article ingestion, story grouping, entity extraction, clustering, and sentiment-style signals. Neon stores app-ready data so the frontend can serve fast reads without running warehouse-style processing on page load.
+GitHub Actions generates embeddings locally with a compact ONNX model. Neon stores half-precision vectors and performs bounded incremental enrichment for semantic topics, sentiment, momentum, regulatory risk, session chatter, and pre-race summaries. The job skips unchanged articles, retains vectors for 180 days, and stops adding vectors at a 400 MB database guard. Snowflake remains an optional enrichment path, but the public product no longer depends on it.
 
 **Current-season weighting**
 
@@ -102,7 +102,7 @@ The project combines public race/session data, public F1 calendar and standings 
 
 ## Tech Stack
 
-Python, FastF1, Snowflake, Snowflake Cortex, Neon Postgres, Next.js, React, TypeScript, Vercel
+Python, FastF1, FastEmbed, pgvector, Neon Postgres, Snowflake (optional), Next.js, React, TypeScript, Vercel
 
 ## Note
 

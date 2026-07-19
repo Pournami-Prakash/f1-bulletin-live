@@ -97,6 +97,43 @@ jobs:
 
 
 # ----------------------------------------------------
+# NEON-NATIVE INTELLIGENCE (SNOWFLAKE-INDEPENDENT)
+# ----------------------------------------------------
+
+  neon_intelligence:
+    name: Neon-native Intelligence
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: ingest
+    if: github.event.inputs.skip_intelligence != 'true'
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/requirements-neon-intelligence.txt
+
+      - name: Cache local embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/fastembed
+          key: fastembed-bge-small-en-v1-${{ runner.os }}
+
+      - name: Install local intelligence dependencies
+        run: pip install --quiet -r scripts/requirements-neon-intelligence.txt
+
+      - name: Refresh Neon-native intelligence
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          FASTEMBED_CACHE_PATH: ~/.cache/fastembed
+        run: python3 scripts/neon_intelligence_v2.py --max-articles 500
+
+
+# ----------------------------------------------------
 # PHASE 1 INTELLIGENCE
 # ----------------------------------------------------
 

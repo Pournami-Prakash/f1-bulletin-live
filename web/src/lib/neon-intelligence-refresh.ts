@@ -209,10 +209,22 @@ async function refreshArticleIntelligence(sql: Sql, articles: ArticleSignal[]) {
       ON CONFLICT (guid) DO UPDATE SET
         title = EXCLUDED.title,
         source_type = EXCLUDED.source_type,
-        cluster_name = EXCLUDED.cluster_name,
-        semantic_cluster = EXCLUDED.semantic_cluster,
-        sentiment_score = EXCLUDED.sentiment_score,
-        sentiment_label = EXCLUDED.sentiment_label,
+        cluster_name = CASE
+          WHEN article_intelligence.local_embedding IS NOT NULL THEN article_intelligence.cluster_name
+          ELSE EXCLUDED.cluster_name
+        END,
+        semantic_cluster = CASE
+          WHEN article_intelligence.local_embedding IS NOT NULL THEN article_intelligence.semantic_cluster
+          ELSE EXCLUDED.semantic_cluster
+        END,
+        sentiment_score = CASE
+          WHEN article_intelligence.local_embedding IS NOT NULL THEN article_intelligence.sentiment_score
+          ELSE EXCLUDED.sentiment_score
+        END,
+        sentiment_label = CASE
+          WHEN article_intelligence.local_embedding IS NOT NULL THEN article_intelligence.sentiment_label
+          ELSE EXCLUDED.sentiment_label
+        END,
         priority_score = EXCLUDED.priority_score,
         published_at = EXCLUDED.published_at,
         processed_at = NOW()
