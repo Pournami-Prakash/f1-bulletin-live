@@ -1,21 +1,23 @@
 # F1 Bulletin
 
-F1 Bulletin is a Formula 1 data product that combines race analytics, news intelligence, circuit context, standings, and prediction workflows in one race-weekend dashboard.
+[**View the live dashboard**](https://f1bulletin.pournamiprakash.dev)
+
+F1 Bulletin brings race analytics, news intelligence, circuit context, standings, and probabilistic predictions into one Formula 1 race-weekend dashboard.
 
 ## Background
 
-The project began as an exploration of FastF1 data after watching *Drive to Survive*. It started with a small Python and Streamlit app for lap analysis, strategy, sector times, and circuit replay.
+The project began as a small FastF1 and Streamlit experiment for exploring lap pace, strategy, sector times, and circuit replays. It later grew around a broader question: what would it look like to connect race data, F1 news, model predictions, and circuit-specific context in one product?
 
-I later rebuilt it around a broader question: what would it look like to connect race data, F1 news, model predictions, and circuit-specific context in one product? Snowflake became the data engineering layer for the news intelligence work, while Next.js became the public interface.
+The current version uses Next.js for the public experience and Neon Postgres for the application data layer. Snowflake, which supported an earlier stage of the news-intelligence pipeline, remains available as an optional enrichment path.
 
-## What It Does
+## Highlights
 
-- Groups similar F1 stories across sources
+- Groups related stories across motorsport news sources
 - Tracks driver and constructor sentiment from article text
-- Produces race predictions with Bayesian priors, current-season weighting, and Monte Carlo simulations
-- Shows lap pace, tyre strategy, sector times, and race analytics
-- Adds circuit-specific context for each race weekend
-- Displays standings and calendar views
+- Produces race predictions using historical priors, current-season evidence, and Monte Carlo simulation
+- Explores lap pace, tyre strategy, sector times, and race sessions
+- Adds circuit characteristics and historical context to each weekend
+- Brings predictions, results, standings, and the race calendar into one interface
 
 ## Architecture
 
@@ -70,40 +72,42 @@ flowchart LR
   I --> N
 ```
 
-## Methods and Design Choices
+## Model and Data Design
 
-**Incremental intelligence flow**
+### Incremental intelligence
 
-GitHub Actions generates embeddings locally with a compact ONNX model. Neon stores half-precision vectors and performs bounded incremental enrichment for semantic topics, sentiment, momentum, regulatory risk, session chatter, and pre-race summaries. The job skips unchanged articles, retains vectors for 180 days, and stops adding vectors at a 400 MB database guard. Snowflake remains an optional enrichment path, but the public product no longer depends on it.
+GitHub Actions generates embeddings with a compact ONNX model. Neon stores half-precision vectors and supports bounded, incremental enrichment for semantic topics, sentiment, momentum, regulatory risk, session chatter, and pre-race summaries. The workflow skips unchanged articles, retains vectors for 180 days, and stops adding vectors at a 400 MB database guard.
 
-**Current-season weighting**
+### Adaptive season weighting
 
-The prediction workflow starts with historical priors, then increases the weight of current-season race evidence as more results become available. This keeps early-season predictions anchored while allowing the model to adapt as the season develops.
+The prediction workflow begins with historical priors, then gives current-season evidence more weight as results accumulate. This anchors early-season predictions while allowing the model to adapt as the year develops.
 
-**Simulation over single-point ranking**
+### Probabilities, not just rankings
 
-Instead of only ranking drivers from P1 to P20, the prediction workflow uses simulations to produce probabilities. That makes the output more useful because a driver can be ranked second while still having a very different win or podium probability from another driver nearby.
+Monte Carlo simulations produce win, podium, and finishing-position probabilities rather than only a P1-to-P20 ranking. Predictions are scored after each race using position error, podium hits, winner accuracy, and probability quality.
 
-**Scored predictions**
+### Circuit-aware context
 
-Predictions are scored after actual race results are available. The workflow tracks position error, podium hits, winner accuracy, and probability quality, creating a feedback loop for model evaluation.
+Track characteristics change how form should be interpreted. The circuit layer distinguishes factors such as tyre degradation, overtaking difficulty, street-circuit behavior, and power sensitivity.
 
-**Circuit-specific context**
+## Why It Matters
 
-The circuit layer exists because track characteristics change how form should be interpreted. A good prediction page should know the difference between a high-degradation race, a street circuit, a low-overtaking track, and a power-sensitive layout.
+Following a Formula 1 weekend often means piecing together results, timing data, standings, circuit characteristics, predictions, and news from separate sources. That makes it difficult to see how the story around a race connects to what is happening on track.
 
-## What Makes It Different
+F1 Bulletin brings those signals together so each one adds context to the others: lap pace can be read alongside tyre strategy, predictions can be interpreted against circuit characteristics, and news trends can be compared with current performance. The result is a clearer view of not only what happened, but why it may have happened and what could happen next.
 
-Most F1 dashboards show results, standings, or news in isolation. I wanted F1 Bulletin to connect those layers: what happened on track, what the model expected, what the circuit tends to reward, and what the news cycle is emphasizing.
+The prediction workflow is also evaluated after each race. Tracking position error, podium hits, winner accuracy, and probability quality makes the model's performance visible instead of presenting predictions as unsupported certainty.
 
 ## Data Sources
 
-The project combines public race/session data, public F1 calendar and standings data, and motorsport news sources. FastF1 is used for session-level race analytics, while news and standings data are processed into app-ready views.
+The project combines public race-session data, calendar and standings data, and motorsport news feeds. FastF1 supports session-level analytics; other sources are processed into app-ready news, context, and standings views.
 
 ## Tech Stack
 
-Python, FastF1, FastEmbed, pgvector, Neon Postgres, Snowflake (optional), Next.js, React, TypeScript, Vercel
+- **Frontend:** Next.js, React, TypeScript, Framer Motion, Vercel
+- **Data and modeling:** Python, FastF1, FastEmbed, pgvector, Neon Postgres
+- **Orchestration and enrichment:** GitHub Actions, SQL, Snowflake (optional)
 
-## Note
+## Disclaimer
 
-This is an independent fan project and is not affiliated with Formula 1.
+F1 Bulletin is an independent fan project. It is not affiliated with, endorsed by, or associated with Formula 1, the FIA, or any Formula 1 team.

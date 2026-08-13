@@ -1,6 +1,7 @@
 // app/layout.tsx
 import type { Metadata } from 'next'
 import { Bebas_Neue, JetBrains_Mono } from 'next/font/google'
+import { siteDescription, siteName, siteUrl } from '@/lib/site-metadata'
 import './globals.css'
 
 const bebas = Bebas_Neue({
@@ -17,12 +18,46 @@ const mono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'F1 Bulletin - Live F1 News and Race Analytics',
-  description: 'Track the latest F1 headlines, race analytics, standings, schedule, and circuit insights in one live dashboard.',
+  metadataBase: new URL(siteUrl),
+  applicationName: siteName,
+  title: {
+    default: 'F1 Bulletin | Live F1 News, Analytics & Predictions',
+    template: `%s | ${siteName}`,
+  },
+  description: siteDescription,
+  alternates: { canonical: '/' },
+  category: 'sports',
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    },
+  },
   openGraph: {
-    title: 'F1 Bulletin - Live F1 News and Race Analytics',
-    description: 'Track the latest F1 headlines, race analytics, standings, schedule, and circuit insights in one live dashboard.',
     type: 'website',
+    url: '/',
+    siteName,
+    title: 'F1 Bulletin | Live F1 News, Analytics & Predictions',
+    description: siteDescription,
+    images: [
+      {
+        url: '/opengraph-image',
+        width: 1200,
+        height: 630,
+        alt: 'F1 Bulletin — live Formula 1 intelligence',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'F1 Bulletin | Live F1 News, Analytics & Predictions',
+    description: siteDescription,
+    images: ['/opengraph-image'],
   },
 }
 
@@ -33,9 +68,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${bebas.variable} ${mono.variable}`}>
-      <head>
-        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏎️</text></svg>" />
-      </head>
       <body>{children}</body>
     </html>
   )
