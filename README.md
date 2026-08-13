@@ -73,15 +73,53 @@ The flow is incremental by design: unchanged articles are skipped, vectors are r
 
 ```mermaid
 flowchart LR
-    A["FastF1 sessions, telemetry + timing"] --> D["Python ETL + race features"]
-    B["Motorsport news feeds"] --> E["Embeddings, clustering + sentiment"]
-    C["Calendar, standings + circuit context"] --> F["App-ready context"]
-    D --> G["Prediction, simulation + scoring"]
-    E --> H["Neon Postgres"]
-    F --> H
-    G --> H
-    H --> I["Next.js F1 Bulletin"]
-    I --> J["Intelligence, analytics, predictions + circuit views"]
+  subgraph Sources["Data Sources"]
+    A["FastF1<br/>laps, stints, telemetry, qualifying"]
+    B["Motorsport news feeds"]
+    C["F1 calendar + standings"]
+  end
+
+  subgraph Orchestration["Orchestration"]
+    D["GitHub Actions<br/>scheduled + manual runs"]
+  end
+
+  subgraph Processing["Processing + Intelligence"]
+    E["Python ETL<br/>race sessions + replay data"]
+    F["Prediction workflow<br/>features, priors, simulations, scoring"]
+    G["Neon-native intelligence<br/>local embeddings, clustering, sentiment"]
+    H["SQL + deterministic refresh<br/>momentum, risk, weekend summaries"]
+  end
+
+  subgraph AppData["App Data Layer"]
+    I["Neon Postgres<br/>public app tables"]
+  end
+
+  subgraph Product["Next.js Product"]
+    J["News intelligence"]
+    K["Race analytics"]
+    L["Predictions + scoring"]
+    M["Circuit context"]
+    N["Standings + calendar"]
+  end
+
+  D --> E
+  D --> F
+  D --> G
+  D --> H
+  B --> G
+  B --> H
+  A --> E
+  E --> F
+  E --> I
+  F --> I
+  G --> H
+  H --> I
+  C --> I
+  I --> J
+  I --> K
+  I --> L
+  I --> M
+  I --> N
 ```
 
 GitHub Actions orchestrates ingestion, intelligence refreshes, session loading, prediction generation, and post-race scoring. Heavy processing stays in Python and SQL; the public Next.js product reads compact, app-ready data from Neon.
