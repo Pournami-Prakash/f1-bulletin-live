@@ -1663,7 +1663,7 @@ def score_prediction(season: int, round_: int) -> None:
         SELECT driver_code, predicted_position, win_probability, podium_probability
         FROM predictions
         WHERE season=%s AND round=%s AND model_version=%s
-        ORDER BY win_probability DESC
+        ORDER BY predicted_position ASC, driver_code
     """, (season, round_, score_model_version))
     actuals = query("""
         SELECT r.driver_code, r.finish_position, r.points

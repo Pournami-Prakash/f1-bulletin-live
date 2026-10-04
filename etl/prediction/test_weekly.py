@@ -27,14 +27,19 @@ class WeeklyTests(unittest.TestCase):
         with patch.object(weekly.fastf1, "get_event_schedule", return_value=pd.DataFrame(events)), \
              patch.object(weekly, "state", side_effect=state), \
              patch.object(weekly.sys, "argv", ["weekly.py", "--season", "2020"]), \
+             patch.object(weekly, "result_urls", return_value={}), \
+             patch.object(weekly, "reconcile") as reconcile, \
+             patch.object(weekly.psycopg2, "connect"), \
              patch.object(weekly, "run") as run:
             weekly.main()
+            self.reconciled = reconcile.call_count
             return run.call_args_list
 
     def test_existing_forecast_scored_without_practice(self):
         calls = self.execute([event()], [(22, 0, 22)])
         self.assertEqual(len(calls), 1)
         self.assertIn("--score", calls[0].args)
+        self.assertEqual(self.reconciled, 1)
 
     def test_off_week_waits_without_loading_future_sessions(self):
         self.assertEqual(self.execute([event(year=2099)], [(0, 0, 0)]), [])

@@ -564,7 +564,7 @@ export default function PredictionsPage() {
                 <div style={{ fontSize: 9, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.14em', marginBottom: 12 }}>MODEL NOTES</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
                   {[
-                    { label: 'METHOD',          value: 'Bayesian Prior + Ridge Regression + Monte Carlo' },
+                    { label: 'METHOD',          value: racesDone >= 8 ? 'Bayesian Prior + XGBoost + Monte Carlo' : 'Bayesian Prior + Ridge Regression + Monte Carlo' },
                     { label: 'SIMULATIONS',      value: `${data.simulation_runs.toLocaleString()} race simulations` },
                     { label: '2026 DATA WEIGHT', value: `${(data.data_weight_2026 * 100).toFixed(0)}% (grows each race)` },
                     { label: 'NEXT MILESTONE',   value: racesDone < 8 ? `R8: XGBoost activates (${8 - racesDone} races away)` : racesDone < 16 ? `R16: Calibration kicks in (${16 - racesDone} races away)` : 'Full model active' },

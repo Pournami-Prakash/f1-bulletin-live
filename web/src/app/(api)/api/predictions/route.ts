@@ -121,12 +121,14 @@ export async function GET(request: Request) {
     const accuracy = accuracyRows as unknown as AccuracyRow[]
 
     const standingsRows = await sql`
-      SELECT r.driver_code, r.team, SUM(r.points)::numeric AS actual_points
+      SELECT r.driver_code,
+             (ARRAY_AGG(r.team ORDER BY s.round DESC, s.date DESC))[1] AS team,
+             SUM(r.points)::numeric AS actual_points
       FROM results r
       JOIN sessions s ON s.id = r.session_id
       WHERE s.season = ${targetSeason}
         AND s.session_type IN ('R', 'S')
-      GROUP BY r.driver_code, r.team
+      GROUP BY r.driver_code
       ORDER BY actual_points DESC
     `
     const standings = standingsRows as unknown as StandingRow[]

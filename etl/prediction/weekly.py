@@ -18,6 +18,7 @@ import fastf1
 import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
+from official_results import reconcile, result_urls
 
 ETL = Path(__file__).resolve().parents[1]
 load_dotenv(ETL.parent / "web" / ".env.local")
@@ -76,6 +77,7 @@ def main():
     args = parser.parse_args()
     now = pd.Timestamp.now(tz="UTC")
     schedule = fastf1.get_event_schedule(args.season, include_testing=False)
+    official_urls = None
     for _, event in schedule.sort_values("RoundNumber").iterrows():
         number = int(event["RoundNumber"])
         if number < args.from_round or (args.through_round and number > args.through_round):
@@ -110,6 +112,10 @@ def main():
             if state(args.season, number)[2] < 15:
                 raise RuntimeError(f"R{number}: prediction was not persisted")
         if completed:
+            if official_urls is None:
+                official_urls = result_urls(args.season)
+            with psycopg2.connect(os.environ["NEON_DATABASE_URL"], connect_timeout=30) as connection:
+                reconcile(connection, args.season, number, event["EventName"], official_urls)
             run("prediction/predict.py", "--season", args.season, "--round", number, "--score")
         else:
             break
