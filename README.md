@@ -126,6 +126,28 @@ GitHub Actions orchestrates ingestion, intelligence refreshes, session loading, 
 
 ## Data Foundation
 
+### Keeping predictions current
+
+The prediction workflow checks every six hours Friday through Monday. It processes
+completed rounds in order, loads missing results, preserves existing predictions,
+and scores them before advancing. Missing forecasts are reconstructed under a
+`prod_backfill_` model version. After catching up, it waits until two hours after
+qualifying and before race start to publish the next forecast. Missing practice
+does not prevent scoring; missing qualifying or race results stops catch-up with
+an error so a later round cannot silently skip a gap.
+
+Run `python etl/prediction/weekly.py --season 2026 --plan` for a read-only report,
+or omit `--plan` to reconcile. `--from-round` and `--through-round` bound a run.
+GitHub Actions also supports manual dispatch with a read-only plan option.
+
+Each new forecast rebuilds its feature artifacts in a temporary directory.
+Query-local session filters hide the target race and all later rounds from
+features and prediction queries while retaining that weekend's pre-race sessions.
+Existing calibration artifacts are not reused. Backfills use today's model and
+configuration with historical session data, so they are retrospective evaluations,
+not proof of forecasts issued at the time or a reconstruction of subsequently
+corrected source records. Their real generation timestamps are retained.
+
 The project combines public Formula 1 session data, timing and telemetry, calendar and standings feeds, circuit context, motorsport news sources, and generated prediction artifacts. FastF1 supports session-level analytics, while the remaining sources are processed into product-ready intelligence and context views.
 
 ## Built With

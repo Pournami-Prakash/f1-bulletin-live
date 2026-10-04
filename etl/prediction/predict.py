@@ -22,6 +22,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 import psycopg2
+from asof import bounded_sql
 from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
@@ -38,7 +39,7 @@ DATABASE_URL = os.environ.get("NEON_DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("NEON_DATABASE_URL not found in web/.env.local")
 
-FEATURES_DIR  = Path("features_output")
+FEATURES_DIR  = Path(os.environ.get("F1_FEATURES_DIR", "features_output"))
 MODEL_VERSION = "v4_regulation_aware_mc"
 MC_RUNS       = 500
 RACES_PER_SEASON = 22
@@ -239,7 +240,7 @@ def get_conn():
 
 def query(sql: str, params=None) -> pd.DataFrame:
     conn = get_conn()
-    df = pd.read_sql(sql, conn, params=params)
+    df = pd.read_sql(bounded_sql(sql), conn, params=params)
     conn.close()
     return df
 
@@ -274,6 +275,8 @@ def prediction_confidence(season: int, completed_2026_races: int) -> float:
     return min(0.30 + evidence_ratio * 0.65, 0.95)
 
 def get_race_distance(season: int, round_: int, circuit: str) -> int:
+    if os.environ.get("F1_ASOF_ROUND"):
+        return int(RACE_LAPS_BY_CIRCUIT.get(canonical_circuit(circuit), 58))
     try:
         row = query("""
             SELECT race_laps
@@ -1805,6 +1808,8 @@ def main():
 
     global MODEL_VERSION
     model_prefix = "prod_" if args.production else ""
+    if os.environ.get("F1_BACKFILL") == "1":
+        model_prefix += "backfill_"
     MODEL_VERSION = f"{model_prefix}v4_regaware_{'xgb' if ml_type == 'xgboost' else 'ridge'}_mc"
 
     step("Building entry list...")

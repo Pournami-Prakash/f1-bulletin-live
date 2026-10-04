@@ -1,245 +1,59 @@
 name: F1 Race Predictions
 
 on:
-  # Run every Saturday at 23:00 UTC — qualifying ends ~21:00 UTC in most TZs,
-  # then FastF1 needs ~30-60 min to publish data, so 23:00 UTC is safe.
   schedule:
-    - cron: '0 23 * * 6'
-  # Also allow manual trigger with custom round
+    # Check throughout race weekends for qualifying publication and race results.
+    - cron: '17 */6 * * 0,1,5,6'
   workflow_dispatch:
     inputs:
       season:
-        description: 'Season year'
-        required: true
-        default: '2026'
-        type: string
-      round:
-        description: 'Round number'
-        required: true
-        default: '5'
-        type: string
-      score_round:
-        description: 'Round to score (leave empty to skip)'
+        description: 'Season (empty uses current UTC year)'
         required: false
         type: string
-      dry_run:
-        description: 'Dry run (no DB write)'
-        required: false
+      from_round:
+        description: 'First round to reconcile'
+        default: '1'
+        type: string
+      plan:
+        description: 'Read-only status, no ingestion or database writes'
         default: false
         type: boolean
 
-env:
-  NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
-  FASTF1_RATE_LIMIT_WAIT_SECONDS: '30'
+concurrency:
+  group: f1-predictions
+  cancel-in-progress: false
 
 jobs:
   predict:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: etl
-
+    timeout-minutes: 180
+    env:
+      NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+      FASTF1_RATE_LIMIT_WAIT_SECONDS: '30'
+      PYTHONUNBUFFERED: '1'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
-
-      - name: Cache FastF1 data
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
-          path: ~/.cache/fastf1
-          # New key each run so fresh data is always saved.
-          # restore-keys falls back to the most recent run's cache,
-          # so previously loaded sessions are reused when FastF1 API is slow.
+          path: |
+            ~/.cache/fastf1
+            etl/cache
           key: fastf1-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            fastf1-${{ runner.os }}-
-
+          restore-keys: fastf1-${{ runner.os }}-
       - name: Install dependencies
+        run: pip install fastf1 pandas numpy scikit-learn xgboost psycopg2-binary python-dotenv pyarrow
+      - name: Reconcile predictions and scores chronologically
+        env:
+          SEASON: ${{ inputs.season }}
+          FROM_ROUND: ${{ inputs.from_round }}
+          PLAN: ${{ inputs.plan }}
+        shell: bash
         run: |
-          pip install fastf1 pandas numpy scikit-learn xgboost psycopg2-binary python-dotenv pyarrow
-
-      - name: Create .env.local
-        run: |
-          echo "NEON_DATABASE_URL=${{ secrets.NEON_DATABASE_URL }}" > ../web/.env.local
-
-      - name: Detect current round (scheduled run)
-        if: github.event_name == 'schedule'
-        id: detect_round
-        run: |
-          python - <<'EOF'
-          import fastf1 as f1
-          import pandas as pd
-          from datetime import datetime, timezone
-          import os
-
-          schedule = f1.get_event_schedule(2026, include_testing=False)
-          now = datetime.now(timezone.utc)
-
-          # Find the next upcoming race
-          next_round = None
-          latest_completed_round = None
-          for _, event in schedule.iterrows():
-              race_date = event.get('Session5DateUtc', event['EventDate'])
-              if pd.isna(race_date):
-                  race_date = event['EventDate']
-              if hasattr(race_date, 'tzinfo') and race_date.tzinfo is None:
-                  race_date = pd.Timestamp(race_date).tz_localize('UTC')
-              else:
-                  race_date = pd.Timestamp(race_date)
-
-              # EventDate is often midnight UTC. Wait until six hours after
-              # the actual race start before marking a round complete.
-              if race_date + pd.Timedelta(hours=6) < pd.Timestamp(now):
-                  latest_completed_round = int(event['RoundNumber'])
-              elif next_round is None:
-                  next_round = int(event['RoundNumber'])
-
-          if next_round:
-              print(f"Next round: {next_round}")
-              print(f"Latest completed round: {latest_completed_round or ''}")
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write(f"round={next_round}\n")
-                  f.write(f"season=2026\n")
-                  f.write(f"score_round={latest_completed_round or ''}\n")
-          else:
-              print("No upcoming rounds found")
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write("round=0\n")
-                  f.write("season=2026\n")
-                  f.write(f"score_round={latest_completed_round or ''}\n")
-          EOF
-
-      - name: Set round variables
-        id: vars
-        run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "season=${{ steps.detect_round.outputs.season }}" >> $GITHUB_OUTPUT
-            echo "round=${{ steps.detect_round.outputs.round }}" >> $GITHUB_OUTPUT
-            echo "score_round=${{ steps.detect_round.outputs.score_round }}" >> $GITHUB_OUTPUT
-            echo "dry_run=false" >> $GITHUB_OUTPUT
-          else
-            echo "season=${{ inputs.season }}" >> $GITHUB_OUTPUT
-            echo "round=${{ inputs.round }}" >> $GITHUB_OUTPUT
-            echo "score_round=${{ inputs.score_round }}" >> $GITHUB_OUTPUT
-            echo "dry_run=${{ inputs.dry_run }}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Skip if no upcoming round
-        if: steps.vars.outputs.round == '0'
-        run: |
-          echo "No upcoming round detected, skipping prediction run"
-          exit 0
-
-      # ── Load practice data for upcoming race ─────────────────────────────
-      - name: Load practice data
-        run: |
-          for attempt in 1 2 3; do
-            if ! python load_fastf1_v4.py \
-              --seasons ${{ steps.vars.outputs.season }} \
-              --round ${{ steps.vars.outputs.round }} \
-              --fp-only; then
-              echo "Practice loader attempt $attempt failed; verifying persisted data"
-            fi
-            if python verify_session_data.py \
-              --season ${{ steps.vars.outputs.season }} \
-              --round ${{ steps.vars.outputs.round }} \
-              --session practice; then
-              exit 0
-            fi
-            if [ "$attempt" -lt 3 ]; then sleep 300; fi
-          done
-          echo "Practice data was still incomplete after 3 attempts"
-          exit 1
-
-      # ── Load qualifying data for upcoming race ────────────────────────────
-      - name: Load qualifying data
-        run: |
-          for attempt in 1 2 3; do
-            if ! python load_fastf1_v4.py \
-              --seasons ${{ steps.vars.outputs.season }} \
-              --round ${{ steps.vars.outputs.round }} \
-              --quali-only; then
-              echo "Qualifying loader attempt $attempt failed; verifying persisted data"
-            fi
-            if python verify_session_data.py \
-              --season ${{ steps.vars.outputs.season }} \
-              --round ${{ steps.vars.outputs.round }} \
-              --session qualifying; then
-              exit 0
-            fi
-            if [ "$attempt" -lt 3 ]; then sleep 300; fi
-          done
-          echo "Qualifying data was still incomplete after 3 attempts"
-          exit 1
-
-      # ── Load sprint data for sprint weekends ──────────────────────────────
-      - name: Load sprint data
-        run: |
-          python load_fastf1_v4.py \
-            --seasons ${{ steps.vars.outputs.season }} \
-            --round ${{ steps.vars.outputs.round }} \
-            --sprint-only
-        continue-on-error: true   # non-sprint rounds or in-progress sprint sessions are expected
-
-      # ── Load actual race data for scoring ─────────────────────────────────
-      - name: Load scoring race data
-        if: steps.vars.outputs.score_round != ''
-        run: |
-          python load_fastf1_v4.py \
-            --seasons ${{ steps.vars.outputs.season }} \
-            --round ${{ steps.vars.outputs.score_round }} \
-            --no-replay
-        continue-on-error: true   # scoring step will no-op if actuals are unavailable
-
-      # ── Feature engineering ───────────────────────────────────────────────
-      - name: Run feature engineering
-        run: python prediction/feature_engineering.py
-
-      # ── Score previous race (if specified) ───────────────────────────────
-      - name: Score previous race
-        if: steps.vars.outputs.score_round != ''
-        run: |
-          python prediction/predict.py \
-            --season ${{ steps.vars.outputs.season }} \
-            --round ${{ steps.vars.outputs.score_round }} \
-            --score
-
-      - name: Refit calibrator (after scoring)
-        if: steps.vars.outputs.score_round != ''
-        run: python prediction/predict.py --fit-calibrator
-        continue-on-error: true   # needs 50+ scored rows to activate
-
-      # ── Generate prediction ───────────────────────────────────────────────
-      - name: Generate prediction (dry run)
-        if: steps.vars.outputs.dry_run == 'true'
-        run: |
-          python prediction/predict.py \
-            --season ${{ steps.vars.outputs.season }} \
-            --round ${{ steps.vars.outputs.round }} \
-            --dry-run
-
-      - name: Generate prediction (write to DB)
-        if: steps.vars.outputs.dry_run != 'true'
-        run: |
-          python prediction/predict.py \
-            --season ${{ steps.vars.outputs.season }} \
-            --round ${{ steps.vars.outputs.round }} \
-            --production
-
-      # ── Summary ───────────────────────────────────────────────────────────
-      - name: Print summary
-        run: |
-          echo "✓ Prediction complete"
-          echo "  Season: ${{ steps.vars.outputs.season }}"
-          echo "  Round:  ${{ steps.vars.outputs.round }}"
-          if [ "${{ steps.vars.outputs.dry_run }}" = "true" ]; then
-            echo "  Mode:   DRY RUN"
-          else
-            echo "  Mode:   LIVE"
-          fi
+          args=()
+          if [[ -n "$SEASON" ]]; then args+=(--season "$SEASON"); fi
+          if [[ -n "$FROM_ROUND" ]]; then args+=(--from-round "$FROM_ROUND"); fi
+          if [[ "$PLAN" == 'true' ]]; then args+=(--plan); fi
+          python etl/prediction/weekly.py "${args[@]}"

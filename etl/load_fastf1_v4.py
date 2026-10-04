@@ -27,6 +27,7 @@ import fastf1 as f1
 import numpy as np
 import pandas as pd
 import psycopg2
+from psycopg2.extras import execute_batch
 import os
 from dotenv import load_dotenv
 
@@ -281,7 +282,7 @@ def load_sprint(season: int, round_number: int, conn) -> None:
         # Safe to wipe old laps now — replacement data is ready
         cur.execute("DELETE FROM laps WHERE session_id = %s", (sprint_session_id,))
         for i in range(0, len(lap_rows), 500):
-            cur.executemany("""
+            execute_batch(cur, """
                 INSERT INTO laps
                   (session_id, driver_code, lap_number, lap_time_ms,
                    s1_ms, s2_ms, s3_ms, compound, tyre_life,
@@ -396,7 +397,7 @@ def load_qualifying(season: int, round_number: int, conn) -> None:
     if rows:
         # Safe to wipe now — we have good data to replace it with
         cur.execute("DELETE FROM qualifying_laps WHERE session_id = %s", (q_session_id,))
-        cur.executemany("""
+        execute_batch(cur, """
             INSERT INTO qualifying_laps
               (session_id, driver_code, q1_ms, q2_ms, q3_ms,
                best_ms, gap_to_pole_ms, grid_position, tyre_compound)
@@ -473,7 +474,7 @@ def load_practice(season: int, round_number: int, conn) -> None:
             if best_ms_v:
                 rows.append((session_id, driver, fp_name, best_ms_v, median_ms_v, lap_count, compound))
         if rows:
-            cur.executemany("""
+            execute_batch(cur, """
                 INSERT INTO practice_laps
                   (session_id, driver_code, fp_session, best_lap_ms, median_lap_ms, lap_count, compound)
                 VALUES (%s,%s,%s,%s,%s,%s,%s)
@@ -558,7 +559,7 @@ def load_track_status(session_id: int, session: f1.core.Session, conn) -> None:
         max_lap = safe_int(laps["LapNumber"].max()) if "LapNumber" in laps.columns else prev_lap
         rows.append((session_id, prev_lap, max_lap or prev_lap, prev_label))
     if rows:
-        cur.executemany("""
+        execute_batch(cur, """
             INSERT INTO track_status (session_id, lap_start, lap_end, status_type)
             VALUES (%s,%s,%s,%s)
         """, rows)
@@ -607,7 +608,7 @@ def load_race_control_messages(session_id: int, session: f1.core.Session, conn) 
             text[:1000],
         ))
     if rows:
-        cur.executemany("""
+        execute_batch(cur, """
             INSERT INTO race_control_messages (session_id, lap_number, event_type, message)
             VALUES (%s, %s, %s, %s)
         """, rows)
@@ -675,7 +676,7 @@ def load_weather(session_id: int, session: f1.core.Session, conn) -> None:
         ))
     if rows:
         for i in range(0, len(rows), 500):
-            cur.executemany("""
+            execute_batch(cur, """
                 INSERT INTO weather
                   (session_id, lap_number, air_temp, track_temp,
                    humidity, wind_speed, wind_direction, rainfall)
@@ -761,7 +762,7 @@ def load_replay(session_id: int, session: f1.core.Session, conn) -> None:
         return
     for i in range(0, len(rows), REPLAY_CHUNK_SIZE):
         chunk = rows[i:i+REPLAY_CHUNK_SIZE]
-        cur.executemany("""
+        execute_batch(cur, """
             INSERT INTO telemetry_replay (session_id, driver_code, frame, lap_number, x, y)
             VALUES (%s, %s, %s, %s, %s, %s)
         """, chunk)
@@ -930,7 +931,7 @@ def load_session(
                     safe_int(row.get("Position")),
                 ))
             for i in range(0, len(lap_rows), 500):
-                cur.executemany("""
+                execute_batch(cur, """
                     INSERT INTO laps
                       (session_id, driver_code, lap_number, lap_time_ms,
                        s1_ms, s2_ms, s3_ms, compound, tyre_life,
@@ -960,7 +961,7 @@ def load_session(
                     prev_lap = lap_num
                 if current_compound and stint_start and prev_lap:
                     stint_rows.append((session_id, driver, stint_num, current_compound, stint_start, prev_lap, prev_lap-stint_start+1))
-            cur.executemany("""
+            execute_batch(cur, """
                 INSERT INTO stints (session_id, driver_code, stint_number, compound, start_lap, end_lap, lap_count)
                 VALUES (%s,%s,%s,%s,%s,%s,%s)
             """, stint_rows)

@@ -454,6 +454,12 @@ export default function PredictionsPage() {
           )}
 
           {/* ── ACCURACY HISTORY ── */}
+          {data?.model_version.includes('backfill_') && (
+            <p style={{ color: '#F59E0B', fontSize: 12, margin: 0 }}>
+              Historical replay: reconstructed with the current model using data available before this race.
+              This prediction was generated after the event.
+            </p>
+          )}
           {showHistory && accuracy.length > 0 && (
             <div style={{ border: '1px solid rgba(255,255,255,.07)', borderRadius: 10, overflow: 'hidden' }}>
               <div style={{ padding: '10px 16px', background: 'rgba(0,0,0,.35)', borderBottom: '1px solid rgba(255,255,255,.06)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -468,7 +474,7 @@ export default function PredictionsPage() {
               {accuracy.filter((row: any) => row.winner_correct !== null).map((row: any, i: number) => (
                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '60px 1fr 60px 80px 70px 60px', padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,.03)', background: i % 2 === 0 ? 'rgba(255,255,255,.01)' : 'transparent' }}>
                   <span style={{ fontSize: 9, color: 'rgba(255,255,255,.3)', fontFamily: mono }}>R{row.round}</span>
-                  <span style={{ fontSize: 9, color: 'rgba(255,255,255,.5)', fontFamily: mono }}>{row.gp_name?.replace(' Grand Prix', ' GP')}</span>
+                  <span style={{ fontSize: 9, color: 'rgba(255,255,255,.5)', fontFamily: mono }}>{row.gp_name?.replace(' Grand Prix', ' GP')}{row.model_version?.includes('backfill_') ? ' · REPLAY' : ''}</span>
                   <span style={{ fontSize: 10, color: row.winner_correct ? '#4ADE80' : '#E10600', fontFamily: mono }}>{row.winner_correct ? '✓' : '✗'}</span>
                   <span style={{ fontSize: 10, color: (row.podium_hits ?? 0) >= 2 ? '#4ADE80' : '#F59E0B', fontFamily: mono }}>{row.podium_hits}/3</span>
                   <span style={{ fontSize: 10, color: '#38BDF8', fontFamily: mono }}>{row.top5_hits}/5</span>

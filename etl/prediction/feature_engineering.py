@@ -22,13 +22,14 @@ import pandas as pd
 from pathlib import Path
 from dotenv import load_dotenv
 import psycopg2
+from asof import bounded_sql
 
 load_dotenv(Path(__file__).resolve().parents[2] / "web" / ".env.local")
 DATABASE_URL = os.environ.get("NEON_DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("NEON_DATABASE_URL not found in web/.env.local")
 
-OUT = Path("features_output")
+OUT = Path(os.environ.get("F1_FEATURES_DIR", "features_output"))
 OUT.mkdir(exist_ok=True)
 
 # ── Config ────────────────────────────────────────────────────
@@ -160,7 +161,7 @@ def get_conn():
 
 def query(sql: str, params=None) -> pd.DataFrame:
     conn = get_conn()
-    df = pd.read_sql(sql, conn, params=params)
+    df = pd.read_sql(bounded_sql(sql), conn, params=params)
     conn.close()
     return df
 
