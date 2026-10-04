@@ -1642,7 +1642,7 @@ def write_predictions(predictions: list[dict]) -> None:
 # ─────────────────────────────────────────────────────────────
 # SCORE PAST PREDICTION
 # ─────────────────────────────────────────────────────────────
-def score_prediction(season: int, round_: int) -> None:
+def score_prediction(season: int, round_: int, model_version: str | None = None) -> None:
     section(f"Scoring {season} R{round_}")
     version_row = query("""
         SELECT model_version FROM predictions
@@ -1657,7 +1657,7 @@ def score_prediction(season: int, round_: int) -> None:
           MAX(predicted_at) DESC
         LIMIT 1
     """, (season, round_))
-    score_model_version = version_row.iloc[0]['model_version'] if not version_row.empty else MODEL_VERSION
+    score_model_version = model_version or (version_row.iloc[0]['model_version'] if not version_row.empty else MODEL_VERSION)
 
     preds = query("""
         SELECT driver_code, predicted_position, win_probability, podium_probability

@@ -28,7 +28,9 @@ export async function GET(request: Request) {
                s.gp_name, s.circuit
         FROM prediction_accuracy pa
         JOIN sessions s ON s.season = pa.season AND s.round = pa.round AND s.session_type = 'R'
-        ORDER BY pa.season DESC, pa.round DESC, pa.evaluated_at DESC
+        ORDER BY pa.season DESC, pa.round DESC,
+                 CASE WHEN pa.model_version LIKE ${PRODUCTION_MODEL_PREFIX + '%'} THEN 0 ELSE 1 END,
+                 pa.evaluated_at DESC
         LIMIT 50
       `
       return NextResponse.json({ accuracy_history: rows })

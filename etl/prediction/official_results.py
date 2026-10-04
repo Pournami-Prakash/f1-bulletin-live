@@ -20,6 +20,17 @@ SLUGS = {
     "Qatar": "qatar", "Abu Dhabi": "abu-dhabi",
 }
 
+TEAM_ALIASES = {"Red Bull": "Red Bull Racing", "RB F1 Team": "Racing Bulls",
+                "Alpine F1 Team": "Alpine", "Cadillac F1 Team": "Cadillac"}
+
+
+def normalize_teams(connection):
+    with connection.cursor() as cursor:
+        for old, new in TEAM_ALIASES.items():
+            for table in ("results", "predictions"):
+                cursor.execute(f"UPDATE {table} SET team=%s WHERE team=%s", (new, old))
+    connection.commit()
+
 
 class ResultsHTML(HTMLParser):
     def __init__(self):
@@ -106,5 +117,6 @@ def reconcile(connection, season, round_number, event_name, urls):
                               AND s.round=%s AND s.session_type='R' AND r.driver_code=%s""",
                            (position, points, status, season, round_number, driver))
     connection.commit()
+    normalize_teams(connection)
     print(f"Official classification verified: R{round_number}, {len(rows)} drivers, {url}", flush=True)
     return rows
