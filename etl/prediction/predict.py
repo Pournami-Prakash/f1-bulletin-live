@@ -683,7 +683,9 @@ def get_target_race(season: int | None, round_: int | None) -> tuple[int, int, s
     if season and round_:
         row = query("""
             SELECT season, round, gp_name, circuit
-            FROM sessions WHERE season=%s AND round=%s AND session_type='R'
+            FROM sessions WHERE season=%s AND round=%s
+            ORDER BY CASE session_type WHEN 'R' THEN 0 WHEN 'Q' THEN 1 ELSE 2 END
+            LIMIT 1
         """, (season, round_))
         if not row.empty:
             r = row.iloc[0]
@@ -751,8 +753,7 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
             quali = pd.DataFrame()
         else:
             if int(valid_quali.sum()) < len(quali):
-                step(f"  Dropping {len(quali) - int(valid_quali.sum())} incomplete qualifying rows")
-                quali = quali[valid_quali].copy()
+                step(f"  Retaining {len(quali) - int(valid_quali.sum())} entrants without qualifying times at the back of the grid")
             quali = apply_grid_overrides(normalize_grid_positions(quali), season, round_)
             step(f"  Using qualifying data: {len(quali)} drivers")
     if quali.empty:
