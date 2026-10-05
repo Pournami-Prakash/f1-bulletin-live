@@ -131,38 +131,43 @@ USING (
    '2026-09-24'::DATE,'2026-09-24'::DATE,'2026-09-25'::DATE,'2026-09-25'::DATE,NULL,NULL,'2026-09-26'::DATE,
    '2026-09-26 11:00:00 +00:00'::TIMESTAMP_TZ,6.003,51,'1:43.009','Leclerc',2019,2,FALSE,FALSE,2026),
 
-  -- R16: Singapore  Oct 9-11  (race Sun Oct 11)  SPRINT
-  (16,'Singapore Grand Prix','Marina Bay Street Circuit','Singapore','Singapore','SG','🇸🇬',
+  -- R16: Bahrain GP held at Sepang, Malaysia  Oct 2-4  (race Sun Oct 4)
+  (16,'Bahrain Grand Prix','Sepang International Circuit','Kuala Lumpur','Malaysia','MY','🇲🇾',
+   '2026-10-02'::DATE,'2026-10-02'::DATE,'2026-10-03'::DATE,'2026-10-03'::DATE,NULL,NULL,'2026-10-04'::DATE,
+   '2026-10-04 08:00:00 +00:00'::TIMESTAMP_TZ,5.543,56,'1:34.223','Montoya',2004,2,FALSE,FALSE,2026),
+
+  -- R17: Singapore  Oct 9-11  (race Sun Oct 11)  SPRINT
+  (17,'Singapore Grand Prix','Marina Bay Street Circuit','Singapore','Singapore','SG','🇸🇬',
    '2026-10-09'::DATE,NULL,NULL,'2026-10-10'::DATE,'2026-10-09'::DATE,'2026-10-10'::DATE,'2026-10-11'::DATE,
    '2026-10-11 12:00:00 +00:00'::TIMESTAMP_TZ,4.940,62,'1:35.867','Leclerc',2023,3,TRUE,FALSE,2026),
 
-  -- R17: United States  Oct 23-25  (race Sun Oct 25)
-  (17,'United States Grand Prix','Circuit of The Americas','Austin','United States','US','🇺🇸',
+  -- R18: United States  Oct 23-25  (race Sun Oct 25)
+  (18,'United States Grand Prix','Circuit of The Americas','Austin','United States','US','🇺🇸',
    '2026-10-23'::DATE,'2026-10-23'::DATE,'2026-10-24'::DATE,'2026-10-24'::DATE,NULL,NULL,'2026-10-25'::DATE,
    '2026-10-25 19:00:00 +00:00'::TIMESTAMP_TZ,5.513,56,'1:36.169','Leclerc',2019,2,FALSE,FALSE,2026),
 
-  -- R18: Mexico  Oct 30-Nov 1  (race Sun Nov 1)
-  (18,'Mexico City Grand Prix','Autodromo Hermanos Rodriguez','Mexico City','Mexico','MX','🇲🇽',
+  -- R19: Mexico  Oct 30-Nov 1  (race Sun Nov 1)
+  (19,'Mexico City Grand Prix','Autodromo Hermanos Rodriguez','Mexico City','Mexico','MX','🇲🇽',
    '2026-10-30'::DATE,'2026-10-30'::DATE,'2026-10-31'::DATE,'2026-10-31'::DATE,NULL,NULL,'2026-11-01'::DATE,
    '2026-11-01 20:00:00 +00:00'::TIMESTAMP_TZ,4.304,71,'1:17.774','Bottas',2021,2,FALSE,FALSE,2026),
 
-  -- R19: Brazil  Nov 6-8  (race Sun Nov 8)
-  (19,'São Paulo Grand Prix','Autodromo Jose Carlos Pace','São Paulo','Brazil','BR','🇧🇷',
+  -- R20: Brazil  Nov 6-8  (race Sun Nov 8)
+  (20,'São Paulo Grand Prix','Autodromo Jose Carlos Pace','São Paulo','Brazil','BR','🇧🇷',
    '2026-11-06'::DATE,'2026-11-06'::DATE,'2026-11-07'::DATE,'2026-11-07'::DATE,NULL,NULL,'2026-11-08'::DATE,
    '2026-11-08 17:00:00 +00:00'::TIMESTAMP_TZ,4.309,71,'1:10.540','Russell',2023,2,FALSE,FALSE,2026),
 
-  -- R20: Las Vegas  Nov 19-21  (race SAT Nov 21 — Saturday race)
-  (20,'Las Vegas Grand Prix','Las Vegas Strip Circuit','Las Vegas','United States','US','🇺🇸',
+  -- R21: Las Vegas  Nov 19-21  (race SAT Nov 21 — Saturday race)
+  (21,'Las Vegas Grand Prix','Las Vegas Strip Circuit','Las Vegas','United States','US','🇺🇸',
    '2026-11-19'::DATE,'2026-11-19'::DATE,'2026-11-20'::DATE,'2026-11-20'::DATE,NULL,NULL,'2026-11-21'::DATE,
    '2026-11-21 06:00:00 +00:00'::TIMESTAMP_TZ,6.201,50,'1:35.119','Leclerc',2023,2,FALSE,FALSE,2026),
 
-  -- R21: Qatar  Nov 27-29  (race Sun Nov 29)
-  (21,'Qatar Grand Prix','Lusail International Circuit','Lusail','Qatar','QA','🇶🇦',
+  -- R22: Qatar  Nov 27-29  (race Sun Nov 29)
+  (22,'Qatar Grand Prix','Lusail International Circuit','Lusail','Qatar','QA','🇶🇦',
    '2026-11-27'::DATE,'2026-11-27'::DATE,'2026-11-28'::DATE,'2026-11-28'::DATE,NULL,NULL,'2026-11-29'::DATE,
    '2026-11-29 14:00:00 +00:00'::TIMESTAMP_TZ,5.380,57,'1:24.319','Piastri',2023,3,FALSE,FALSE,2026),
 
-  -- R22: Abu Dhabi  Dec 4-6  (race Sun Dec 6)
-  (22,'Abu Dhabi Grand Prix','Yas Marina Circuit','Abu Dhabi','United Arab Emirates','AE','🇦🇪',
+  -- R23: Abu Dhabi  Dec 4-6  (race Sun Dec 6)
+  (23,'Abu Dhabi Grand Prix','Yas Marina Circuit','Abu Dhabi','United Arab Emirates','AE','🇦🇪',
    '2026-12-04'::DATE,'2026-12-04'::DATE,'2026-12-05'::DATE,'2026-12-05'::DATE,NULL,NULL,'2026-12-06'::DATE,
    '2026-12-06 13:00:00 +00:00'::TIMESTAMP_TZ,5.281,58,'1:26.103','Leclerc',2023,2,FALSE,FALSE,2026)
 
@@ -195,7 +200,7 @@ WHEN NOT MATCHED THEN INSERT (
   src.lap_record_holder,src.lap_record_year,src.drs_zones,src.is_sprint_weekend,src.is_completed,src.season
 );
 
-DELETE FROM MART.RACE_CALENDAR WHERE season=2026 AND round > 22;
+DELETE FROM MART.RACE_CALENDAR WHERE season=2026 AND round > 23;
 
 UPDATE MART.RACE_CALENDAR SET is_completed=TRUE WHERE race_date < CURRENT_DATE() AND season=2026;
 

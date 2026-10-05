@@ -164,6 +164,8 @@ RACE_LAPS_BY_CIRCUIT = {
     'Las Vegas': 50,
     'Lusail': 57,
     'Madrid': 55,
+    'Montréal': 70,
+    'Kuala Lumpur': 56,
     'Yas Island': 58,
 }
 
@@ -182,6 +184,7 @@ CIRCUIT_ALIASES = {
     'Circuit Zandvoort': 'Zandvoort',
     'Autodromo Nazionale Monza': 'Monza',
     'Madrid Street Circuit': 'Madrid',
+    'Sepang International Circuit': 'Kuala Lumpur',
     'Baku City Circuit': 'Baku',
     'Marina Bay Street Circuit': 'Marina Bay',
     'Circuit of The Americas': 'Austin',
@@ -274,16 +277,16 @@ def prediction_confidence(season: int, completed_2026_races: int) -> float:
         return min(0.24 + evidence_ratio * 0.64, 0.88)
     return min(0.30 + evidence_ratio * 0.65, 0.95)
 
-def get_race_distance(season: int, round_: int, circuit: str) -> int:
+def get_race_distance(season: int, round_: int, circuit: str, gp_name: str | None = None) -> int:
     if os.environ.get("F1_ASOF_ROUND"):
         return int(RACE_LAPS_BY_CIRCUIT.get(canonical_circuit(circuit), 58))
     try:
         row = query("""
             SELECT race_laps
             FROM race_calendar
-            WHERE season = %s AND round = %s
+            WHERE season = %s AND race_name = %s
             LIMIT 1
-        """, (season, round_))
+        """, (season, gp_name))
         if not row.empty and pd.notna(row.iloc[0]['race_laps']):
             return int(row.iloc[0]['race_laps'])
     except Exception:
@@ -1848,7 +1851,7 @@ def main():
     step("Computing Bayesian prior...")
     priors = bayesian_prior(entries, min(n_2026_races, round_ - 1))
 
-    race_distance = get_race_distance(season, round_, circuit)
+    race_distance = get_race_distance(season, round_, circuit, gp_name)
     mc_seed = args.seed if args.seed is not None else DEFAULT_MC_SEED + season * 100 + round_
     np.random.seed(mc_seed)
     step(f"Running {MC_RUNS} Monte Carlo simulations over {race_distance} laps (seed={mc_seed})...")
