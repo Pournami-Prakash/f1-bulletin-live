@@ -249,6 +249,20 @@ weather = query("""
 """)
 step(f"Weather: {len(weather)} rows")
 
+# Qualifying-session conditions are known before the race, so they can feed the
+# forecast consistently in training and at prediction time (race-day weather cannot).
+quali_weather = query("""
+    SELECT s.season, s.round,
+           AVG(w.track_temp)::float AS quali_track_temp,
+           AVG(w.air_temp)::float   AS quali_air_temp,
+           BOOL_OR(COALESCE(w.rainfall, FALSE))::int AS quali_rain
+    FROM weather w
+    JOIN sessions s ON s.id = w.session_id
+    WHERE s.session_type = 'Q'
+    GROUP BY s.season, s.round
+""").set_index(['season', 'round'])
+step(f"Qualifying weather: {len(quali_weather)} sessions")
+
 track_status = query("""
     SELECT ts.lap_start, ts.lap_end, ts.status_type,
            s.season, s.round, s.circuit
@@ -1025,6 +1039,9 @@ for (season, round_), race in results.groupby(['season','round']):
             'air_temp':                round(avg_air_temp, 1)   if pd.notna(avg_air_temp)   else np.nan,
             'track_temp':              round(avg_track_temp, 1) if pd.notna(avg_track_temp) else np.nan,
             'had_rain':                int(had_rain),
+            'quali_track_temp':        quali_weather['quali_track_temp'].get((season, round_), np.nan),
+            'quali_air_temp':          quali_weather['quali_air_temp'].get((season, round_), np.nan),
+            'quali_rain':              quali_weather['quali_rain'].get((season, round_), np.nan),
         })
 
 features = pd.DataFrame(features_rows)
@@ -1121,6 +1138,7 @@ prediction_features = [
     'overtaking_index', 'arw_effectiveness',
     'tyre_deg_rate', 'ers_circuit_factor',
     'track_temp', 'had_rain',
+    'quali_track_temp', 'quali_air_temp', 'quali_rain',
     'pit_lane_delta_sec', 'pit_crew_speed', 'lap1_risk',
     'grid_volatility', 'front_hold_rate', 'top10_shuffle_rate',
     'sc_race_probability', 'early_sc_probability', 'middle_sc_probability',

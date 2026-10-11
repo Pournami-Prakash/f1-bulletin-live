@@ -422,6 +422,7 @@ RIDGE_FEATURES = [
     'driver_overperformance',
     'overtaking_index', 'tyre_deg_rate',
     'ers_circuit_factor', 'track_temp',
+    'quali_track_temp', 'quali_air_temp', 'quali_rain',
     'grid_volatility', 'front_hold_rate',
     'late_sc_probability', 'one_stop_rate', 'two_stop_rate',
     'first_stop_median_lap', 'early_stop_gain_advantage',
@@ -887,6 +888,14 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
     avg_track_temp = float(wx.iloc[0]['track_temp']) if not wx.empty and wx.iloc[0]['track_temp'] else 32.0
     had_rain       = bool(wx.iloc[0]['had_rain']) if not wx.empty else False
 
+    qwx = query("""
+        SELECT AVG(w.track_temp)::float AS track_temp, AVG(w.air_temp)::float AS air_temp,
+               BOOL_OR(COALESCE(w.rainfall, FALSE))::int AS rain
+        FROM weather w JOIN sessions s ON s.id = w.session_id
+        WHERE s.season=%s AND s.round=%s AND s.session_type='Q'
+    """, (season, round_))
+    quali_wx = qwx.iloc[0] if not qwx.empty and pd.notna(qwx.iloc[0]['track_temp']) else None
+
     fp_data = query("""
         SELECT pl.driver_code, pl.fp_session, pl.median_lap_ms, pl.best_lap_ms
         FROM practice_laps pl
@@ -1141,6 +1150,9 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
             'pu_uncertainty':     uncertainty,
             'track_temp':         avg_track_temp,
             'had_rain':           had_rain,
+            'quali_track_temp':   float(quali_wx['track_temp']) if quali_wx is not None else np.nan,
+            'quali_air_temp':     float(quali_wx['air_temp'])   if quali_wx is not None else np.nan,
+            'quali_rain':         float(quali_wx['rain'])       if quali_wx is not None else np.nan,
             'circuit':            circuit,
             'confidence':         confidence,
         })

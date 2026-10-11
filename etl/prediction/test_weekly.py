@@ -53,8 +53,9 @@ class WeeklyTests(unittest.TestCase):
     def test_backfill_rebuilds_isolated_artifacts_with_same_boundary(self):
         with patch.object(weekly, "run") as run:
             weekly.forecast(2026, 11, True)
-            self.assertEqual(run.call_count, 2)
-            first, second = run.call_args_list
+            self.assertEqual(run.call_count, 3)
+            weather, first, second = run.call_args_list
+            self.assertEqual(weather.args[0], "load_quali_weather.py")
             env = first.kwargs["env"]
             self.assertEqual(env["F1_ASOF_ROUND"], "2026:11")
             self.assertEqual(env["F1_BACKFILL"], "1")

@@ -104,7 +104,16 @@ def session_time(event, name):
     raise RuntimeError(f"Missing {name} start for {event['EventName']}")
 
 
+def load_quali_weather(season, round_number):
+    # Optional input: a failure leaves the weather features missing (imputed), not the forecast blocked.
+    try:
+        run("load_quali_weather.py", "--season", season, "--round", round_number)
+    except Exception as error:
+        print(f"R{round_number}: qualifying weather unavailable ({error}); continuing without it", flush=True)
+
+
 def forecast(season, round_number, completed):
+    load_quali_weather(season, round_number)
     with tempfile.TemporaryDirectory(prefix="f1-asof-") as directory:
         env = dict(os.environ, F1_ASOF_ROUND=f"{season}:{round_number}",
                    F1_FEATURES_DIR=directory, F1_BACKFILL="1" if completed else "0")
