@@ -126,6 +126,21 @@ GitHub Actions orchestrates ingestion, intelligence refreshes, session loading, 
 
 ## Data Foundation
 
+### Neon-owned calendar alongside Snowflake
+
+`scripts/neon_calendar_sync.py` refreshes the calendar directly in Neon each hour
+using FastF1's event schedule and the circuit metadata in
+`sql/neon_race_calendar.sql`. Run it with `--season 2026` for an immediate refresh.
+It needs only `NEON_DATABASE_URL`; no Snowflake connection is required.
+
+The authoritative copy is `race_calendar_neon`. The existing `race_calendar`
+remains the app's read interface. A database trigger preserves Neon-owned records
+when another writer sends an outdated calendar, so the existing Snowflake sync
+can keep running without reverting round numbers, times, or circuit details.
+Snowflake code, jobs, seed SQL, and secrets remain independent and intact.
+If the event list changes, the refresh fails rather than assigning another
+race's circuit metadata; update the Neon seed for new events before retrying.
+
 ### Keeping predictions current
 
 The prediction workflow checks every six hours Friday through Monday. It processes

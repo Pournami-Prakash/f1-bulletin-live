@@ -1,0 +1,25 @@
+name: Neon Calendar
+
+on:
+  schedule:
+    - cron: '37 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: neon-calendar
+  cancel-in-progress: false
+
+jobs:
+  calendar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install fastf1 pandas psycopg2-binary python-dotenv
+      - run: python -m unittest discover -s scripts -p test_neon_calendar_sync.py
+      - run: python scripts/neon_calendar_sync.py

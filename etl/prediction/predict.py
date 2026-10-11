@@ -278,6 +278,17 @@ def prediction_confidence(season: int, completed_2026_races: int) -> float:
     return min(0.30 + evidence_ratio * 0.65, 0.95)
 
 def get_race_distance(season: int, round_: int, circuit: str, gp_name: str | None = None) -> int:
+    # Planned calendar distance is pre-race information, unlike completed race
+    # laps. Prefer the Neon-owned copy, including during historical replays.
+    try:
+        row = query("""
+            SELECT race_laps FROM race_calendar_neon
+            WHERE season=%s AND round=%s AND race_name=%s LIMIT 1
+        """, (season, round_, gp_name))
+        if not row.empty and pd.notna(row.iloc[0]['race_laps']):
+            return int(row.iloc[0]['race_laps'])
+    except psycopg2.errors.UndefinedTable:
+        pass  # Compatible with installations before the Neon calendar migration.
     if os.environ.get("F1_ASOF_ROUND"):
         return int(RACE_LAPS_BY_CIRCUIT.get(canonical_circuit(circuit), 58))
     try:
