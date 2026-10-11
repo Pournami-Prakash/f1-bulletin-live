@@ -180,3 +180,26 @@ F1 Bulletin is the answer I built: one place to understand what happened, why it
 ## Disclaimer
 
 F1 Bulletin is an independent fan project. It is not affiliated with, endorsed by, or associated with Formula 1, Formula One Management, the FIA, or any Formula 1 team. Names and marks belong to their respective owners.
+
+### Prediction quality safeguards
+
+Forecast fields must match the source qualifying entry list, including drivers without a timed lap. The weekly reconciler verifies driver identities in each stored model version and the race classification before scoring. A partial existing forecast is preserved and reported for explicit repair instead of being silently replaced. Publication checks the race start again after computation; post-start reconstructions require a matching historical query boundary and a `backfill_` model version.
+
+The v5 regulation-aware model retains the ML / Monte Carlo blended expected finishing position when assigning the final order. Win and podium probabilities are separate estimates and are no longer adjusted merely to make them decrease down the finish-order table. Tyre-age estimates use within-stint slopes, exclude pit laps and warm-up laps, and apply an explicit 28 ms/lap fuel correction. Estimates outside 0–300 ms/lap, or with fewer than three supported stints, use conservative compound defaults. This fuel correction is an assumption, not measured fuel mass.
+
+The website labels the former confidence percentage as **data evidence**, a data-volume heuristic rather than measured accuracy. Grid labels refer to the grid used by the forecast, not verified race starting positions. Zero points and zero error remain valid displayed values. Model versions distinguish changed forecasts; previously published forecasts remain unchanged for scoring.
+
+Run the regression checks with:
+
+```sh
+.venv/bin/python -m unittest discover -s etl/prediction -p 'test*.py'
+(cd web && node --test tests/predictions.test.mjs)
+```
+
+Compare a candidate chronologically without database writes:
+
+```sh
+.venv/bin/python etl/prediction/backtest_quality.py --rounds 10 12 14 16 --baseline-ref 6cf81d6 --output /tmp/f1-quality-backtest.json
+```
+
+Each race rebuilds both versions' features with its own historical query boundary. The report includes mean absolute position error, winner/podium hits, win Brier score, and the qualifying-order baseline. A small historical comparison is a regression check, not proof of future accuracy.

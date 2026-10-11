@@ -45,6 +45,8 @@ jobs:
           restore-keys: fastf1-${{ runner.os }}-
       - name: Install dependencies
         run: pip install fastf1 pandas numpy scikit-learn xgboost psycopg2-binary python-dotenv pyarrow
+      - name: Validate prediction safeguards
+        run: python -m unittest discover -s etl/prediction -p 'test*.py'
       - name: Reconcile predictions and scores chronologically
         env:
           SEASON: ${{ inputs.season }}

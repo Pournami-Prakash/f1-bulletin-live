@@ -40,18 +40,7 @@ const bebas = 'var(--font-bebas)'
 const CDN = 'https://media.formula1.com/image/upload/c_fill,w_720/q_auto/d_common:f1:2026:fallback:driver:2026fallbackdriverright.webp/v1740000000/common/f1/2026'
 
 function gridContext(data: RacePrediction | null): GridContext {
-  if (!data) return { short: 'GRID', table: 'GRID', note: 'Starting grid' }
-  if (data.has_actuals) return { short: 'START', table: 'START', note: 'Actual race start' }
-  const predictedAt = new Date(data.predicted_at).getTime()
-  const raceHasNotStarted = data.round >= 10 && Number.isFinite(predictedAt)
-  if (raceHasNotStarted) {
-    return {
-      short: 'REF GRID',
-      table: 'REF',
-      note: 'Reference grid until qualifying is loaded',
-    }
-  }
-  return { short: 'GRID', table: 'GRID', note: 'Qualifying grid' }
+  return { short: 'MODEL GRID', table: 'GRID', note: 'Forecast grid · final starting positions unverified' }
 }
 
 const DRIVER_IMAGES: Record<string, string> = {
@@ -243,14 +232,14 @@ function DriverRow({ driver, index, mounted }: { driver: DriverPrediction; index
 }
 
 function AccuracyCard({ accuracy }: { accuracy: NonNullable<RacePrediction['accuracy']> }) {
-  const mae = accuracy.mae_position ? parseFloat(String(accuracy.mae_position)) : null
+  const mae = accuracy.mae_position != null ? parseFloat(String(accuracy.mae_position)) : null
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 1, marginTop: 1 }}>
       {[
         { label: 'WINNER',        value: accuracy.winner_correct ? '✓' : '✗',  color: accuracy.winner_correct ? '#4ADE80' : '#E10600' },
         { label: 'PODIUM HITS',   value: `${accuracy.podium_hits}/3`,           color: (accuracy.podium_hits ?? 0) >= 2 ? '#4ADE80' : '#F59E0B' },
         { label: 'TOP 5 HITS',    value: `${accuracy.top5_hits}/5`,             color: '#38BDF8' },
-        { label: 'AVG POS ERROR', value: mae ? mae.toFixed(2) : '—',           color: mae && mae < 3 ? '#4ADE80' : '#F59E0B' },
+        { label: 'AVG POS ERROR', value: mae != null ? mae.toFixed(2) : '—',           color: mae != null && mae < 3 ? '#4ADE80' : '#F59E0B' },
       ].map(k => (
         <div key={k.label} style={{ padding: '12px 16px', background: 'rgba(0,0,0,.3)', borderBottom: `2px solid ${k.color}30` }}>
           <div style={{ fontSize: 8, color: 'rgba(255,255,255,.3)', fontFamily: mono, letterSpacing: '.14em', marginBottom: 4 }}>{k.label}</div>
@@ -357,7 +346,6 @@ export default function PredictionsPage() {
 
   const top3      = data?.drivers.slice(0, 3) ?? []
   const upsets    = data?.drivers.filter(d => d.is_upset_pick) ?? []
-  const racesDone = data?.championship?.[0]?.races_done ?? 2
   const gridInfo   = gridContext(data)
 
   return (
@@ -418,10 +406,10 @@ export default function PredictionsPage() {
 
               {data ? (
                 <div style={{ padding: '8px 14px', border: `1px solid ${data.confidence < 0.4 ? 'rgba(245,158,11,.25)' : data.confidence < 0.7 ? 'rgba(56,189,248,.25)' : 'rgba(74,222,128,.25)'}`, borderRadius: 8, background: 'rgba(0,0,0,.3)', textAlign: 'center', minWidth: 100, flexShrink: 0, marginTop: 8 }}>
-                  <div style={{ fontSize: 7, color: 'rgba(255,255,255,.25)', fontFamily: mono, letterSpacing: '.12em', marginBottom: 2 }}>2026 CONFIDENCE</div>
+                  <div style={{ fontSize: 7, color: 'rgba(255,255,255,.25)', fontFamily: mono, letterSpacing: '.12em', marginBottom: 2 }}>DATA EVIDENCE</div>
                   <div style={{ fontFamily: bebas, fontSize: 32, lineHeight: 1, color: data.confidence < 0.4 ? '#F59E0B' : data.confidence < 0.7 ? '#38BDF8' : '#4ADE80' }}>{Math.round(data.confidence * 100)}%</div>
                   <div style={{ fontSize: 7, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.1em' }}>
-                    {data.confidence < 0.4 ? 'BUILDING' : data.confidence < 0.7 ? 'STABILIZING' : 'HIGH'} · EVIDENCE {data.championship?.[0]?.races_done ?? 0}/22
+                    Heuristic · not forecast accuracy
                   </div>
                 </div>
               ) : (
@@ -478,7 +466,7 @@ export default function PredictionsPage() {
                   <span style={{ fontSize: 10, color: row.winner_correct ? '#4ADE80' : '#E10600', fontFamily: mono }}>{row.winner_correct ? '✓' : '✗'}</span>
                   <span style={{ fontSize: 10, color: (row.podium_hits ?? 0) >= 2 ? '#4ADE80' : '#F59E0B', fontFamily: mono }}>{row.podium_hits}/3</span>
                   <span style={{ fontSize: 10, color: '#38BDF8', fontFamily: mono }}>{row.top5_hits}/5</span>
-                  <span style={{ fontSize: 10, color: (parseFloat(row.mae_position) ?? 99) < 3.5 ? '#4ADE80' : '#F59E0B', fontFamily: mono }}>{row.mae_position ? parseFloat(row.mae_position).toFixed(1) : '—'}</span>
+                  <span style={{ fontSize: 10, color: (parseFloat(row.mae_position) ?? 99) < 3.5 ? '#4ADE80' : '#F59E0B', fontFamily: mono }}>{row.mae_position != null ? parseFloat(row.mae_position).toFixed(1) : '—'}</span>
                 </div>
               ))}
             </div>
@@ -564,10 +552,10 @@ export default function PredictionsPage() {
                 <div style={{ fontSize: 9, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.14em', marginBottom: 12 }}>MODEL NOTES</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
                   {[
-                    { label: 'METHOD',          value: racesDone >= 8 ? 'Bayesian Prior + XGBoost + Monte Carlo' : 'Bayesian Prior + Ridge Regression + Monte Carlo' },
+                    { label: 'METHOD',          value: data.model_version.includes('v5_regaware_') ? 'ML ensemble finish order + Bayesian / Monte Carlo probabilities' : data.model_version.includes('v4_regaware_') ? 'Bayesian + Monte Carlo; legacy ML estimates excluded from final order' : `Archived model: ${data.model_version}` },
                     { label: 'SIMULATIONS',      value: `${data.simulation_runs.toLocaleString()} race simulations` },
                     { label: '2026 DATA WEIGHT', value: `${(data.data_weight_2026 * 100).toFixed(0)}% (grows each race)` },
-                    { label: 'NEXT MILESTONE',   value: racesDone < 8 ? `R8: XGBoost activates (${8 - racesDone} races away)` : racesDone < 16 ? `R16: Calibration kicks in (${16 - racesDone} races away)` : 'Full model active' },
+                    { label: 'VALIDATION', value: 'See scored forecasts below; data evidence is not calibrated accuracy' },
                   ].map(n => (
                     <div key={n.label}>
                       <div style={{ fontSize: 8, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.1em', marginBottom: 3 }}>{n.label}</div>

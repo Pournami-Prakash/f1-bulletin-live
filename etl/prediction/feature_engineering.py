@@ -23,6 +23,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import psycopg2
 from asof import bounded_sql
+from tyre_model import fit_tyre_curve
 
 load_dotenv(Path(__file__).resolve().parents[2] / "web" / ".env.local")
 DATABASE_URL = os.environ.get("NEON_DATABASE_URL")
@@ -508,24 +509,10 @@ for circuit in results['circuit'].unique():
     tyre_deg_gp[circuit] = {}
 
     for compound in ['SOFT', 'MEDIUM', 'HARD']:
-        comp_laps = circuit_laps[circuit_laps['compound']==compound]
-        if len(comp_laps) < 15:
-            continue
-        x = comp_laps['tyre_life'].values
-        y = comp_laps['lap_time_ms'].values
-        if len(x) > 3:
-            try:
-                coeffs = np.polyfit(x, y, 2)
-                tyre_deg_gp[circuit][compound] = {
-                    'quad':   round(float(coeffs[0]), 5),
-                    'linear': round(float(coeffs[1]), 3),
-                    'n_laps': len(comp_laps),
-                }
-                if compound == 'SOFT':
-                    tyre_deg[circuit] = round(float(coeffs[1]), 2)
-            except Exception:
-                if compound == 'SOFT':
-                    tyre_deg[circuit] = 80.0
+        curve = fit_tyre_curve(circuit_laps, compound)
+        tyre_deg_gp[circuit][compound] = curve
+        if compound == 'SOFT':
+            tyre_deg[circuit] = curve['linear']
 
 overtaking = results.copy()
 overtaking['positions_changed'] = abs(overtaking['grid_position'] - overtaking['finish_position'])

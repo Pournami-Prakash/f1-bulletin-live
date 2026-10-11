@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 import psycopg2
 from asof import bounded_sql
+from tyre_model import FUEL_MS_PER_LAP
 from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
@@ -40,9 +41,15 @@ if not DATABASE_URL:
     raise RuntimeError("NEON_DATABASE_URL not found in web/.env.local")
 
 FEATURES_DIR  = Path(os.environ.get("F1_FEATURES_DIR", "features_output"))
-MODEL_VERSION = "v4_regulation_aware_mc"
+MODEL_VERSION = "v5_regulation_aware_mc"
 MC_RUNS       = 500
-RACES_PER_SEASON = 22
+def races_per_season(season: int) -> int:
+    rows = query("SELECT count(*) AS total FROM race_calendar WHERE season=%s", (season,))
+    total = int(rows.iloc[0]['total']) if not rows.empty else 0
+    if total <= 0:
+        raise RuntimeError(f"Missing calendar for {season}; cannot compute season evidence")
+    return total
+
 
 SEASON_WEIGHTS = {
     2021: 0.20, 2022: 0.50, 2023: 0.75, 2024: 0.85, 2025: 0.90, 2026: 1.00,
@@ -272,7 +279,7 @@ def race_actuals_available(season: int, round_: int) -> bool:
     return not actuals.empty
 
 def prediction_confidence(season: int, completed_2026_races: int) -> float:
-    evidence_ratio = min(max(completed_2026_races / RACES_PER_SEASON, 0.0), 1.0)
+    evidence_ratio = min(max(completed_2026_races / races_per_season(season), 0.0), 1.0)
     if season >= 2026:
         return min(0.24 + evidence_ratio * 0.64, 0.88)
     return min(0.30 + evidence_ratio * 0.65, 0.95)
@@ -681,7 +688,7 @@ def project_championship(season: int) -> pd.DataFrame | None:
     # Count actual completed race result rounds, not merely scheduled sessions.
     races_done = count_completed_races(season)
 
-    races_remaining = max(0, RACES_PER_SEASON - int(races_done))
+    races_remaining = max(0, races_per_season(season) - int(races_done))
 
     proj = actual.merge(latest_pred[['driver_code','points_expected']], on='driver_code', how='left')
     proj['points_expected'] = proj['points_expected'].fillna(2.0)
@@ -1386,9 +1393,9 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
                 else:
                     deg_factor = comp_data['deg_ms_per_lap'] * effective_age
 
-                fuel_benefit   = (race_distance - lap) * 28
+                fuel_penalty   = (race_distance - lap) * FUEL_MS_PER_LAP
                 lap_noise      = np.random.normal(0, 60)
-                effective_pace = pace_ms[d] + deg_factor - fuel_benefit + lap_noise
+                effective_pace = pace_ms[d] + deg_factor + fuel_penalty + lap_noise
                 if sc_active:
                     effective_pace = np.random.normal(0, 50)
 
@@ -1494,12 +1501,12 @@ def compute_predictions(
 
         win_prob    = float((arr == 1).mean())
         podium_prob = float((arr <= 3).mean())
-        median_pos  = int(np.median(arr))
+        mean_pos  = float(arr.mean())
         points_exp  = float(np.mean([POINTS_MAP.get(p, 0) for p in sims]))
 
-        ridge_pos      = ridge_preds.get(d, median_pos) if ridge_preds else median_pos
-        rf_pos         = rf_preds.get(d, median_pos)    if rf_preds    else median_pos
-        blended_median = round(mc_weight_pos*median_pos + ridge_weight_pos*ridge_pos + rf_weight_pos*rf_pos)
+        ridge_pos      = ridge_preds.get(d, mean_pos) if ridge_preds else mean_pos
+        rf_pos         = rf_preds.get(d, mean_pos)    if rf_preds    else mean_pos
+        blended_finish = mc_weight_pos*mean_pos + ridge_weight_pos*ridge_pos + rf_weight_pos*rf_pos
 
         blended_win = mc_weight * win_prob + prior_weight * priors.get(d, 1/n)
         blended_pod = mc_weight * podium_prob + prior_weight * min(priors.get(d, 1/n) * 3, 1.0)
@@ -1520,7 +1527,7 @@ def compute_predictions(
             'circuit':            e['circuit'],
             'driver_code':        d,
             'team':               e['team'],
-            'predicted_position': int(blended_median) if ridge_preds else median_pos,
+            'predicted_position': blended_finish,
             'win_probability':    round(blended_win, 4),
             'podium_probability': round(blended_pod, 4),
             'points_expected':    round(points_exp, 2),
@@ -1541,10 +1548,8 @@ def compute_predictions(
     grid_to_entry = {e['driver_code']: e['grid_position'] for e in entries}
     for p in predictions:
         grid = grid_to_entry.get(p['driver_code'], 20)
-        if grid <= 10 and p['win_probability'] < 0.004:
-            p['win_probability'] = 0.004
-        elif grid <= 5 and p['win_probability'] < 0.008:
-            p['win_probability'] = 0.008
+        floor = 0.008 if grid <= 5 else 0.004 if grid <= 10 else 0.0
+        p['win_probability'] = max(p['win_probability'], floor)
 
     total_win = sum(p['win_probability'] for p in predictions)
     if total_win > 0:
@@ -1552,35 +1557,9 @@ def compute_predictions(
             p['win_probability']    = round(p['win_probability'] / total_win, 4)
             p['podium_probability'] = round(min(p['podium_probability'], 1.0), 4)
 
-    # Full-field race order should represent expected finishing strength, not
-    # just "most likely winner". After qualifying, win probability is extremely
-    # pole-biased, while expected points preserves race-pace, reliability, and
-    # strategy signals across all finishing positions.
-    predictions.sort(
-        key=lambda x: (
-            x['points_expected'],
-            x['podium_probability'],
-            x['win_probability'],
-        ),
-        reverse=True,
-    )
-
-    # Monotonic smoothing
-    for i in range(1, len(predictions)):
-        if predictions[i]['win_probability'] > predictions[i-1]['win_probability']:
-            avg = (predictions[i]['win_probability'] + predictions[i-1]['win_probability']) / 2
-            predictions[i-1]['win_probability'] = round(avg + 0.001, 4)
-            predictions[i]['win_probability']   = round(avg - 0.001, 4)
-    for i in range(1, len(predictions)):
-        if predictions[i]['podium_probability'] > predictions[i-1]['podium_probability'] * 1.05:
-            avg = (predictions[i]['podium_probability'] + predictions[i-1]['podium_probability']) / 2
-            predictions[i-1]['podium_probability'] = round(avg + 0.001, 4)
-            predictions[i]['podium_probability']   = round(avg - 0.001, 4)
-
-    total = sum(p['win_probability'] for p in predictions)
-    if total > 0:
-        for p in predictions:
-            p['win_probability'] = round(p['win_probability'] / total, 4)
+    # Preserve the ensemble estimate through ranking. Probabilities describe
+    # different events and must not be smoothed to match expected finish order.
+    predictions.sort(key=lambda p: (p['predicted_position'], -p['points_expected'], p['driver_code']))
 
     # Store the full-field expected-result rank. Win probability remains visible,
     # but it no longer forces the table to mirror the qualifying grid.
@@ -1592,7 +1571,34 @@ def compute_predictions(
 # ─────────────────────────────────────────────────────────────
 # WRITE TO NEON
 # ─────────────────────────────────────────────────────────────
+def validate_publication(predictions: list[dict]) -> None:
+    if not predictions:
+        raise RuntimeError("Cannot publish an empty forecast")
+    first = predictions[0]
+    season, number, version = first['season'], first['round'], first['model_version']
+    if any((p['season'], p['round'], p['model_version']) != (season, number, version) for p in predictions):
+        raise RuntimeError("Cannot publish a mixed race/model forecast")
+    if 'backfill_' in version:
+        if os.environ.get('F1_ASOF_ROUND') != f'{season}:{number}':
+            raise RuntimeError("Historical replay requires the matching query boundary")
+    else:
+        rows = query("SELECT race_start_utc FROM race_calendar WHERE season=%s AND round=%s", (season, number))
+        if rows.empty or pd.isna(rows.iloc[0]['race_start_utc']):
+            raise RuntimeError("Race start unavailable; refusing to publish an unverified pre-race forecast")
+        if pd.Timestamp.now(tz='UTC') >= pd.to_datetime(rows.iloc[0]['race_start_utc'], utc=True):
+            raise RuntimeError("Race has started; use a labelled historical replay instead")
+    roster = query("""SELECT DISTINCT q.driver_code FROM qualifying_laps q
+        JOIN sessions s ON s.id=q.session_id WHERE s.season=%s AND s.round=%s
+        AND s.session_type='Q'""", (season, number))
+    drivers = [p['driver_code'] for p in predictions]
+    if not drivers or len(drivers) != len(set(drivers)) or set(drivers) != set(roster['driver_code']):
+        raise RuntimeError("Prediction field differs from qualifying; refusing partial publication")
+    if sorted(p['predicted_position'] for p in predictions) != list(range(1, len(drivers)+1)):
+        raise RuntimeError("Prediction positions must form a complete ranking")
+
+
 def write_predictions(predictions: list[dict]) -> None:
+    validate_publication(predictions)
     conn = get_conn()
     cur  = conn.cursor()
     for p in predictions:
@@ -1751,7 +1757,7 @@ def score_prediction(season: int, round_: int, model_version: str | None = None)
 def print_predictions(predictions: list[dict], gp_name: str) -> None:
     print(f"\n  {'─'*60}")
     print(f"  RACE PREDICTIONS: {gp_name}")
-    print(f"  Model: {MODEL_VERSION}  |  {MC_RUNS} MC sims  |  Confidence: {predictions[0]['confidence']:.0%}")
+    print(f"  Model: {MODEL_VERSION}  |  {MC_RUNS} MC sims  |  Evidence index: {predictions[0]['confidence']:.0%}")
     print(f"  {'─'*60}")
     print(f"  {'POS':4} {'DRV':6} {'TEAM':22} {'WIN%':6} {'POD%':6} {'EXP PTS':8} {'GRID':5} {'UPSET'}")
     print(f"  {'─'*60}")
@@ -1768,8 +1774,8 @@ def print_predictions(predictions: list[dict], gp_name: str) -> None:
         print(f"\n  ⚡ UPSET ALERTS:")
         for u in upsets:
             print(f"    {u['driver_code']} (P{u['grid_position']} grid) → {u['win_probability']*100:.1f}% win probability")
-    print(f"\n  ⚠️  Confidence: {predictions[0]['confidence']:.0%} "
-          f"(grows each race as 2026 data accumulates)")
+    print(f"\n  ⚠️  Evidence index: {predictions[0]['confidence']:.0%} "
+          f"(data-volume heuristic, not measured forecast accuracy)")
 
 # ─────────────────────────────────────────────────────────────
 # MAIN
@@ -1825,7 +1831,7 @@ def main():
     model_prefix = "prod_" if args.production else ""
     if os.environ.get("F1_BACKFILL") == "1":
         model_prefix += "backfill_"
-    MODEL_VERSION = f"{model_prefix}v4_regaware_{'xgb' if ml_type == 'xgboost' else 'ridge'}_mc"
+    MODEL_VERSION = f"{model_prefix}v5_regaware_{'xgb' if ml_type == 'xgboost' else 'ridge'}_mc"
 
     step("Building entry list...")
     entries = get_entry_list(season, round_, artifacts)

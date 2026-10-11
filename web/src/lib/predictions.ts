@@ -156,9 +156,9 @@ export function shapeRacePrediction(params: {
       gap_to_pole_ms:     p.gap_to_pole_ms,
       rolling_avg_finish: toNumber(p.rolling_avg_finish, 10.5),
       is_upset_pick:      p.is_upset_pick,
-      upset_score:        p.upset_score ? toNumber(p.upset_score) : null,
+      upset_score:        p.upset_score != null ? toNumber(p.upset_score) : null,
       actual_position:    p.actual_position,
-      actual_points:      p.actual_points ? toNumber(p.actual_points) : null,
+      actual_points:      p.actual_points != null ? toNumber(p.actual_points) : null,
       position_error:     p.position_error,
     })),
     accuracy: shapeAccuracy(params.accuracy),
@@ -169,10 +169,10 @@ function shapeAccuracy(rows: AccuracyRow[]): PredictionAccuracy | null {
   if (rows.length === 0) return null
   const row = rows[0]
   return {
-    mae_position:   row.mae_position ? toNumber(row.mae_position) : null,
+    mae_position:   row.mae_position != null ? toNumber(row.mae_position) : null,
     winner_correct: row.winner_correct,
     podium_hits:    row.podium_hits,
     top5_hits:      row.top5_hits,
-    brier_score:    row.brier_score ? toNumber(row.brier_score) : null,
+    brier_score:    row.brier_score != null ? toNumber(row.brier_score) : null,
   }
 }

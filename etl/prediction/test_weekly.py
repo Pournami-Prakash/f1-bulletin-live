@@ -26,6 +26,8 @@ class WeeklyTests(unittest.TestCase):
     def execute(self, events, state):
         with patch.object(weekly.fastf1, "get_event_schedule", return_value=pd.DataFrame(events)), \
              patch.object(weekly, "state", side_effect=state), \
+             patch.object(weekly, "expected_roster", return_value=set(map(str, range(22)))), \
+             patch.object(weekly, "validate_fields"), \
              patch.object(weekly.sys, "argv", ["weekly.py", "--season", "2020"]), \
              patch.object(weekly, "result_urls", return_value={}), \
              patch.object(weekly, "reconcile") as reconcile, \
