@@ -94,6 +94,7 @@ CIRCUIT_TYPES = {
     'Monza':       'permanent',
     'Baku':        'street',
     'Singapore':   'street',
+    'Marina Bay':  'street',
     'Austin':      'permanent',
     'Mexico City': 'permanent',
     'São Paulo':   'permanent',
