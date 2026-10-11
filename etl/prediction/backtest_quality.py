@@ -35,8 +35,11 @@ def evaluate(directory, source, season, number):
     priors = model.bayesian_prior(entries, completed)
     np.random.seed(model.DEFAULT_MC_SEED + season*100 + number)
     sims = model.simulate_race(entries, race_distance=model.get_race_distance(season, number, circuit, gp), artifacts=artifacts)
+    kwargs = {}
+    if hasattr(model, 'robust_model'):
+        kwargs['robust'] = model.robust_model.forecast(season, number, entries, circuit)
     return model.compute_predictions(entries, sims, priors, season, number, gp,
-                                     ridge_preds=ml, rf_preds=rf, n_2026_races=completed)
+                                     ridge_preds=ml, rf_preds=rf, n_2026_races=completed, **kwargs)
 
 
 def main():

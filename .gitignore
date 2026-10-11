@@ -47,3 +47,5 @@ build/
 
 # FastF1 cache
 fastf1_http_cache.sqlite
+etl/research/*.parquet
+etl/research/*.csv
