@@ -50,6 +50,21 @@ class WeeklyTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "refusing to skip ahead"):
             self.execute([event(), event(2)], [(0, 22, 22), (0, 22, 22)])
 
+    def test_completed_roster_uses_official_classification_without_timing_feed(self):
+        with patch.object(weekly, 'classification', return_value=[('AAA', 1, 25, 'Finished'), ('BBB', 2, 18, 'Finished')]), \
+             patch.object(weekly.fastf1, 'get_session') as timing:
+            roster = weekly.expected_roster(2026, 1, event_name='Australian Grand Prix', urls={'australia': 'official'})
+        self.assertEqual(roster, {'AAA', 'BBB'})
+        timing.assert_not_called()
+
+    def test_partial_timing_roster_cannot_trigger_reingestion(self):
+        from unittest.mock import MagicMock
+        session = MagicMock()
+        session.results = pd.DataFrame({'Abbreviation': [f'A{chr(65+i//26)}{chr(65+i%26)}' for i in range(19)]})
+        with patch.object(weekly.fastf1, 'get_session', return_value=session):
+            with self.assertRaisesRegex(RuntimeError, 'complete qualifying entry list unavailable'):
+                weekly.expected_roster(2026, 1)
+
     def test_backfill_rebuilds_isolated_artifacts_with_same_boundary(self):
         with patch.object(weekly, "run") as run:
             weekly.forecast(2026, 11, True)

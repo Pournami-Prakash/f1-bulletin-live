@@ -18,7 +18,7 @@ import fastf1
 import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
-from official_results import reconcile, result_urls
+from official_results import reconcile, result_urls, classification, SLUGS
 
 ETL = Path(__file__).resolve().parents[1]
 load_dotenv(ETL.parent / "web" / ".env.local")
@@ -48,12 +48,19 @@ def state(season, round_number):
             return cur.fetchone()
 
 
-def expected_roster(season, round_number):
+def expected_roster(season, round_number, *, event_name=None, urls=None):
+    # Finished races have an authoritative entry list. Do not let a partial
+    # timing-feed fallback shrink an already complete historical classification.
+    if event_name is not None:
+        slug = SLUGS.get(event_name.removesuffix(" Grand Prix"))
+        if not urls or slug not in urls:
+            raise RuntimeError(f"No official classification URL for {event_name}")
+        return {row[0] for row in classification(urls[slug])}
     session = fastf1.get_session(season, round_number, 'Q')
     session.load(laps=False, telemetry=False, weather=False, messages=False)
     codes = session.results['Abbreviation'].dropna().astype(str)
     roster = set(codes[codes.str.fullmatch(r'[A-Z]{3}')])
-    if len(roster) < 15 or len(roster) != len(session.results):
+    if len(roster) < (22 if season == 2026 else 20) or len(roster) != len(session.results):
         raise RuntimeError(f"R{round_number}: complete qualifying entry list unavailable")
     return roster
 
@@ -149,7 +156,11 @@ def main():
         if not completed and (not ready or now >= race_time):
             print("Waiting for qualifying publication or race completion.", flush=True)
             break
-        expected = expected_roster(args.season, number)
+        if completed and official_urls is None:
+            official_urls = result_urls(args.season)
+        expected = expected_roster(args.season, number,
+                                   event_name=event["EventName"] if completed else None,
+                                   urls=official_urls)
         field_size = len(expected)
         common = ("--seasons", args.season, "--round", number)
         if completed and actuals != field_size:
