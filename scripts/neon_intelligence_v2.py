@@ -2,7 +2,7 @@
 """Incremental, Neon-native F1 news intelligence.
 
 This replaces the unavailable Snowflake enrichment path with:
-  * local FastEmbed vectors and semantic topic classification
+  * local BGE text vectors and semantic topic classification
   * semantic + lexical sentiment
   * SQL/Python momentum, regulatory, session, and pre-race intelligence
   * deterministic summaries (no model API)
@@ -214,10 +214,10 @@ def embed_articles(conn, articles: Sequence[Article], cache_dir: str) -> int:
         log.info("No new or changed articles need embeddings")
         return 0
 
-    from fastembed import TextEmbedding
+    from bge_embedding import BgeTextEmbedding
 
     log.info("Embedding %d articles with %s", len(articles), MODEL_NAME)
-    model = TextEmbedding(model_name=MODEL_NAME, cache_dir=cache_dir)
+    model = BgeTextEmbedding(model_name=MODEL_NAME, cache_dir=cache_dir)
     topic_names = list(TOPICS)
     prototype_texts = list(TOPICS.values()) + list(SENTIMENT_PROTOTYPES.values())
     prototypes = normalize(np.asarray(list(model.embed(prototype_texts)), dtype=np.float32))

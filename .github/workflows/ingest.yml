@@ -131,7 +131,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/fastembed
-          key: fastembed-bge-small-en-v1-${{ runner.os }}
+          key: bge-text-aa8f8b06-${{ runner.os }}
 
       - name: Install local intelligence dependencies
         run: pip install --upgrade pip setuptools && pip install --quiet -r scripts/requirements-neon-intelligence.txt

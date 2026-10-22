@@ -30,12 +30,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      - run: npm audit --omit=dev --audit-level=moderate
-      - name: Report development advisories
-        run: npm audit --json > /tmp/dependency-audit.json || true
-      - name: Summarize development advisories without artifact storage
-        run: |
-          node -e 'const r=require("/tmp/dependency-audit.json"); require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, "Development dependency advisories: " + JSON.stringify(r.metadata?.vulnerabilities ?? {}) + "\n")'
+      - name: Audit production and development dependencies
+        run: npm audit --audit-level=moderate
       - run: npm run build
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
@@ -49,6 +45,7 @@ jobs:
     env:
       # Import-time configuration only. Unit tests mock database access.
       NEON_DATABASE_URL: postgresql://test:test@127.0.0.1:1/test
+      VERIFY_BGE_MODEL: '1'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -59,7 +56,8 @@ jobs:
           cache: pip
           cache-dependency-path: scripts/requirements-neon-intelligence.txt
       - run: pip install --upgrade pip setuptools && pip install -r requirements.txt
+      - run: pip check
       - run: python -m unittest discover -s scripts -p 'test*.py'
       - run: python -m unittest discover -s etl/prediction -p 'test*.py'
       - name: Scan Python dependencies
-        run: pip install pip-audit && pip-audit --progress-spinner off
+        run: pip install pip-audit && python scripts/audit-python-dependencies.py

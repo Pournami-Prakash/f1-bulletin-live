@@ -1,0 +1,10 @@
+{
+  "name": "fast-glob",
+  "version": "3.3.1+f1.1",
+  "private": true,
+  "description": "Directory glob adapter for Next ESLint root discovery",
+  "main": "index.cjs",
+  "dependencies": {
+    "tinyglobby": "0.2.17"
+  }
+}

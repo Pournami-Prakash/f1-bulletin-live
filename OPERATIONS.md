@@ -16,7 +16,7 @@ Neon API access confirms organization `org-ancient-forest-42677442` is on Free. 
 
 The migration copy verified 33 table counts (excluding changing rate-budget counters), including 303 sessions, 902 predictions, and 13,021 stories; indexes, sequences, operational functions/policies, and application relation grants matched. Restricted reader/writer access, RLS, concurrent rate limits, and all three migration checks passed on AWS. Azure-only `cloud_admin` default grants to the platform `neon_superuser` role were excluded after the restore stopped on that absent platform role; application grants were retained and verified. An encrypted pre-migration dump and private verification report are under `~/.codex/private/f1-region-migration/`; the raw dump was removed. Scheduled writing workflows were temporarily paused and the source application writer login disabled during the copy. The source administrator login defaults to read-only. The AWS deployment passed staged authenticated ingestion, intelligence refresh, readiness, public reads, and unauthorized-write rejection, then was promoted. Production Vercel variables, the GitHub database secret, root `.env`, and `web/.env.local` now point to AWS; scheduled workflows were resumed. Existing immutable Azure deployments and any older Preview/Development variables have not been retroactively rewritten. Do not delete the source project until recovery requirements are reviewed; it is not kept synchronized after cutover. To consider source rollback, first reconcile AWS writes since cutover, then explicitly restore source administrator writability and application login before updating credentials/deployments. A blind rollback to the source would lose post-cutover changes.
 
-Remaining: five development-package advisory entries in the braces chain and 37 Python advisory entries across Pillow and msgpack (rechecked October 22). Their supported upstream pins still prevent the required patched versions. The production JavaScript audit is clean. GitHub account-wide billing limits and notification delivery are not verified by the available API permissions. The Python security scan deliberately remains failing for unresolved findings; no audit IDs were ignored.
+The dependency follow-up removes the previously reported braces, Pillow, and MessagePack findings. Full web audits (including development packages), fresh Python installation, and the existing local Python environment report zero findings; Python audits also reject skipped packages. No advisory IDs are ignored. The project now maintains a small lint glob adapter and a packaging-only SignalR fork; their scope, provenance, and replacement criteria are documented below. GitHub account-wide billing limits and notification delivery remain unverified.
 
 The following sections describe the setup and repeatable operations. Earlier October 20 measurements are retained as historical evidence where identified.
 
@@ -95,9 +95,9 @@ The equivalent local encrypted-backup/isolated-Docker restore procedure passed o
 - Six read-only requests through the local production server successfully read real Neon data, including the new batch endpoint. A separate replay request returned 3,360 frames with the intended cache header. Authenticated readiness returned the expected degraded status before the first new ingestion audit record exists.
 - A bounded local production-server load check returned 50/50 HTTP 200 responses at concurrency 5, p50 104 ms and p95 207 ms. It is not a maximum-capacity benchmark.
 - No configured database URL, database password, or ingestion key was found in the 28 generated client bundle files checked. This is not an exhaustive Git-history or provider-log secret audit.
-- Workflow YAML syntax parsed and the Git diff passed whitespace checks. The Actions jobs themselves have not run.
+- Workflow YAML syntax parsed and the Git diff passed whitespace checks. The initial measurements were local; subsequent production health and calendar Actions jobs passed after the AWS cutover.
 
-## Checks and remaining dependency blockers
+## Dependency remediation and repeatable checks
 
 ```sh
 npm --prefix web run lint
@@ -106,21 +106,27 @@ npm --prefix web test
 npm --prefix web run build
 npm --prefix web run test:e2e
 node scripts/check-client-secrets.mjs
-.venv/bin/python -m unittest discover -s scripts -p 'test*.py'
+VERIFY_BGE_MODEL=1 .venv/bin/python -m unittest discover -s scripts -p 'test*.py'
 .venv/bin/python -m unittest discover -s etl/prediction -p 'test*.py'
 .venv/bin/python -m pip check
+.venv/bin/python scripts/audit-python-dependencies.py
+npm --prefix web audit --audit-level=moderate
 ```
 
-Install Python runtime dependencies with `pip install -r requirements.txt`; each pipeline also consumes `requirements-security.txt`. FastEmbed is upgraded to 0.9.0 and FastF1 to 3.8.3. The configured BGE text model remains supported. Model-generation and complete live ingestion/refresh execution were not replayed as part of this release review.
+Install Python runtime dependencies from the repository root with `pip install -r requirements.txt`; individual ETL installs use `pip install -r etl/requirements.txt`. Every FastF1 workflow now installs the local SignalR maintenance fork instead of allowing pip to select the vulnerable upstream pin. Constraints prevent accidentally reinstalling the unsupported dependency combination.
 
-The web production dependency audit reports zero findings. Five development-package entries remain through Next's ESLint → fast-glob → micromatch → braces dependency chain; braces 3.0.3 has no compatible published fix in that chain. No forced Next downgrade was applied.
+The full web audit reports zero findings. A private npm workspace replaces Next ESLint's sole `fast-glob.globSync(pattern, { onlyDirectories: true })` use with a tinyglobby adapter, preserving the Next/React/hooks/TypeScript lint rules and removing the unpatched micromatch/braces chain. The package is explicitly a project-owned replacement, versioned `3.3.1+f1.1`, not an upstream fix. Actual Next root-directory discovery tests cover directory filtering, absolute paths, brace patterns, multiple roots, and missing matches. Clean `npm ci` reproduces the replacement. Review the adapter on Next upgrades; remove it once the upstream chain has a published fix. See `web/tools/eslint-glob/README.md`.
 
-On October 20, Python findings fell from 118 across 14 installed packages to 10 advisory entries across two packages. The October 22 recheck reports 37 entries across the same two packages, including newly published Pillow advisories. FastEmbed still requires Pillow <13, while the current Pillow findings require Pillow 13. FastF1 requires signalrcore, which pins msgpack 1.1.2; the audit reports two entries for the same msgpack advisory requiring 1.2.1. Do not break dependency contracts or ignore audit IDs to claim a clean scan. Python dependency security sign-off remains blocked for these findings. The Next.js application is independently deployed with a clean production JavaScript audit; this is not an overall security-complete release. The current pipeline uses text embeddings and HTTP timing APIs; these paths do not establish exploitability of image decoders or SignalR MessagePack handling, and reachability has not been exhaustively proved absent.
+FastEmbed was removed. `scripts/bge_embedding.py` loads only the same BGE-small quantized ONNX text assets at immutable Hugging Face revision `aa8f8b060edb00e03bfdd08813a2949946c8ba55`, with 512-token truncation, CLS pooling, 384 dimensions, and L2 normalization. It loads no remote Python code and no image models. A regression fixture generated with FastEmbed 0.9.0 matches the replacement exactly on the original local runtime for six inputs including empty text, Unicode, and truncation; the fresh runtime also passes the vector similarity check. CI runs the real CPU model regression and batching checks. Existing vectors retain the same model label and dimensionality. Pillow is now allowed to upgrade to patched 13.0.0 for FastF1's matplotlib dependency.
+
+`vendor/signalrcore` contains the verified upstream 1.0.2 Python source and MIT license, unchanged, with packaging maintained as `1.0.2+f1.1`. Its dependency is `msgpack>=1.2.3,<2` instead of the vulnerable upstream exact pin. The archive hash, per-source-file hashes, and provenance are retained. MessagePack wire tests cover timing payloads, Unicode/binary values, multi-byte frame lengths, ping, handshake, completion, streams, cancellation, close, and acknowledgements. Live FastF1 HTTP schedule retrieval returned 23 events and resolved a qualifying session. Remove the fork after upstream supports patched MessagePack.
+
+The Python audit checks installed package versions, verifies that the installed SignalR Python bytes match the upstream-source manifest, and audits its unchanged code against public `signalrcore==1.0.2` explicitly. This prevents the local packaging version being skipped merely because it is not on PyPI. The patched installed MessagePack version is scanned separately. Any vulnerability or skipped package fails the audit; no IDs are ignored. A fresh environment audited 83 packages with zero findings/skips, and the existing local environment audited 92 with zero findings/skips. Both passed `pip check`. Earlier October 20/22 findings (including the 37 Pillow/MessagePack entries) are historical and superseded by this follow-up; a clean dependency audit does not establish that the entire application is vulnerability-free.
 
 Browser checks use controlled API fixtures on desktop Chromium, emulated Android Chrome, and emulated iPhone WebKit. Separate local production-server smoke/load checks read real Neon data. This is not physical-device testing, a live production traffic-capacity test, or proof of upstream service contracts during outages.
 
 ## Reference points
 
 - [Vercel trusted request headers](https://vercel.com/docs/headers/request-headers) describe the deployment header used for client identity.
-- [Outstanding braces advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) identifies the development dependency chain issue.
+- [Braces advisory removed by the lint dependency replacement](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) identifies the development dependency chain issue.
 - [OWASP SSRF prevention](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html) informs the allowlist, private-address, and redirect controls. The review did not perform a full SSRF penetration test.

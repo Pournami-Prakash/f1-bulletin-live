@@ -170,7 +170,7 @@ The project combines public Formula 1 session data, timing and telemetry, calend
 ## Built With
 
 - **Product:** Next.js, React, TypeScript, Framer Motion, Vercel
-- **Data and modeling:** Python, FastF1, FastEmbed, pgvector, Neon Postgres
+- **Data and modeling:** Python, FastF1, BGE text embeddings through ONNX Runtime, pgvector, Neon Postgres
 - **Orchestration and enrichment:** GitHub Actions, SQL, Snowflake (optional)
 
 ## Origin
