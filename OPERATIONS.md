@@ -1,10 +1,18 @@
 # Operations and recovery
 
-## Current state — October 20, 2026
+## Current state — October 22, 2026
 
-Repository hardening is implemented. Three additive, checksummed migrations have been applied to the configured Neon database. Reader, rate-limiter, and application-writer logins have been provisioned and verified. Their generated credentials exist only in the ignored, mode-0600 `web/.env.local`; no credential was printed or committed.
+The hardened Next.js site is live at https://f1bulletin.vercel.app and https://f1bulletin.pournamiprakash.dev. Production deployment `dpl_8PMs811GJhEWYkXMj7dKv97MnYMU` was built and tested before promotion. Authenticated RSS ingestion, intelligence refresh, and readiness all returned HTTP 200 on the staged deployment with the restricted credentials.
 
-The application changes and new Actions workflows have **not been deployed or pushed**. GitHub CLI has no authenticated account and no Vercel deployment token is configured here. Existing production requests therefore still use the old application until deployment. Neon schema changes are additive and compatible with that application.
+Three additive, checksummed migrations are applied to Neon. The reader, operations, writer, ingestion key, and rate-limit salt are configured as sensitive Production environment variables. The production `NEON_DATABASE_URL` fallback now points to the restricted application writer, not the administrator. Administrator access remains local/GitHub for migrations and backups. Generated credentials were never printed or committed.
+
+An encrypted local backup and isolated restore passed in 92 seconds: 303 sessions, 902 predictions, 12,995 stories, and all three migration records. The encrypted dump is 32,291,756 bytes, with SHA-256 `31e6e46682e5a2937b40f42926b16b08e9ab6630627174546c104fd19135637e`. Verification and ciphertext are under `~/.local/share/f1-bulletin/backups/`. The age identity is under `~/.codex/private/f1-bulletin-backups/identity.txt`; preserve a separate offline copy. The disposable Docker restore database was removed afterward.
+
+**Zero-cost policy:** Vercel remains on its verified Hobby plan. No plan upgrade, paid monitoring, larger runner, or cloud database was created. GitHub uses the existing public repository and standard runners. Optional Snowflake enrichment, scheduled cloud backup uploads, and browser trace artifacts are disabled through repository variables. Backup encryption keys are configured for future use, but storage uploads remain off until a hard no-charge policy is verified. Dependency reports use job summaries instead of artifact uploads. Local encrypted backups remain available without cloud artifact storage.
+
+Remaining: five development-package advisory entries in the braces chain and 37 Python advisory entries across Pillow and msgpack (rechecked October 22). Their supported upstream pins still prevent the required patched versions. The production JavaScript audit is clean. Neon account plan/PITR settings, GitHub account-wide billing limits, and notification delivery are not verified by the available API permissions. The Python security scan deliberately remains failing for unresolved findings; no audit IDs were ignored.
+
+The following sections describe the setup and repeatable operations. Earlier October 20 measurements are retained as historical evidence where identified.
 
 ## Release and credential cutover
 
@@ -60,7 +68,7 @@ The nightly backup workflow creates a PostgreSQL custom-format dump, encrypts it
 
 Run **Encrypted database backup**, record its successful Actions run ID, then run **Isolated backup restore test** with that ID. The latter verifies the checksum, decrypts in a temporary runner directory, restores to a disposable pgvector/Postgres 17 service, and queries sessions, predictions, and stories. It does not connect to production for restoration. Record the elapsed time, row counts, artifact/run IDs, and outcome. Repeat after schema changes and periodically thereafter.
 
-These workflows are prepared, not proven. They have not run here, backup keys are not configured, and Docker's daemon is unavailable locally. GitHub artifact retention and encryption do not replace verification of the Neon project's own backup/PITR settings or an independently stored backup strategy. No successful restore, recovery time, or production backup guarantee is claimed.
+The equivalent local encrypted-backup/isolated-Docker restore procedure passed on October 22. Run it with `node scripts/local-backup-restore.mjs` after Docker is running and libpq 17 plus age are installed. The Actions backup/restore workflows have not run and remain gated off for the zero-cost policy. A successful local drill does not establish ongoing automated backup coverage, Neon PITR retention, or a guaranteed disaster recovery time.
 
 ## Rollback and disaster recovery
 
@@ -101,7 +109,7 @@ Install Python runtime dependencies with `pip install -r requirements.txt`; each
 
 The web production dependency audit reports zero findings. Five development-package entries remain through Next's ESLint → fast-glob → micromatch → braces dependency chain; braces 3.0.3 has no compatible published fix in that chain. No forced Next downgrade was applied.
 
-Python findings fell from 118 across 14 installed packages to 10 advisory entries across two packages. FastEmbed still requires Pillow <13, while eight findings require Pillow 13. FastF1 requires signalrcore, which pins msgpack 1.1.2; the audit reports two entries for the same msgpack advisory requiring 1.2.1. Do not break dependency contracts or ignore audit IDs to claim a clean scan. CI's Python audit remains a release blocker for these findings. The current pipeline uses text embeddings and HTTP timing APIs; these paths do not establish exploitability of image decoders or SignalR MessagePack handling, and reachability has not been exhaustively proved absent.
+On October 20, Python findings fell from 118 across 14 installed packages to 10 advisory entries across two packages. The October 22 recheck reports 37 entries across the same two packages, including newly published Pillow advisories. FastEmbed still requires Pillow <13, while the current Pillow findings require Pillow 13. FastF1 requires signalrcore, which pins msgpack 1.1.2; the audit reports two entries for the same msgpack advisory requiring 1.2.1. Do not break dependency contracts or ignore audit IDs to claim a clean scan. Python dependency security sign-off remains blocked for these findings. The Next.js application is independently deployed with a clean production JavaScript audit; this is not an overall security-complete release. The current pipeline uses text embeddings and HTTP timing APIs; these paths do not establish exploitability of image decoders or SignalR MessagePack handling, and reachability has not been exhaustively proved absent.
 
 Browser checks use controlled API fixtures on desktop Chromium, emulated Android Chrome, and emulated iPhone WebKit. Separate local production-server smoke/load checks read real Neon data. This is not physical-device testing, a live production traffic-capacity test, or proof of upstream service contracts during outages.
 
