@@ -39,7 +39,7 @@ SF_CONFIG = {
     'warehouse': 'F1_APP_WH',
     'database':  'F1_BULLETIN',
     'schema':    'MART',
-    'role':      os.environ.get('SNOWFLAKE_ROLE', 'SYSADMIN'),
+    'role':      os.environ.get('SNOWFLAKE_ROLE', 'F1_INGESTOR'),
 }
 
 NEON_URL = os.environ['NEON_DATABASE_URL']

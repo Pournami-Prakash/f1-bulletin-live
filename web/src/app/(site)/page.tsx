@@ -1,5 +1,7 @@
 'use client'
 
+import { safeExternalUrl } from '@/lib/external-url'
+
 import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -334,6 +336,7 @@ export default function HomePage() {
   const [drivers, setDrivers]   = useState<Driver[]>([])
   const [dS, setDS]             = useState<Standing[]>([])
   const [cS, setCS]             = useState<Standing[]>([])
+  const [dataError, setDataError] = useState(false)
 
   const heroRef = useRef<HTMLDivElement>(null)
   const { scrollY } = useScroll()
@@ -347,46 +350,26 @@ export default function HomePage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/intelligence/briefing').then(r => r.ok ? r.json() : null),
-      fetch('/api/stories?hours=720&limit=12').then(r => r.ok ? r.json() : null),
-      fetch('/api/intelligence/drivers?format=summary&type=driver').then(r => r.ok ? r.json() : null),
-      fetch('/api/standings/drivers').then(r => r.ok ? r.json() : null),
-      fetch('/api/standings/constructors').then(r => r.ok ? r.json() : null),
+      fetch('/api/intelligence/briefing').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/news/stories?hours=720&limit=12').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/intelligence/drivers?format=summary&type=driver').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/standings?type=drivers').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/standings?type=constructors').then(r => r.ok ? r.json() : null).catch(() => null),
     ]).then(([br, st, dr, ds, cs]) => {
       if (br?.ok) setBriefing(br.briefing ?? null)
       setStories(st?.ok ? (st.data ?? []) : [])
       setDrivers(dr?.ok ? (dr.data ?? dr.drivers ?? []) : [])
-      setDS(((ds?.standings ?? ds?.data ?? []) as Standing[]).slice(0, 5))
-      setCS(((cs?.standings ?? cs?.data ?? []) as Standing[]).slice(0, 5))
-    }).catch(() => {})
+      setDS((ds?.standings ?? []).slice(0, 5).map((s: any) => ({ driver_code: s.Driver?.code ?? s.Driver?.familyName, team: s.Constructors?.[0]?.name, points: Number(s.points) })))
+      setCS((cs?.standings ?? []).slice(0, 5).map((s: any) => ({ driver_code: s.Constructor?.name, team: s.Constructor?.name, points: Number(s.points) })))
+      setDataError(!br?.ok || !st?.ok || !dr?.ok || !ds?.standings || !cs?.standings)
+    }).catch(() => { setDataError(true) })
   }, [])
 
-  const heroWords = (briefing?.headline ?? 'MERC BUILD A ROCKETSHIP. FERRARI BETS BIG.').replace(/"/g, '').split(' ')
+  const heroWords = (briefing?.headline ?? 'FORMULA 1. THE STORY BEHIND THE RACE.').replace(/"/g, '').split(' ')
 
-  const FD: Standing[] = [
-    { driver_code: 'ANT', team: 'Mercedes',        points: 47 },
-    { driver_code: 'RUS', team: 'Mercedes',        points: 43 },
-    { driver_code: 'HAM', team: 'Ferrari',         points: 33 },
-    { driver_code: 'LEC', team: 'Ferrari',         points: 30 },
-    { driver_code: 'NOR', team: 'McLaren',         points: 15 },
-  ]
-  const FC: Standing[] = [
-    { driver_code: 'Mercedes', team: 'Mercedes',        points: 90 },
-    { driver_code: 'Ferrari',  team: 'Ferrari',         points: 63 },
-    { driver_code: 'McLaren',  team: 'McLaren',         points: 18 },
-    { driver_code: 'Red Bull', team: 'Red Bull Racing', points: 8  },
-  ]
-  const FDrv: Driver[] = [
-    { driverName: 'Antonelli',  sentimentAvg: 0.42,  sentimentLabel: 'positive' },
-    { driverName: 'Russell',    sentimentAvg: 0.31,  sentimentLabel: 'positive' },
-    { driverName: 'Hamilton',   sentimentAvg: 0.28,  sentimentLabel: 'positive' },
-    { driverName: 'Leclerc',    sentimentAvg: 0.11,  sentimentLabel: 'neutral'  },
-    { driverName: 'Verstappen', sentimentAvg: -0.14, sentimentLabel: 'negative' },
-  ]
-
-  const finalD   = dS.length > 0 ? dS : FD
-  const finalC   = cS.length > 0 ? cS : FC
-  const finalDrv = drivers.length > 0 ? drivers.slice(0, 5) : FDrv
+  const finalD = dS
+  const finalC = cS
+  const finalDrv = drivers.slice(0, 5)
 
   return (
     <>
@@ -397,6 +380,7 @@ export default function HomePage() {
       )}
 
       <div suppressHydrationWarning style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'relative', zIndex: 3 }}>
+        {dataError && <div role="status" style={{ padding: '12px 24px', color: '#fbbf24' }}>Some live data is unavailable. <button onClick={() => window.location.reload()}>Try again</button></div>}
         <Header onReset={() => { sessionStorage.removeItem('f1b_booted'); setBooted(false) }} />
         <Ticker />
 
@@ -430,22 +414,22 @@ export default function HomePage() {
                   ))}
                 </h1>
 
-                {stories.length > 1 && stories[1] && (
+                {stories.length > 0 && stories[0] && (
                   <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55, duration: 0.45 }} style={{ marginBottom: 28, maxWidth: 540 }}>
-                    {stories[1].latest_url ? (
-                      <a href={stories[1].latest_url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block' }}>
+                    {stories[0].latest_url ? (
+                      <a href={safeExternalUrl(stories[0].latest_url)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block' }}>
                         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '11px 14px', border: '1px solid rgba(255,255,255,.08)', borderLeft: '2px solid rgba(255,255,255,.18)', borderRadius: '0 8px 8px 0', background: 'rgba(255,255,255,.02)' }}>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 7, fontFamily: mono, letterSpacing: '.1em', color: 'rgba(255,255,255,.3)', marginBottom: 5 }}>{(stories[1].topic_cluster || 'F1').replace(/_/g, ' ')} · {timeAgo(stories[1].latest_event_ts)}</div>
-                            <div style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,.62)' }}>{stories[1].story_title || stories[1].title}</div>
+                            <div style={{ fontSize: 7, fontFamily: mono, letterSpacing: '.1em', color: 'rgba(255,255,255,.3)', marginBottom: 5 }}>{(stories[0].topic_cluster || 'F1').replace(/_/g, ' ')} · {timeAgo(stories[0].latest_event_ts)}</div>
+                            <div style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,.62)' }}>{stories[0].story_title || stories[0].title}</div>
                           </div>
                           <span style={{ fontSize: 11, color: 'rgba(255,255,255,.22)', paddingTop: 2 }}>↗</span>
                         </div>
                       </a>
                     ) : (
                       <div style={{ padding: '11px 14px', border: '1px solid rgba(255,255,255,.07)', borderLeft: '2px solid rgba(255,255,255,.15)', borderRadius: '0 8px 8px 0', background: 'rgba(255,255,255,.02)' }}>
-                        <div style={{ fontSize: 7, fontFamily: mono, color: 'rgba(255,255,255,.3)', marginBottom: 4 }}>{(stories[1].topic_cluster || 'F1').replace(/_/g, ' ')}</div>
-                        <div style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,.62)' }}>{stories[1].story_title || stories[1].title}</div>
+                        <div style={{ fontSize: 7, fontFamily: mono, color: 'rgba(255,255,255,.3)', marginBottom: 4 }}>{(stories[0].topic_cluster || 'F1').replace(/_/g, ' ')}</div>
+                        <div style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,.62)' }}>{stories[0].story_title || stories[0].title}</div>
                       </div>
                     )}
                   </motion.div>

@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { publicJson } from '@/lib/api'
+import { NextRequest } from "next/server";
 import { fetchJolpicaJson, parseStandingType, standingsPath } from "@/lib/jolpica";
 
 export async function GET(req: NextRequest) {
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest) {
     const lists = data?.MRData?.StandingsTable?.StandingsLists ?? [];
 
     if (lists.length === 0) {
-      return NextResponse.json({ standings: [], season });
+      return publicJson({ standings: [], season });
     }
 
     const standings =
@@ -19,9 +20,9 @@ export async function GET(req: NextRequest) {
         ? lists[0].ConstructorStandings
         : lists[0].DriverStandings;
 
-    return NextResponse.json({ standings, season: lists[0].season });
+    return publicJson({ standings, season: lists[0].season });
   } catch {
-    return NextResponse.json(
+    return publicJson(
       { error: "Internal server error" },
       { status: 500 }
     );

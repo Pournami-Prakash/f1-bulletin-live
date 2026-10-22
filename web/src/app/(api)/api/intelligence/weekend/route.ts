@@ -1,3 +1,4 @@
+import { logEvent } from '@/lib/observability'
 import { NextResponse } from 'next/server'
 import { getNeonSql } from '@/lib/neon'
 
@@ -64,8 +65,8 @@ export async function GET() {
         generatedAt: prerace.generated_at,
       } : null,
     })
-  } catch (error) {
-    console.error('[/api/intelligence/weekend]', error)
+  } catch {
+    logEvent('error', 'api_failed', { route: '/api/intelligence/weekend' })
     return NextResponse.json({ ok: false, error: 'Failed to fetch weekend data' }, { status: 500 })
   }
 }

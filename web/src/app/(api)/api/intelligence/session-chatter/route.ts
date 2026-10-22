@@ -1,8 +1,10 @@
+import { publicJson } from '@/lib/api'
+import { logEvent } from '@/lib/observability'
+import { clamp, toInt } from '@/lib/api'
 // app/api/intelligence/session-chatter/route.ts
 // Live session chatter — race week articles filtered by relevance
 // Only returns data during race week
 
-import { NextResponse } from 'next/server'
 import { getNeonSql } from '@/lib/neon'
 
 export const dynamic = 'force-dynamic'
@@ -11,8 +13,8 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const session = searchParams.get('session')    // FP1|FP2|FP3|QUALIFYING|SPRINT|RACE|GENERAL
-    const hours   = parseInt(searchParams.get('hours') || '6')
-    const limit   = parseInt(searchParams.get('limit') || '30')
+    const hours   = clamp(toInt(searchParams.get('hours'), 6), 1, 720)
+    const limit   = clamp(toInt(searchParams.get('limit'), 30), 1, 200)
     const round   = searchParams.get('round')
 
     const sql = getNeonSql()
@@ -25,7 +27,7 @@ export async function GET(request: Request) {
 
     // Not race week — return empty with context
     if (!stateRow?.is_race_week) {
-      return NextResponse.json({
+      return publicJson({
         ok:         true,
         isRaceWeek: false,
         daysUntil:  stateRow?.days_until_race,
@@ -85,7 +87,7 @@ export async function GET(request: Request) {
       Object.entries(bySession).map(([k, v]) => [k, v.length])
     )
 
-    return NextResponse.json({
+    return publicJson({
       ok:             true,
       isRaceWeek:     true,
       activeSession:  stateRow.current_session,
@@ -109,9 +111,9 @@ export async function GET(request: Request) {
       bySession: session ? undefined : bySession,
     })
 
-  } catch (error) {
-    console.error('[/api/intelligence/session-chatter]', error)
-    return NextResponse.json(
+  } catch {
+    logEvent('error', 'api_failed', { route: '/api/intelligence/session-chatter' })
+    return publicJson(
       { ok: false, error: 'Failed to fetch session chatter' },
       { status: 500 }
     )

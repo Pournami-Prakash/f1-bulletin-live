@@ -1,5 +1,7 @@
 # F1 Bulletin
 
+Operational setup, security remediation, deployment cutover, and recovery procedures are documented in [OPERATIONS.md](OPERATIONS.md).
+
 > **The timing screen tells you who was fastest. F1 Bulletin connects the pace, strategy, circuit, news, and probabilities that explain why—and asks what comes next.**
 
 <p align="center">

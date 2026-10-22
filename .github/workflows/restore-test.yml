@@ -1,0 +1,48 @@
+name: Isolated backup restore test
+on:
+  workflow_dispatch:
+    inputs:
+      backup_run_id:
+        description: 'Successful encrypted backup Actions run ID'
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: restore-test-only
+          POSTGRES_DB: restored
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    steps:
+      - name: Install restore tools
+        run: sudo apt-get update -qq && sudo apt-get install -y postgresql-client-17 age
+      - uses: actions/download-artifact@v4
+        with:
+          name: encrypted-database-backup
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.backup_run_id }}
+          path: /tmp/restore
+      - name: Verify, decrypt, restore into disposable database
+        env:
+          BACKUP_IDENTITY: ${{ secrets.BACKUP_IDENTITY }}
+          PGPASSWORD: restore-test-only
+        run: |
+          set -euo pipefail
+          test -n "$BACKUP_IDENTITY"
+          umask 077
+          trap 'rm -f /tmp/restore-key /tmp/restore.dump' EXIT
+          cd /tmp/restore
+          sha256sum -c f1.dump.age.sha256
+          printf '%s\n' "$BACKUP_IDENTITY" > /tmp/restore-key
+          age -d -i /tmp/restore-key -o /tmp/restore.dump f1.dump.age
+          /usr/lib/postgresql/17/bin/psql --host=127.0.0.1 --username=postgres --dbname=restored -v ON_ERROR_STOP=1 -c 'CREATE ROLE f1_web_reader NOLOGIN' -c 'CREATE ROLE f1_app_writer NOLOGIN' -c 'CREATE ROLE f1_rate_limiter NOLOGIN'
+          /usr/lib/postgresql/17/bin/pg_restore --host=127.0.0.1 --username=postgres --dbname=restored --no-owner --no-acl --exit-on-error /tmp/restore.dump
+          /usr/lib/postgresql/17/bin/psql --host=127.0.0.1 --username=postgres --dbname=restored -v ON_ERROR_STOP=1 -c 'SELECT COUNT(*) FROM public.sessions' -c 'SELECT COUNT(*) FROM public.predictions' -c 'SELECT COUNT(*) FROM public.story_timeline'

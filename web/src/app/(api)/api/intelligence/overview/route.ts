@@ -1,3 +1,4 @@
+import { logEvent } from '@/lib/observability'
 import { NextResponse } from 'next/server'
 import { getNeonSql } from '@/lib/neon'
 
@@ -144,8 +145,8 @@ export async function GET() {
         breakingCount: stories.filter((s: any) => s.is_breaking).length,
       },
     })
-  } catch (error) {
-    console.error('[/api/intelligence/overview]', error)
+  } catch {
+    logEvent('error', 'api_failed', { route: '/api/intelligence/overview' })
     return NextResponse.json({ ok: false, error: 'Failed to fetch overview' }, { status: 500 })
   }
 }

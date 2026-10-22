@@ -5,6 +5,8 @@
  */
 
 import { NextResponse } from "next/server";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { logEvent } from "@/lib/observability";
 
 // ---------------------------------------------------------------------------
 // Response envelope
@@ -22,12 +24,21 @@ export function ok<T>(data: T, extra?: { count?: number; headers?: Record<string
   return NextResponse.json(body, { headers: extra?.headers });
 }
 
+/** Only use for public GET endpoints. Never caches errors or overrides no-store. */
+export function publicJson(body: unknown, init?: ResponseInit) {
+  const headers = new Headers(init?.headers);
+  if (!headers.has('Cache-Control')) headers.set('Cache-Control', (init?.status ?? 200) >= 400
+    ? 'no-store' : 'public, s-maxage=30, stale-while-revalidate=60');
+  return NextResponse.json(body, { ...init, headers });
+}
+
 export function err(
   message: string,
   status = 500,
   code?: string
 ): NextResponse<ApiError> {
-  return NextResponse.json({ ok: false, error: message, ...(code ? { code } : {}) }, { status });
+  if (status >= 500) logEvent("error", "api_error", { status, code: code ?? "INTERNAL_ERROR" });
+  return NextResponse.json({ ok: false, error: status >= 500 ? "Service temporarily unavailable. Please try again." : message, ...(code ? { code } : {}) }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
 export function badRequest(message: string) {
@@ -64,12 +75,12 @@ export function clamp(n: number, lo: number, hi: number): number {
 }
 
 export function toInt(value: string | null, fallback: number): number {
-  const n = Number.parseInt(value ?? "", 10);
-  return Number.isFinite(n) ? n : fallback;
+  const n = value !== null && /^-?\d+$/.test(value) ? Number(value) : NaN;
+  return Number.isSafeInteger(n) ? n : fallback;
 }
 
 export function toString(value: string | null, fallback = ""): string {
-  return (value ?? fallback).trim();
+  return (value ?? fallback).trim().slice(0, 256);
 }
 
 export function toEnum<T extends string>(
@@ -121,10 +132,8 @@ export function validateIngestAuth(req: Request): boolean {
   const key = process.env.INGEST_KEY;
   if (!key) return false; // no key configured → deny everything
 
-  // Accept either Bearer token or legacy ?key= query param (migration path)
   const auth = req.headers.get("Authorization");
-  if (auth?.startsWith("Bearer ") && auth.slice(7) === key) return true;
-
-  const qKey = new URL(req.url).searchParams.get("key");
-  return qKey === key;
+  if (!auth?.startsWith("Bearer ")) return false;
+  const digest = (value: string) => createHash("sha256").update(value).digest();
+  return timingSafeEqual(digest(auth.slice(7)), digest(key));
 }

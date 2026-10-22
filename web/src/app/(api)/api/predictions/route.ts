@@ -1,3 +1,4 @@
+import { logEvent } from '@/lib/observability'
 import { NextResponse } from 'next/server'
 import { getNeonSql, PRODUCTION_MODEL_PREFIX } from '@/lib/neon'
 import {
@@ -173,8 +174,8 @@ export async function GET(request: Request) {
       headers: { 'Cache-Control': 'no-store' }
     })
 
-  } catch (err) {
-    console.error('[/api/predictions] error:', err)
+  } catch {
+    logEvent('error', 'api_failed', { route: '/api/predictions' })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

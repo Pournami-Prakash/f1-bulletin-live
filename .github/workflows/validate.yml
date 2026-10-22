@@ -1,0 +1,62 @@
+name: Validate application
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  PIP_CONSTRAINT: ${{ github.workspace }}/requirements-security.txt
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=moderate
+      - name: Report development advisories
+        run: npm audit --json > /tmp/dependency-audit.json || true
+      - name: Summarize development advisories without artifact storage
+        run: |
+          node -e 'const r=require("/tmp/dependency-audit.json"); require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, "Development dependency advisories: " + JSON.stringify(r.metadata?.vulnerabilities ?? {}) + "\n")'
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure() && vars.ENABLE_TEST_ARTIFACTS == '1'
+        with:
+          name: browser-failures
+          path: web/test-results
+          retention-days: 7
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: scripts/requirements-neon-intelligence.txt
+      - run: pip install --upgrade pip setuptools && pip install -r requirements.txt
+      - run: python -m unittest discover -s scripts -p 'test*.py'
+      - run: python -m unittest discover -s etl/prediction -p 'test*.py'
+      - name: Scan Python dependencies
+        run: pip install pip-audit && pip-audit --progress-spinner off

@@ -1,3 +1,4 @@
+import { logEvent } from '@/lib/observability'
 import { NextResponse } from 'next/server'
 import { getNeonSql } from '@/lib/neon'
 
@@ -34,8 +35,8 @@ export async function GET() {
     }))
 
     return NextResponse.json({ ok: true, alerts, ticker, count: alerts.length })
-  } catch (error) {
-    console.error('[/api/intelligence/alerts]', error)
+  } catch {
+    logEvent('error', 'api_failed', { route: '/api/intelligence/alerts' })
     return NextResponse.json({ ok: false, error: 'Failed to fetch alerts' }, { status: 500 })
   }
 }

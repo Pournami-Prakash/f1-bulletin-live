@@ -260,8 +260,7 @@ export default function BootScreen({ onEnter }: Props) {
 
   const raceTargetMs = useMemo(
     () => CURRENT?.raceUTC.getTime() ?? (Date.now() + 86400000),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [CURRENT?.raceUTC.getTime()]
+    [CURRENT]
   )
 
   useEffect(() => {

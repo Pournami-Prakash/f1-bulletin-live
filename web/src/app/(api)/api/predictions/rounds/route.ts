@@ -1,3 +1,4 @@
+import { logEvent } from '@/lib/observability'
 import { NextResponse } from 'next/server'
 import { getNeonSql, PRODUCTION_MODEL_PREFIX } from '@/lib/neon'
 
@@ -38,8 +39,8 @@ export async function GET(request: Request) {
     `
 
     return NextResponse.json({ season, rounds: rows })
-  } catch (err) {
-    console.error('[/api/predictions/rounds]', err)
+  } catch {
+    logEvent('error', 'api_failed', { route: '/api/predictions/rounds' })
     return NextResponse.json({ season, rounds: [] })
   }
 }

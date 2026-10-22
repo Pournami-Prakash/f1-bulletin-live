@@ -1,4 +1,6 @@
 'use client'
+
+import { safeExternalUrl } from '@/lib/external-url'
 // app/stories/page.tsx
 
 import { useEffect, useMemo, useState } from 'react'
@@ -90,6 +92,7 @@ export default function StoriesPage() {
   const [stories, setStories] = useState<StoryRow[]>([])
   const [alerts, setAlerts] = useState<AlertRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [priority, setPriority] = useState<string>('all')
   const [sortBy, setSortBy] = useState<'momentum' | 'recent' | 'sentiment'>('momentum')
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -98,14 +101,16 @@ export default function StoriesPage() {
     let mounted = true
 
     Promise.all([
-      fetch('/api/stories?hours=720&limit=100').then(r => (r.ok ? r.json() : null)),
-      fetch('/api/intelligence/alerts?hours=24').then(r => (r.ok ? r.json() : null)),
+      fetch('/api/news/stories?hours=720&limit=100').then(r => (r.ok ? r.json() : null)).catch(() => null),
+      fetch('/api/intelligence/alerts?hours=24').then(r => (r.ok ? r.json() : null)).catch(() => null),
     ])
       .then(([storiesRes, alertsRes]) => {
         if (!mounted) return
+        setLoadError(!storiesRes?.ok)
         setStories(storiesRes?.ok ? storiesRes.data ?? [] : [])
         setAlerts(alertsRes?.ok ? alertsRes.data ?? [] : [])
       })
+      .catch(() => { if (mounted) setLoadError(true) })
       .finally(() => {
         if (mounted) setLoading(false)
       })
@@ -398,7 +403,8 @@ export default function StoriesPage() {
                   borderRadius: 12,
                 }}
               >
-                No stories match this filter.
+                {loadError ? 'Stories could not be loaded. Please try again.' : 'No stories match this filter.'}
+                {loadError && <button onClick={() => window.location.reload()}>Try again</button>}
               </div>
             )}
           </main>
@@ -563,7 +569,7 @@ function StoryCard({
           {cluster.latest_url && (
             <div style={{ marginTop: 14 }}>
               <a
-                href={cluster.latest_url}
+                href={safeExternalUrl(cluster.latest_url)}
                 target="_blank"
                 rel="noreferrer"
                 style={{

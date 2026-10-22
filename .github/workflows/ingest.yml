@@ -18,10 +18,18 @@ on:
         type: choice
         options: ['false', 'true']
 
+permissions:
+  contents: read
+
+concurrency:
+  group: f1-ingestion
+  cancel-in-progress: false
+
 env:
+  PIP_CONSTRAINT: ${{ github.workspace }}/requirements-security.txt
   SNOWFLAKE_WAREHOUSE: F1_APP_WH
   SNOWFLAKE_DATABASE: F1_BULLETIN
-  SNOWFLAKE_ROLE: SYSADMIN
+  SNOWFLAKE_ROLE: ${{ vars.SNOWFLAKE_ROLE || 'F1_INGESTOR' }}
   # Use the canonical deployment directly. A redirecting APP_URL previously
   # returned "Redirecting..." with a successful status without running POST.
   APP_BASE_URL: https://f1bulletin.vercel.app
@@ -47,13 +55,15 @@ jobs:
       - name: Probe Snowflake availability
         id: snowflake-check
         env:
+          ENABLE_SNOWFLAKE_ENRICHMENT: ${{ vars.ENABLE_SNOWFLAKE_ENRICHMENT }}
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
-          if [ -n "$SNOWFLAKE_ACCOUNT" ] && [ -n "$SNOWFLAKE_USER" ] && [ -n "$SNOWFLAKE_PASSWORD" ]; then
+          if [ "$ENABLE_SNOWFLAKE_ENRICHMENT" = "1" ] && [ -n "$SNOWFLAKE_ACCOUNT" ] && [ -n "$SNOWFLAKE_USER" ] && [ -n "$SNOWFLAKE_PASSWORD" ]; then
+            python3 -m pip install --quiet --upgrade pip setuptools
             python3 -m pip install --quiet snowflake-connector-python
-            if python3 -c "import os, snowflake.connector as sf; conn = sf.connect(account=os.environ['SNOWFLAKE_ACCOUNT'], user=os.environ['SNOWFLAKE_USER'], password=os.environ['SNOWFLAKE_PASSWORD'], warehouse=os.environ.get('SNOWFLAKE_WAREHOUSE', 'F1_APP_WH'), database=os.environ.get('SNOWFLAKE_DATABASE', 'F1_BULLETIN'), role=os.environ.get('SNOWFLAKE_ROLE', 'SYSADMIN'), login_timeout=20, network_timeout=20); cur = conn.cursor(); cur.execute('SELECT 1'); cur.close(); conn.close()"; then
+            if python3 -c "import os, snowflake.connector as sf; conn = sf.connect(account=os.environ['SNOWFLAKE_ACCOUNT'], user=os.environ['SNOWFLAKE_USER'], password=os.environ['SNOWFLAKE_PASSWORD'], warehouse=os.environ.get('SNOWFLAKE_WAREHOUSE', 'F1_APP_WH'), database=os.environ.get('SNOWFLAKE_DATABASE', 'F1_BULLETIN'), role=os.environ.get('SNOWFLAKE_ROLE', 'F1_INGESTOR'), login_timeout=20, network_timeout=20); cur = conn.cursor(); cur.execute('SELECT 1'); cur.close(); conn.close()"; then
               echo "available=true" >> "$GITHUB_OUTPUT"
             else
               echo "Snowflake unavailable, enrichment will be skipped"
@@ -68,7 +78,7 @@ jobs:
           INGEST_KEY: ${{ secrets.INGEST_KEY }}
         run: |
           test -n "$INGEST_KEY"
-          curl --silent --show-error --fail-with-body --retry 2 --retry-delay 5 \
+          curl --silent --show-error --fail-with-body --connect-timeout 10 --max-time 125 --retry 2 --retry-max-time 390 \
             -X POST \
             -H "Authorization: Bearer $INGEST_KEY" \
             "$APP_BASE_URL/api/ingest/rss?tier=all" \
@@ -82,7 +92,7 @@ jobs:
           INGEST_KEY: ${{ secrets.INGEST_KEY }}
         run: |
           test -n "$INGEST_KEY"
-          curl --silent --show-error --fail-with-body --retry 2 --retry-delay 5 \
+          curl --silent --show-error --fail-with-body --connect-timeout 10 --max-time 125 --retry 2 --retry-max-time 390 \
             -X POST \
             -H "Authorization: Bearer $INGEST_KEY" \
             "$APP_BASE_URL/api/intelligence/refresh" \
@@ -105,7 +115,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: ingest
-    if: github.event.inputs.skip_intelligence != 'true'
+    if: github.event.inputs.skip_intelligence != 'true' && github.event.inputs.ingest_only != 'true'
 
     steps:
 
@@ -124,7 +134,7 @@ jobs:
           key: fastembed-bge-small-en-v1-${{ runner.os }}
 
       - name: Install local intelligence dependencies
-        run: pip install --quiet -r scripts/requirements-neon-intelligence.txt
+        run: pip install --upgrade pip setuptools && pip install --quiet -r scripts/requirements-neon-intelligence.txt
 
       - name: Refresh Neon-native intelligence
         env:
@@ -140,7 +150,8 @@ jobs:
   phase1_intelligence:
     name: Phase 1 Intelligence
     runs-on: ubuntu-latest
-    needs: ingest
+    needs: [ingest, neon_intelligence]
+    timeout-minutes: 20
 
     if: |
       github.event.inputs.ingest_only != 'true' &&
@@ -157,6 +168,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip setuptools
           pip install \
             snowflake-connector-python \
             psycopg2-binary \
@@ -196,6 +208,7 @@ jobs:
   semantic_clustering:
     name: Semantic Clustering
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [ingest, phase1_intelligence]
     if: |
       github.event.inputs.ingest_only != 'true' &&
@@ -230,6 +243,7 @@ jobs:
   phase2_intelligence:
     name: Phase 2 Intelligence
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [ingest, semantic_clustering]
     if: |
       github.event.inputs.ingest_only != 'true' &&
@@ -246,6 +260,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip setuptools
           pip install \
             snowflake-connector-python \
             psycopg2-binary \
@@ -276,6 +291,7 @@ jobs:
   phase3_intelligence:
     name: Phase 3 Intelligence
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [ingest, phase2_intelligence]
     if: |
       github.event.inputs.ingest_only != 'true' &&
@@ -292,6 +308,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip setuptools
           pip install \
             snowflake-connector-python \
             psycopg2-binary \

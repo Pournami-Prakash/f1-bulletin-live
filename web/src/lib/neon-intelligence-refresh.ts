@@ -287,9 +287,11 @@ async function refreshClusters(sql: Sql, articles: ArticleSignal[]) {
           cluster_name, cluster_id, z_score, article_count,
           baseline_avg, severity, triggered_at, resolved
         )
-        VALUES (
-          ${cluster}, ${cluster}, ${zScore}, ${recentCount},
+        SELECT ${cluster}, ${cluster}, ${zScore}, ${recentCount},
           ${Math.max(1, items.length / 3)}, ${maxPriority >= 85 ? "HIGH" : "MEDIUM"}, NOW(), FALSE
+        WHERE NOT EXISTS (
+          SELECT 1 FROM spike_alerts WHERE cluster_id = ${cluster}
+            AND resolved = FALSE AND triggered_at >= NOW() - INTERVAL '24 hours'
         )
       `;
     }
@@ -463,7 +465,7 @@ async function refreshBriefing(sql: Sql, articles: ArticleSignal[], clusters: Ma
 }
 
 export async function refreshNeonIntelligence(): Promise<RefreshStats> {
-  const sql = getNeonSql();
+  const sql = getNeonSql("write");
   const start = Date.now();
   const articles = await loadArticles(sql);
 
@@ -484,14 +486,23 @@ export async function refreshNeonIntelligence(): Promise<RefreshStats> {
     };
   }
 
-  await refreshArticleIntelligence(sql, articles);
-  const clusters = await refreshClusters(sql, articles);
-  const driversUpdated = await refreshEntities(sql, articles);
-  const briefingDate = await refreshBriefing(sql, articles, clusters);
+  // Compute a bounded write plan in memory, then publish it atomically.
+  const writes: ReturnType<Sql>[] = [
+    sql`SELECT set_config('statement_timeout', '10000', true)`,
+    sql`SELECT pg_advisory_xact_lock(2026, 2317)`,
+  ];
+  const stage = ((strings: TemplateStringsArray, ...values: any[]) => {
+    writes.push(sql(strings, ...values));
+    return Promise.resolve([]);
+  }) as unknown as Sql;
+  await refreshArticleIntelligence(stage, articles);
+  const clusters = await refreshClusters(stage, articles);
+  const driversUpdated = await refreshEntities(stage, articles);
+  const briefingDate = await refreshBriefing(stage, articles, clusters);
   const alertsCreated = [...clusters.values()].filter((items) => items.filter((item) => isRecent(item, RECENT_HOURS)).length >= 5).length;
   const duration = (Date.now() - start) / 1000;
 
-  await sql`
+  await stage`
     INSERT INTO pipeline_run_log (
       run_at, articles_processed, clusters_summarized, spikes_detected,
       drivers_updated, duration_seconds, status, error_message, snowflake_credits_used
@@ -501,6 +512,8 @@ export async function refreshNeonIntelligence(): Promise<RefreshStats> {
       ${driversUpdated}, ${duration}, 'neon_refresh:success', NULL, 0
     )
   `;
+
+  await sql.transaction(writes);
 
   return {
     articlesProcessed: articles.length,

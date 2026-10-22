@@ -1,3 +1,4 @@
+import { JobBusyError, runJob } from "@/lib/jobs";
 /**
  * POST /api/ingest/rss
  *
@@ -13,6 +14,8 @@
 
 import { ok, err, unauthorized, methodNotAllowed, toErrorMessage, validateIngestAuth } from "@/lib/api";
 import { ingestRssToNeon, RSS_FEEDS } from "@/lib/rss-ingest";
+
+export const maxDuration = 120;
 
 // ---------------------------------------------------------------------------
 // Handlers
@@ -35,10 +38,13 @@ export async function POST(req: Request) {
   const fetchHtml = searchParams.get("html") === "1";
   const tierFilter = (searchParams.get("tier") || "all").toLowerCase();
 
+  if (!["all", "official", "media"].includes(tierFilter)) return err("Invalid tier", 400);
+  if (fetchHtml && process.env.ENABLE_HTML_INGEST !== "1") return err("HTML ingestion is disabled", 400);
   try {
-    const result = await ingestRssToNeon({ fetchHtml, tier: tierFilter });
+    const result = await runJob("rss-ingest", () => ingestRssToNeon({ fetchHtml, tier: tierFilter, signal: AbortSignal.timeout(105_000) }));
     return ok(result);
   } catch (e) {
+    if (e instanceof JobBusyError) return err("Job is already running", 409);
     return err(toErrorMessage(e));
   }
 }

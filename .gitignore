@@ -49,3 +49,10 @@ build/
 fastf1_http_cache.sqlite
 etl/research/*.parquet
 etl/research/*.csv
+
+# browser test reports
+web/test-results/
+web/playwright-report/
+
+# Vercel local project linkage
+.vercel/

@@ -1,5 +1,6 @@
-fastf1
-psycopg2-binary
-python-dotenv
-pandas
-numpy
+-c ../requirements-security.txt
+fastf1>=3.8.3,<4
+psycopg2-binary>=2.9,<3
+python-dotenv>=1.2.4,<2
+pandas>=2.3,<3
+numpy>=1.26,<3

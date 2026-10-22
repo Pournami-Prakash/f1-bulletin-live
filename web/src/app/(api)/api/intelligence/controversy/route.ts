@@ -1,4 +1,6 @@
-import { NextResponse } from 'next/server'
+import { publicJson } from '@/lib/api'
+import { logEvent } from '@/lib/observability'
+import { clamp, toInt, toEnum } from '@/lib/api'
 import { getNeonSql } from '@/lib/neon'
 
 export const dynamic = "force-dynamic"
@@ -6,8 +8,8 @@ export const dynamic = "force-dynamic"
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const days = parseInt(searchParams.get('days') || '1')
-    const type = searchParams.get('type') || 'all'
+    const days = clamp(toInt(searchParams.get('days'), 1), 1, 365)
+    const type = toEnum(searchParams.get('type'), ['driver', 'team', 'all'] as const, 'all')
     const sql = getNeonSql()
 
     const cutoff = new Date()
@@ -55,9 +57,9 @@ export async function GET(request: Request) {
       negativeCount:  r.negative_count,
       topCluster:     r.top_cluster,
     }))
-    return NextResponse.json({ ok: true, data, count: data.length })
-  } catch (error) {
-    console.error('[/api/intelligence/controversy]', error)
-    return NextResponse.json({ ok: false, error: 'Failed to fetch controversy data' }, { status: 500 })
+    return publicJson({ ok: true, data, count: data.length })
+  } catch {
+    logEvent('error', 'api_failed', { route: '/api/intelligence/controversy' })
+    return publicJson({ ok: false, error: 'Failed to fetch controversy data' }, { status: 500 })
   }
 }

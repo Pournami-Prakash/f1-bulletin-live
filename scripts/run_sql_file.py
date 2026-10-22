@@ -21,6 +21,8 @@ def execute_sql_file(path: str):
         warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "F1_APP_WH"),
         database=os.environ.get("SNOWFLAKE_DATABASE", "F1_BULLETIN"),
         schema="MART",
+        role=os.environ.get("SNOWFLAKE_ROLE", "F1_INGESTOR"),
+        network_timeout=60,
         login_timeout=30,
     )
 

@@ -19,9 +19,15 @@ on:
         default: false
         type: boolean
 
+permissions:
+  contents: read
+
 concurrency:
   group: f1-predictions
   cancel-in-progress: false
+
+env:
+  PIP_CONSTRAINT: ${{ github.workspace }}/requirements-security.txt
 
 jobs:
   predict:
@@ -44,7 +50,7 @@ jobs:
           key: fastf1-${{ runner.os }}-${{ github.run_id }}
           restore-keys: fastf1-${{ runner.os }}-
       - name: Install dependencies
-        run: pip install fastf1 pandas numpy scikit-learn xgboost psycopg2-binary python-dotenv pyarrow
+        run: pip install --upgrade pip setuptools && pip install fastf1 pandas numpy scikit-learn xgboost psycopg2-binary python-dotenv pyarrow
       - name: Validate prediction safeguards
         run: python -m unittest discover -s etl/prediction -p 'test*.py'
       - name: Reconcile predictions and scores chronologically

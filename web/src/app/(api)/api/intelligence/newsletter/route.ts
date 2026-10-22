@@ -1,3 +1,5 @@
+import { logEvent } from '@/lib/observability'
+import { fetchWithRetry } from '@/lib/fetch'
 import {
   clamp,
   err,
@@ -649,10 +651,10 @@ function parseLiveTimingDate(value?: string, gmtOffset?: string) {
 }
 
 async function fetchLiveTimingJson<T>(path: string, revalidate = 30): Promise<T | null> {
-  const res = await fetch(`https://livetiming.formula1.com/static/${path}`, {
+  const res = await fetchWithRetry(`https://livetiming.formula1.com/static/${path}`, {
     headers: { 'user-agent': 'f1-bulletin/1.0' },
     next: { revalidate },
-  })
+  }, 8000, 1)
   if (!res.ok) return null
   const text = await res.text()
   return JSON.parse(text.replace(/^\uFEFF/, '')) as T
@@ -1077,7 +1079,7 @@ export async function GET(req: Request) {
 
     return ok(payload, { count: stories.length })
   } catch (e) {
-    console.error('[/api/intelligence/newsletter]', e)
+    logEvent('error', 'api_failed', { route: '/api/intelligence/newsletter' })
     return err(toErrorMessage(e))
   }
 }

@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { getNeonSql } from "@/lib/neon";
-import { fetchWithRetry } from "@/lib/fetch";
+import { fetchAllowedResponse } from "@/lib/fetch";
 import {
   cleanSummary,
   EMPTY_FULL_TEXT,
@@ -149,8 +149,9 @@ function priorityFor(feed: FeedDef, title: string, summary: string) {
 export async function ingestRssToNeon(options: {
   fetchHtml: boolean;
   tier: string;
+  signal?: AbortSignal;
 }): Promise<NeonRssIngestResult> {
-  const sql = getNeonSql();
+  const sql = getNeonSql("write");
   const tierFilter = options.tier.toLowerCase();
   const feeds = RSS_FEEDS
     .filter((f) => f.enabled !== false)
@@ -163,7 +164,8 @@ export async function ingestRssToNeon(options: {
   let totalUpdated = 0;
   let totalSkipped = 0;
 
-  for (const feed of feeds) {
+  const processFeed = async (feed: FeedDef) => {
+    options.signal?.throwIfAborted();
     const timeout = feed.timeoutMs ?? 15_000;
     const headers = {
       "user-agent": "f1-bulletin-ingestor/1.0",
@@ -173,10 +175,10 @@ export async function ingestRssToNeon(options: {
 
     let feedRes: Response;
     try {
-      feedRes = await fetchWithRetry(feed.url, { headers, cache: "no-store" }, timeout, 1);
+      feedRes = await fetchAllowedResponse(feed.url, { headers, cache: "no-store", signal: options.signal }, timeout);
     } catch (e) {
       perFeed[feed.name] = { fetched: 0, inserted: 0, updated: 0, skipped: 0, error: (e as Error).message };
-      continue;
+      return;
     }
 
     if (!feedRes.ok) {
@@ -188,13 +190,18 @@ export async function ingestRssToNeon(options: {
         httpStatus: feedRes.status,
         error: `http_${feedRes.status}`,
       };
-      continue;
+      return;
     }
 
-    const items = parseRssFeed(await feedRes.text());
+    const items = parseRssFeed(await feedRes.text()).slice(0, 100);
     perFeed[feed.name] = { fetched: items.length, inserted: 0, updated: 0, skipped: 0, httpStatus: feedRes.status };
 
     for (const item of items) {
+      options.signal?.throwIfAborted();
+      try {
+        const link = new URL(item.link);
+        if (link.protocol !== "https:" || link.username || link.password || item.link.length > 2048) continue;
+      } catch { continue; }
       totalAttempted++;
       let full: FullTextResult = EMPTY_FULL_TEXT;
       if (options.fetchHtml) {
@@ -225,7 +232,9 @@ export async function ingestRssToNeon(options: {
       const textAll = [item.title, summary, full.full_title, full.meta_description, full.content_text].filter(Boolean).join("\n\n");
       const storyId = stableId("rss", `${cluster}:${item.title.toLowerCase().replace(/\s+/g, " ").trim()}`);
 
-      const [eventRow] = await sql`
+      const [, [eventRow]] = await sql.transaction([
+        sql`SELECT set_config('statement_timeout', '10000', true)`,
+        sql`
         INSERT INTO event_f1_only (
           url,
           source_type, source, title, summary,
@@ -263,9 +272,9 @@ export async function ingestRssToNeon(options: {
           updated_at = NOW()
         WHERE event_f1_only.content_hash IS DISTINCT FROM EXCLUDED.content_hash
         RETURNING (xmax = 0) AS inserted
-      `;
+      `,
 
-      await sql`
+      sql`
         INSERT INTO story_timeline (
           story_id,
           topic_cluster,
@@ -321,7 +330,10 @@ export async function ingestRssToNeon(options: {
           is_breaking = story_timeline.is_breaking OR EXCLUDED.is_breaking,
           breaking_tier = COALESCE(EXCLUDED.breaking_tier, story_timeline.breaking_tier),
           updated_at = NOW()
-      `;
+        WHERE (story_timeline.story_title, story_timeline.latest_url, story_timeline.latest_event_ts)
+          IS DISTINCT FROM (EXCLUDED.story_title, EXCLUDED.latest_url, EXCLUDED.latest_event_ts)
+      `,
+      ]);
 
       if (!eventRow) {
         totalSkipped++;
@@ -334,8 +346,17 @@ export async function ingestRssToNeon(options: {
         perFeed[feed.name].updated++;
       }
     }
+  };
+  // Two feeds at a time bound upstream sockets and shorten the serverless job.
+  // Await every started task before releasing the job lease, including failures.
+  for (let offset = 0; offset < feeds.length; offset += 2) {
+    const outcomes = await Promise.allSettled(feeds.slice(offset, offset + 2).map(processFeed));
+    if (outcomes.some(result => result.status === 'rejected')) throw new Error("Feed processing failed");
   }
 
+  if (Object.values(perFeed).every((feed) => Boolean(feed.error))) {
+    throw new Error("All configured feeds failed");
+  }
   return {
     ingestId,
     attempted: totalAttempted,

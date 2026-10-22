@@ -174,7 +174,7 @@ def sf_connect():
         warehouse=os.getenv("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
         database=os.getenv("SNOWFLAKE_DATABASE", "F1_BULLETIN"),
         schema="RAW",
-        role=os.getenv("SNOWFLAKE_ROLE", "SYSADMIN"),
+        role=os.getenv("SNOWFLAKE_ROLE", "F1_INGESTOR"),
         paramstyle="qmark",
         client_session_keep_alive=True,
     )

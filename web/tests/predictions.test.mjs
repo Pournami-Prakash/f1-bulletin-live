@@ -8,9 +8,9 @@ function load(source, imports = {}) {
   const code = ts.transpileModule(readFileSync(new URL(source, import.meta.url), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText
-  const module = { exports: {} }
-  new Function('require', 'module', 'exports', code)(name => imports[name] ?? require(name), module, module.exports)
-  return module.exports
+  const loaded = { exports: {} }
+  new Function('require', 'module', 'exports', code)(name => imports[name] ?? require(name), loaded, loaded.exports)
+  return loaded.exports
 }
 const neon = load('../src/lib/neon.ts')
 const { shapeRacePrediction } = load('../src/lib/predictions.ts', { '@/lib/neon': neon })

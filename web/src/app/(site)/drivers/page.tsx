@@ -224,6 +224,7 @@ function useEntityTs(tab: Tab, name: string | null, days = 30) {
     fetch(`/api/intelligence/drivers?format=timeseries&type=${tab}&driver=${encodeURIComponent(name)}&days=${days}`)
       .then((r) => r.ok ? r.json() : null)
       .then((d) => { if (mounted) setData(d?.ok ? (d.data ?? []).map(normTs) : []) })
+      .catch(() => { if (mounted) setData([]) })
       .finally(() => { if (mounted) setLoading(false) })
     return () => { mounted = false }
   }, [tab, name, days])
@@ -240,13 +241,10 @@ function useBatchTs(tab: Tab, entities: EnrichedEntity[], days = 30) {
     if (key === keyRef.current) return
     keyRef.current = key
     let mounted = true
-    Promise.all(
-      entities.map((e) =>
-        fetch(`/api/intelligence/drivers?format=timeseries&type=${tab}&driver=${encodeURIComponent(e.driverName)}&days=${days}`)
-          .then((r) => r.ok ? r.json() : null)
-          .then((d) => [e.driverName, d?.ok ? (d.data ?? []).map(normTs) : []] as const),
-      ),
-    ).then((results) => { if (mounted) setMap(Object.fromEntries(results)) })
+    fetch(`/api/intelligence/drivers?format=batch&type=${tab}&names=${encodeURIComponent(names.join('|'))}&days=${days}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (mounted) setMap(Object.fromEntries(names.map(name => [name, (d?.data?.[name] ?? []).map(normTs)]))) })
+      .catch(() => { if (mounted) { keyRef.current = ''; setMap({}) } })
     return () => { mounted = false }
   }, [tab, entities, days])
   return map

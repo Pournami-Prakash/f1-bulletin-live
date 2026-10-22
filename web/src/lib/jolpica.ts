@@ -1,3 +1,4 @@
+import { fetchWithRetry } from '@/lib/fetch'
 const JOLPICA_BASE = 'https://api.jolpi.ca/ergast/f1'
 
 export type StandingType = 'drivers' | 'constructors'
@@ -14,7 +15,7 @@ export function jolpicaPath(path: string) {
 }
 
 export async function fetchJolpicaJson(path: string, revalidate = 3600) {
-  const res = await fetch(path, { next: { revalidate } })
+  const res = await fetchWithRetry(path, { next: { revalidate } }, 8000, 1)
   if (!res.ok) {
     throw new Error(`Jolpica request failed with ${res.status}`)
   }

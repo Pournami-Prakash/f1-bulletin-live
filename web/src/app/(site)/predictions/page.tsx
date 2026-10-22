@@ -39,7 +39,7 @@ const bebas = 'var(--font-bebas)'
 
 const CDN = 'https://media.formula1.com/image/upload/c_fill,w_720/q_auto/d_common:f1:2026:fallback:driver:2026fallbackdriverright.webp/v1740000000/common/f1/2026'
 
-function gridContext(data: RacePrediction | null): GridContext {
+function gridContext(): GridContext {
   return { short: 'MODEL GRID', table: 'GRID', note: 'Forecast grid · final starting positions unverified' }
 }
 
@@ -346,7 +346,7 @@ export default function PredictionsPage() {
 
   const top3      = data?.drivers.slice(0, 3) ?? []
   const upsets    = data?.drivers.filter(d => d.is_upset_pick) ?? []
-  const gridInfo   = gridContext(data)
+  const gridInfo   = gridContext()
 
   return (
     <>

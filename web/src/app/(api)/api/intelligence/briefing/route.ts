@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { publicJson } from '@/lib/api'
+import { logEvent } from '@/lib/observability'
 import { getNeonSql } from '@/lib/neon'
 
 export const dynamic = "force-dynamic"
@@ -45,14 +46,14 @@ export async function GET() {
       time:       s.latest_event_ts,
     }))
 
-    return NextResponse.json({
+    return publicJson({
       ok: true,
       briefing: briefing[0] ?? null,
       stories: mapped,
       count: mapped.length,
     })
-  } catch (error) {
-    console.error('[/api/intelligence/briefing]', error)
-    return NextResponse.json({ ok: false, error: 'Failed to fetch briefing' }, { status: 500 })
+  } catch {
+    logEvent('error', 'api_failed', { route: '/api/intelligence/briefing' })
+    return publicJson({ ok: false, error: 'Failed to fetch briefing' }, { status: 500 })
   }
 }

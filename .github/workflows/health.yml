@@ -1,0 +1,35 @@
+name: Production health and retention
+on:
+  schedule:
+    - cron: '25 */3 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: f1-health
+  cancel-in-progress: false
+jobs:
+  ready:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web --omit=dev
+      - name: Prune expired operational records
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: node scripts/prune-operations.mjs
+      - name: Check readiness and pipeline freshness
+        env:
+          INGEST_KEY: ${{ secrets.INGEST_KEY }}
+        run: |
+          test -n "$INGEST_KEY"
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 25 \
+            --retry 2 --retry-max-time 90 -H "Authorization: Bearer $INGEST_KEY" \
+            'https://f1bulletin.vercel.app/api/health?ready=1' -o /tmp/readiness.json
+          jq -e '.ok == true' /tmp/readiness.json

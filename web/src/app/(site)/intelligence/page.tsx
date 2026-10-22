@@ -1,5 +1,7 @@
 'use client'
 
+import { safeExternalUrl } from '@/lib/external-url'
+
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -305,7 +307,7 @@ function useEntityTs(tab: IntelTab, name: string|null, days=30) {
     if (!name) { setData([]); return }
     let mounted=true; setLoading(true)
     fetch(`/api/intelligence/drivers?format=timeseries&type=${tab}&driver=${encodeURIComponent(name)}&days=${days}`)
-      .then(r=>r.ok?r.json():null).then(d=>{ if(mounted) setData(d?.ok?(d.data??[]).map(normTs):[]) }).finally(()=>{ if(mounted) setLoading(false) })
+      .then(r=>r.ok?r.json():null).then(d=>{ if(mounted) setData(d?.ok?(d.data??[]).map(normTs):[]) }).catch(()=>{ if(mounted) setData([]) }).finally(()=>{ if(mounted) setLoading(false) })
     return ()=>{ mounted=false }
   },[tab,name,days])
   return {data,loading}
@@ -318,10 +320,11 @@ function useBatchTs(tab: IntelTab, entities: EnrichedEntity[], days=30) {
     const key = `${tab}:${entities.map(e=>e.driverName).join(',')}:${days}`
     if (key===keyRef.current) return
     keyRef.current=key; let mounted=true
-    Promise.all(entities.map(e=>
-      fetch(`/api/intelligence/drivers?format=timeseries&type=${tab}&driver=${encodeURIComponent(e.driverName)}&days=${days}`)
-        .then(r=>r.ok?r.json():null).then(d=>[e.driverName,d?.ok?(d.data??[]).map(normTs):[]] as const)
-    )).then(results=>{ if(mounted) setMap(Object.fromEntries(results)) })
+    const names = entities.map(e => e.driverName)
+    fetch(`/api/intelligence/drivers?format=batch&type=${tab}&names=${encodeURIComponent(names.join('|'))}&days=${days}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if(mounted) setMap(Object.fromEntries(names.map(name => [name, (d?.data?.[name] ?? []).map(normTs)]))) })
+      .catch(() => { if(mounted) { keyRef.current = ''; setMap({}) } })
     return ()=>{ mounted=false }
   },[tab,entities,days])
   return map
@@ -363,7 +366,7 @@ function BreakingBanner({ stories }: { stories: Story[] }) {
       {stories.slice(0,3).map((s,i) => (
         <span key={i} style={{fontSize:10,color:'rgba(255,255,255,.7)'}}>
           {i>0&&<span style={{color:'rgba(255,255,255,.2)',marginRight:8}}>·</span>}
-          {s.latest_url?<a href={s.latest_url} target="_blank" rel="noopener noreferrer" style={{color:'#fff',textDecoration:'none'}}>{s.story_title}</a>:s.story_title}
+          {s.latest_url?<a href={safeExternalUrl(s.latest_url)} target="_blank" rel="noopener noreferrer" style={{color:'#fff',textDecoration:'none'}}>{s.story_title}</a>:s.story_title}
         </span>
       ))}
     </div>
@@ -497,7 +500,7 @@ function StoryRow({ story, dim }: { story: Story; dim?: boolean }) {
     </div>
   )
   if (!href) return inner
-  return <a href={href} target="_blank" rel="noopener noreferrer" style={{textDecoration:'none',color:'inherit',display:'block'}}>{inner}</a>
+  return <a href={safeExternalUrl(href)} target="_blank" rel="noopener noreferrer" style={{textDecoration:'none',color:'inherit',display:'block'}}>{inner}</a>
 }
 
 function KpiCard({ label, value, color, sub }: { label:string; value:string|number; color:string; sub?:string }) {
@@ -1271,7 +1274,7 @@ function NewsletterStoryItem({ story, index, compact }: { story: NewsletterStory
     </div>
   )
   if (!story.url) return content
-  return <a href={story.url} target="_blank" rel="noopener noreferrer" style={{display:'block',textDecoration:'none',color:'inherit'}}>{content}</a>
+  return <a href={safeExternalUrl(story.url)} target="_blank" rel="noopener noreferrer" style={{display:'block',textDecoration:'none',color:'inherit'}}>{content}</a>
 }
 
 function PrintNewsletterSheet({ newsletter }: { newsletter: Newsletter }) {

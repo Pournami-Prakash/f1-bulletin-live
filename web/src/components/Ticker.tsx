@@ -13,14 +13,7 @@ interface Props {
   loading?: boolean
 }
 
-const FALLBACK = [
-  { type: 'o', text: 'FIA COMMISSION — Sprint format revised, cost cap updated for 2026' },
-  { type: 'r', text: 'REDDIT — Hamilton Ferrari Year One retrospective viral across F1 communities' },
-  { type: 'n', text: 'NEWS — Russell P1 Bahrain Day 2, Piastri 0.087s back on C4 compound' },
-  { type: 'n', text: 'NEWS — Verstappen on 2026 regulations: "We need to wait and see"' },
-  { type: 'r', text: 'REDDIT — Aston Martin Honda concerns deepen ahead of Melbourne opener' },
-  { type: 'o', text: 'OFFICIAL — 2026 PU deployment rules confirmed by unanimous vote' },
-]
+const FALLBACK = [{ type: 'n', text: 'Live headlines are temporarily unavailable. Open Stories to try again.' }]
 
 export default function Ticker({ items }: Props) {
   const [fetched, setFetched] = useState<{ type: string; text: string }[]>([])

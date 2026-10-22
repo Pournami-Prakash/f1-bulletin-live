@@ -1,3 +1,4 @@
+import { logEvent } from '@/lib/observability'
 import { NextResponse } from 'next/server'
 import { getNeonSql } from '@/lib/neon'
 
@@ -52,8 +53,8 @@ export async function GET(request: Request) {
     `
 
     return NextResponse.json({ circuitKey: key, aliases, winners })
-  } catch (error) {
-    console.error('[/api/racing/circuit-history]', error)
+  } catch {
+    logEvent('error', 'api_failed', { route: '/api/racing/circuit-history' })
     return NextResponse.json({ circuitKey: key, winners: [] }, { status: 500 })
   }
 }

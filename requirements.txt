@@ -1,0 +1,6 @@
+-c requirements-security.txt
+-r scripts/requirements-neon-intelligence.txt
+-r etl/requirements.txt
+scikit-learn>=1.8,<2
+xgboost>=3,<4
+pyarrow>=23,<27

@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { publicJson } from '@/lib/api'
+import { logEvent } from '@/lib/observability'
 import { getNeonSql } from '@/lib/neon'
 
 export async function GET() {
@@ -21,9 +22,9 @@ export async function GET() {
       WHERE session_type = 'R'
       ORDER BY season DESC, round DESC
     `
-    return NextResponse.json(rows)
-  } catch (error) {
-    console.error('[/api/racing/sessions]', error)
-    return NextResponse.json({ error: 'Failed to fetch sessions' }, { status: 500 })
+    return publicJson(rows)
+  } catch {
+    logEvent('error', 'api_failed', { route: '/api/racing/sessions' })
+    return publicJson({ error: 'Failed to fetch sessions' }, { status: 500 })
   }
 }

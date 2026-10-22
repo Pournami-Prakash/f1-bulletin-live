@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { publicJson } from '@/lib/api'
+import { logEvent } from '@/lib/observability'
 import { getNeonSql } from '@/lib/neon'
 
 export const revalidate = 300
@@ -58,10 +59,10 @@ export async function GET(request: Request) {
       ) normalized_calendar
       ORDER BY round
     `
-    return NextResponse.json(rows)
-  } catch (err) {
-    console.error('Neon calendar query failed:', err)
-    return NextResponse.json(
+    return publicJson(rows)
+  } catch {
+    logEvent('error', 'api_failed', { route: '/api/calendar' })
+    return publicJson(
       { error: 'Failed to fetch calendar' },
       { status: 500 }
     )

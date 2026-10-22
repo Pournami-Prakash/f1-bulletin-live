@@ -1,3 +1,6 @@
+import { logEvent } from '@/lib/observability'
+import { fetchWithRetry } from '@/lib/fetch'
+import { badRequest } from '@/lib/api'
 import { NextResponse } from 'next/server'
 import { jolpicaPath } from '@/lib/jolpica'
 const CURRENT_YEAR = new Date().getFullYear()
@@ -6,12 +9,18 @@ export const revalidate = 3600
 
 async function fetchJSON(url: string) {
   try {
-    const res = await fetch(url, { next: { revalidate: 3600 } })
+    const res = await fetchWithRetry(url, { next: { revalidate: 3600 } }, 8000, 1)
     if (!res.ok) return null
     return await res.json()
   } catch {
     return null
   }
+}
+
+async function mapBounded<T, R>(items: T[], mapper: (item: T) => Promise<R>): Promise<R[]> {
+  const output: R[] = []
+  for (let offset = 0; offset < items.length; offset += 4) output.push(...await Promise.all(items.slice(offset, offset + 4).map(mapper)))
+  return output
 }
 
 // Paginate through all races — Jolpica hard caps at 100 per page
@@ -26,12 +35,9 @@ async function fetchAllRaces(driverId: string): Promise<any[]> {
   if (total <= 100) return firstRaces
 
   const pages = Math.ceil(total / 100)
-  const rest = await Promise.all(
-    Array.from({ length: pages - 1 }, (_, i) =>
-      fetchJSON(
-        jolpicaPath(`drivers/${driverId}/results.json?limit=100&offset=${(i + 1) * 100}`)
-      )
-    )
+  if (!Number.isFinite(total) || pages > 10) throw new Error("Upstream race history exceeds limit")
+  const rest = await mapBounded(Array.from({ length: pages - 1 }, (_, i) => i), i =>
+    fetchJSON(jolpicaPath(`drivers/${driverId}/results.json?limit=100&offset=${(i + 1) * 100}`))
   )
 
   return [
@@ -52,12 +58,8 @@ async function countChampionships(
   )
   if (!completedSeasons.length) return 0
 
-  const results = await Promise.all(
-    completedSeasons.map(s =>
-      fetchJSON(
-        jolpicaPath(`${s.season}/drivers/${driverId}/driverstandings.json?limit=1`)
-      )
-    )
+  const results = await mapBounded(completedSeasons.slice(0, 100), s =>
+    fetchJSON(jolpicaPath(`${s.season}/drivers/${driverId}/driverstandings.json?limit=1`))
   )
 
   return results.filter(d => {
@@ -71,6 +73,7 @@ export async function GET(
   context: { params: Promise<{ driverId: string }> }
 ) {
   const { driverId } = await context.params
+  if (!/^[a-z][a-z0-9_]{0,63}$/.test(driverId)) return badRequest("Invalid driver ID")
 
   try {
     const [
@@ -172,8 +175,8 @@ export async function GET(
         results: recentResults,
       },
     })
-  } catch (err) {
-    console.error('[driver API]', err)
+  } catch {
+    logEvent('error', 'api_failed', { route: '/api/racing/driver/[driverId]' })
     return NextResponse.json(
       { ok: false, error: 'Failed to fetch driver data' },
       { status: 500 }
