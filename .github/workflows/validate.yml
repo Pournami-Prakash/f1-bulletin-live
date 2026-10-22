@@ -46,6 +46,9 @@ jobs:
           path: web/test-results
           retention-days: 7
   python:
+    env:
+      # Import-time configuration only. Unit tests mock database access.
+      NEON_DATABASE_URL: postgresql://test:test@127.0.0.1:1/test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
