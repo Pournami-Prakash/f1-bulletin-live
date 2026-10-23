@@ -124,3 +124,62 @@ test('every round exposes normalized race and championship distributions, includ
   }
   for(const d of forecast.drivers) assert.deepEqual(forecast.races.find(r=>r.round===4&&r.driver_code===d.driver_code).championship_position_probabilities,d.position_probabilities)
 })
+
+test('clinch conditions use all future points and worst-case rival race countback',()=>{
+  const {clinchAgainst}=loaded.exports
+  const a={driver_code:'A',current_points:100,active:true,race_finishes:[6,0,0]}
+  const b={driver_code:'B',current_points:75,active:true,race_finishes:[2,0,0]}
+  const context={future_points:25,future_races:1}
+  assert.equal(clinchAgainst(a,b,1,1,context),'occupied')
+  assert.equal(clinchAgainst(a,b,0,0,context),'safe') // Equality, but six wins beat three.
+  assert.equal(clinchAgainst({...a,race_finishes:[3,0,0]},b,0,0,context),'tie')
+  assert.equal(clinchAgainst({...a,race_finishes:[2,0,0]},b,0,0,context),'alive')
+  assert.equal(clinchAgainst(a,b,0,10,context),'alive') // A single point keeps B alive.
+  assert.equal(clinchAgainst(a,b,0,0,{future_points:33,future_races:1}),'alive') // Include future sprint.
+  assert.equal(clinchAgainst(a,b,0,0,context,0,1),'alive') // This weekend's sprint also counts.
+  assert.equal(clinchAgainst(a,{...b,active:false},0,0,context),'safe')
+})
+
+test('next-race conditional clinch estimates count matching joint race outcomes',()=>{
+  const data=fixture()
+  data.results.filter(r=>r.driver_code==='A').forEach(r=>{r.points=300})
+  const forecast=simulateChampionship(data)
+  const context=forecast.next_race_clinch
+  assert.equal(context.round,3)
+  assert.equal(context.future_points,25)
+  assert.equal(context.future_races,1)
+  assert.equal(context.sprint_pending,true)
+  assert.deepEqual(context.drivers.find(d=>d.driver_code==='A').race_finishes.slice(0,3),[2,0,0])
+  for(const counter of context.conditional) {
+    assert.ok(Number.isInteger(counter.samples)&&counter.samples>=0)
+    assert.ok(counter.clinches>=0&&counter.clinches<=counter.samples)
+    if(counter.driver_code==='A') assert.equal(counter.clinches,counter.samples)
+    else assert.equal(counter.clinches,0)
+  }
+  assert.ok(context.conditional.find(c=>c.driver_code==='A'&&c.position===1).samples>0)
+  data.calendar=data.calendar.slice(0,2)
+  assert.equal(simulateChampionship(data).next_race_clinch,null)
+})
+
+test('Austin clinch boundary requires the win, Russell ninth or worse and Hamilton fifth or worse',()=>{
+  const {clinchAgainst}=loaded.exports
+  const ant={driver_code:'ANT',current_points:340,active:true,race_finishes:[8,0,0]}
+  const rus={driver_code:'RUS',current_points:238,active:true,race_finishes:[3,0,0]}
+  const ham={driver_code:'HAM',current_points:229,active:true,race_finishes:[1,0,0]}
+  const afterAustin={future_points:125,future_races:5}
+  assert.equal(clinchAgainst(ant,rus,1,9,afterAustin),'safe')
+  assert.equal(clinchAgainst(ant,rus,1,8,afterAustin),'alive')
+  assert.equal(clinchAgainst(ant,ham,1,5,afterAustin),'safe')
+  assert.equal(clinchAgainst(ant,ham,1,4,afterAustin),'alive')
+  assert.equal(clinchAgainst(ant,rus,2,0,afterAustin),'alive')
+})
+
+test('a proposed classification has enough classified cars to fill every selected place',()=>{
+  const {feasibleClassification}=loaded.exports
+  assert.equal(feasibleClassification(22,[1,9,5,2]),true)
+  assert.equal(feasibleClassification(22,[1,0,22]),false)
+  assert.equal(feasibleClassification(4,[0,4]),false)
+  assert.equal(feasibleClassification(4,[0,3,2,1]),true)
+  assert.equal(feasibleClassification(4,[1,1]),false)
+  assert.equal(feasibleClassification(4,[0,0,0,0]),false)
+})

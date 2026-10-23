@@ -5,7 +5,7 @@
  */
 export const RACE_POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
 export const SPRINT_POINTS = [8, 7, 6, 5, 4, 3, 2, 1]
-export const CHAMPIONSHIP_VERSION = 'season_scenarios_v2'
+export const CHAMPIONSHIP_VERSION = 'season_scenarios_v3'
 
 export type CalendarEvent = {
   round: number; race_name: string; circuit_name: string; race_start_utc: string
@@ -29,8 +29,43 @@ export type ChampionshipDriver = {
   podium_probability: number; position_probabilities: number[]; maximum_points: number
   points_eliminated: boolean
 }
+export type ClinchDriver = { driver_code: string; active: boolean; current_points: number; race_finishes: number[] }
+export type ClinchContext = {
+  round: number; future_points: number; future_races: number; sprint_pending: boolean
+  drivers: ClinchDriver[]
+  conditional: { driver_code: string; position: number; samples: number; clinches: number }[]
+}
+export function feasibleClassification(field: number, known: number[]): boolean {
+  const classified = known.filter(p=>p>0)
+  const available = field-known.filter(p=>p===0).length
+  return available>0 && new Set(classified).size===classified.length
+    && classified.every(p=>Number.isInteger(p)&&p<=available)
+}
+export type ClinchStatus = 'safe' | 'alive' | 'tie' | 'occupied'
+/** Worst-case rival wins every remaining GP and sprint; candidate scores nothing.
+ * Equal race countback is left unresolved here because next qualifying is unknown.
+ */
+export function clinchAgainst(candidate: ClinchDriver, rival: ClinchDriver, candidatePosition: number,
+  rivalPosition: number, context: Pick<ClinchContext,'future_points'|'future_races'>,
+  candidateSprintPoints = 0, rivalSprintPoints = 0): ClinchStatus {
+  if (candidatePosition > 0 && candidatePosition === rivalPosition && rival.active) return 'occupied'
+  const candidatePoints = candidate.current_points + (RACE_POINTS[candidatePosition-1] ?? 0) + candidateSprintPoints
+  const rivalPoints = rival.current_points + (rival.active ? (RACE_POINTS[rivalPosition-1] ?? 0) + rivalSprintPoints + context.future_points : 0)
+  if (candidatePoints > rivalPoints) return 'safe'
+  if (candidatePoints < rivalPoints) return 'alive'
+  const a = [...candidate.race_finishes], b = [...rival.race_finishes]
+  if (candidatePosition) a[candidatePosition-1] = (a[candidatePosition-1] ?? 0)+1
+  if (rival.active && rivalPosition) b[rivalPosition-1] = (b[rivalPosition-1] ?? 0)+1
+  if (rival.active) b[0] = (b[0] ?? 0)+context.future_races
+  for (let i=0;i<Math.max(a.length,b.length);i++) {
+    if ((a[i]??0) !== (b[i]??0)) return (a[i]??0) > (b[i]??0) ? 'safe' : 'alive'
+  }
+  return 'tie'
+}
+
 export type ChampionshipForecast = {
   season: number; model_version: string; generated_at: string; as_of_round: number
+  next_race_clinch: ClinchContext | null
   simulations: number; range_level: number; completed_races: number; completed_sprints: number
   remaining: (CalendarEvent & { race_pending: boolean; sprint_pending: boolean; awaiting_results: boolean })[]
   drivers: ChampionshipDriver[]; races: RaceScenario[]; warnings: string[]; unresolved_tie_probability: number
@@ -173,6 +208,14 @@ export function simulateChampionship(input: {
   const finalPoints = drivers.map(() => [] as number[])
   const positionCounts = drivers.map(() => Array<number>(n).fill(0))
   const raceSamples = remaining.map(() => drivers.map(() => ({ position: [] as number[], points: [] as number[], cumulative: [] as number[], championship: Array<number>(n).fill(0), wins: 0 })))
+  const nextClinch = remaining[0]?.race_pending ? {
+    round: remaining[0].round, sprint_pending: remaining[0].sprint_pending,
+    future_points: remaining.slice(1).reduce((sum,e)=>sum+(e.race_pending?25:0)+(e.sprint_pending?8:0),0),
+    future_races: remaining.slice(1).filter(e=>e.race_pending).length,
+    drivers: drivers.map((driver_code,i)=>({ driver_code, active: active.has(driver_code), current_points: points[i], race_finishes: raceCounts[i] })),
+    conditional: [] as ClinchContext['conditional'],
+  } : null
+  const clinchCounts = drivers.map(()=>Array.from({length:active.size},()=>({samples:0,clinches:0})))
   let unresolvedTies = 0
   const distributePositions = (totals: number[], rc: number[][], qc: number[][], emit: (i: number, rank: number, share: number) => void) => {
     const order = drivers.map((_, i) => i).sort((a, b) => compareCountback(a, b, totals, rc, qc))
@@ -197,6 +240,7 @@ export function simulateChampionship(input: {
       const quali = [...activeIndices].sort((a, b) => a - b).map(i => ({ i, score: pace(i) + 2.2 * normal() })).sort((a, b) => a.score - b.score)
       const grid = Array<number>(n).fill(n)
       quali.forEach(({ i }, rank) => { grid[i] = rank + 1; if (event.race_pending) qc[i][rank]++ })
+      const gpPoints = Array<number>(n).fill(0)
       const run = (sprint: boolean) => {
         // A shared reliability shock correlates disruption across the field.
         const chaos = random() < .12 ? 1.5 : 1
@@ -211,6 +255,7 @@ export function simulateChampionship(input: {
           // in this simplified outlook. Existing actual points are never altered.
           if (!retired) totals[i] += scoring[rank] ?? 0
           if (!sprint) {
+            gpPoints[i] = retired ? 0 : scoring[rank] ?? 0
             rc[i][rank]++
             raceSamples[e][i].position.push(rank + 1)
             if (rank === 0) raceSamples[e][i].wins++
@@ -224,12 +269,38 @@ export function simulateChampionship(input: {
         raceSamples[e][i].cumulative.push(totals[i])
       }
       distributePositions(totals, rc, qc, (i, rank, share) => { raceSamples[e][i].championship[rank - 1] += share })
+      if (e === 0 && nextClinch) {
+        for (const i of activeIndices) {
+          const rank = raceSamples[e][i].position.at(-1)!
+          // Condition on the stated points-paying finish, not a retirement with
+          // the same classification number but no points in this model.
+          if (gpPoints[i] !== (RACE_POINTS[rank-1] ?? 0)) continue
+          const counter = clinchCounts[i][rank-1]
+          counter.samples++
+          const locked = drivers.every((_,j)=> {
+            if (i===j) return true
+            const maxPoints = totals[j] + (active.has(drivers[j]) ? nextClinch.future_points : 0)
+            if (totals[i] !== maxPoints) return totals[i] > maxPoints
+            const worstRace = [...rc[j]], worstQuali = [...qc[j]]
+            if (active.has(drivers[j])) {
+              worstRace[0] += nextClinch.future_races
+              worstQuali[0] += nextClinch.future_races
+            }
+            for (const [a,b] of [[rc[i],worstRace],[qc[i],worstQuali]]) {
+              for(let place=0;place<a.length;place++) if(a[place]!==b[place]) return a[place]>b[place]
+            }
+            return false
+          })
+          if (locked) counter.clinches++
+        }
+      }
     }
     if (distributePositions(totals, rc, qc, (i, rank, share) => {
       positionCounts[i][rank - 1] += share
     })) unresolvedTies++
     for (let i = 0; i < n; i++) finalPoints[i].push(totals[i])
   }
+  if (nextClinch) nextClinch.conditional = drivers.flatMap((driver_code,i)=>clinchCounts[i].map((counter,rank)=>({driver_code,position:rank+1,...counter})))
   const available = remaining.reduce((sum, e) => sum + (e.race_pending ? 25 : 0) + (e.sprint_pending ? 8 : 0), 0)
   const maximumCurrent = Math.max(...points)
   const output = drivers.map((code, i): ChampionshipDriver => ({
@@ -259,7 +330,7 @@ export function simulateChampionship(input: {
   if (remaining.some(r => r.awaiting_results)) warnings.push('A scheduled race has started without a complete result in the database; its outcome remains uncertain here.')
   if (unresolvedTies) warnings.push('Identical race and qualifying countback ties share title probability; display order is not an official tie ruling.')
   return { season, model_version: CHAMPIONSHIP_VERSION, generated_at: now.toISOString(), as_of_round: last.round,
-    simulations, range_level: .8, completed_races: currentRaces.length,
+    next_race_clinch: nextClinch, simulations, range_level: .8, completed_races: currentRaces.length,
     completed_sprints: calendar.filter(e => complete(groups.get(`${season}:${e.round}:S`) ?? [])).length,
     remaining, drivers: output, races, warnings, unresolved_tie_probability: unresolvedTies / simulations }
 }

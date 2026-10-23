@@ -6,6 +6,7 @@ import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import type { ChampionshipForecast, ChampionshipDriver } from '@/lib/championship'
 import styles from './championship.module.css'
+import ClinchMap from './ClinchMap'
 
 type View = 'championship' | 'race'
 const points = (n: number) => new Intl.NumberFormat('en-GB', { maximumFractionDigits: 1 }).format(n)
@@ -140,6 +141,7 @@ export default function ChampionshipPage() {
     {error && <div className={styles.state} role="alert"><h2>Season outlook unavailable</h2><p>{error}</p><button onClick={() => setAttempt(a => a+1)}>Try again</button></div>}
     {data && driver && <>
       <div className={styles.snapshot}><span>{data.season} / AFTER R{data.as_of_round}</span><span>{data.remaining.filter(e => e.race_pending).length} RACES LEFT</span><span>{data.remaining.filter(e => e.sprint_pending).length} SPRINTS LEFT</span><span>{data.simulations.toLocaleString('en-GB')} SIMULATED SEASONS</span></div>
+      <ClinchMap data={data} />
       <section aria-labelledby="map-heading" className={styles.explorer}>
         <div className={styles.toolbar}><div><span className={styles.kicker}>THE POSSIBILITY MAP</span><h2 id="map-heading">THE BATTLES AHEAD</h2></div><div className={styles.mode} role="group" aria-label="Forecast view">{(['championship','race'] as const).map(v => <button key={v} aria-pressed={view===v} disabled={v==='race' && !data.remaining.some(e => e.race_pending)} onClick={() => {
           setView(v);setPlaying(false);setInspectedPosition(null)
@@ -173,7 +175,7 @@ export default function ChampionshipPage() {
 
       </section>
       <section className={styles.reading} aria-labelledby="reading-heading"><h2 id="reading-heading">READ THE FUTURE,<br /><em>DON’T MISTAKE IT FOR FACT.</em></h2><p>Each shape is a distribution from {data.simulations.toLocaleString('en-GB')} complete simulated seasons. Follow a driver to see where their future spreads out; move the race cursor to see what each weekend could mean. Championship positions include sprint points.</p></section>
-      <details className={styles.method}><summary>How to read this forecast</summary>{data.warnings.map(w=><p key={w}>{w}</p>)}<p>The 80% range runs from the 10th to the 90th percentile. Distributions are marginal: different drivers’ best cases cannot all happen together. Team-coloured lines connect average positions; they can cross or overlap and are not a predicted finishing order.</p><p>Absolute points bounds for {code}: {points(driver.current_points)}–{points(driver.maximum_points)}, assuming no future penalties. Snapshot: {new Date(data.generated_at).toLocaleString('en-GB')} · {data.model_version}. <a href="https://www.fia.com/system/files/documents/fia_2026_f1_regulations_-_section_a_general_provisions_-_iss_02_-_2026-02-27.pdf" target="_blank" rel="noopener noreferrer">FIA championship scoring and countback rules ↗</a></p>
+      <details className={styles.method}><summary>How to read this forecast</summary>{data.warnings.map(w=><p key={w}>{w}</p>)}<p>The 80% range runs from the 10th to the 90th percentile. Distributions are marginal: different drivers’ best cases cannot all happen together. Team-coloured lines connect average positions; they can cross or overlap and are not a predicted finishing order.</p><p>Absolute points bounds for {code}: {points(driver.current_points)}–{points(driver.maximum_points)}, assuming no future penalties. Snapshot: {new Date(data.generated_at).toLocaleString('en-GB')} · {data.model_version}. <a href="https://www.fia.com/system/files/documents/fia_2026_f1_regulations_-_section_a_general_provisions_-_iss_03_-_2026-06-25.pdf" target="_blank" rel="noopener noreferrer">FIA championship scoring and countback rules ↗</a></p>
         <details className={styles.exact}><summary>Exact position probabilities for {code}</summary><div className={styles.dataScroll}><table><caption>{code} · {mode} probabilities by round</caption><thead><tr><th scope="col">Position</th>{(view==='championship'?stops:stops.filter(r=>data.remaining.find(e=>e.round===r)?.race_pending)).map(r=><th scope="col" key={r}>{r?`R${r}`:'Now'}</th>)}</tr></thead><tbody>{probabilities.map((_,i)=><tr key={i}><th scope="row">P{i+1}</th>{(view==='championship'?stops:stops.filter(r=>data.remaining.find(e=>e.round===r)?.race_pending)).map(r=><td key={r}>{percent(distribution(data,driver,r,view)[i]??0)}</td>)}</tr>)}</tbody></table></div></details>
       </details>
     </>}

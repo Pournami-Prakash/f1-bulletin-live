@@ -19,13 +19,19 @@ test('championship possibility map supports drivers, race scrubbing and exact pr
   await expect(page.getByRole('heading', { name: /THOUSANDS OF FUTURES/ })).toBeVisible()
   await expect(page.getByText('2 RACES LEFT')).toBeVisible()
   await expect(page.getByText('1 SPRINTS LEFT')).toBeVisible()
+  await page.getByLabel('AAA sprint finish', { exact: true }).selectOption('1')
+  await expect(page.getByText('CHOOSE FEASIBLE SPRINT FINISHES', { exact: true })).toBeHidden()
+  await page.getByLabel('BBB sprint finish', { exact: true }).selectOption('1')
+  await expect(page.getByText('CHOOSE FEASIBLE SPRINT FINISHES', { exact: true })).toBeVisible()
+  await page.getByLabel('BBB sprint finish', { exact: true }).selectOption('2')
+  await expect(page.getByText('CHOOSE FEASIBLE SPRINT FINISHES', { exact: true })).toBeHidden()
   const map = page.getByRole('region', { name: 'Interactive championship possibility map' })
   await expect(map.getByRole('img')).toBeVisible()
   for (const code of ['AAA','BBB','CCC','DDD']) await expect(page.getByRole('button', { name: `Follow ${code}`, exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Follow CCC', exact: true }).click()
   await expect(map.getByRole('img')).toHaveAccessibleName(/CCC championship possibilities/)
   await page.getByRole('group', { name: 'Choose a remaining race' }).getByRole('button', { name: /ROUND 2 Chinese/ }).click()
-  await expect(page.getByRole('heading', { name: 'Chinese' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Chinese', exact: true })).toBeVisible()
   await page.getByLabel('Inspect position', { exact: true }).selectOption('2')
   const probability = fixture.races.find(r=>r.round===2&&r.driver_code==='CCC')!.championship_position_probabilities[1]
   await expect(page.locator('[aria-live="polite"]').filter({hasText:'of simulated outcomes'})).toContainText(`${(probability*100).toFixed(1)}%`)
@@ -66,4 +72,31 @@ test('championship end-of-season state shows final standings with no future even
   await expect(page.getByText(/No races remain on the recorded calendar/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Race finishes', exact: true })).toBeDisabled()
   await expect(page.getByRole('region', { name: 'Interactive championship possibility map' }).getByRole('img')).toBeVisible()
+})
+
+test('clinch map combines rival conditions and prevents duplicate finishes', async ({ page }) => {
+  const clinchFixture=simulateChampionship({season:2026,simulations:100,results:[...results,{...results[0],driver_code:'EEE',finish_position:5,points:0},{...results[0],driver_code:'FFF',finish_position:6,points:0}].map(r=>({...r,expected_drivers:6,points:r.driver_code==='AAA'?60:r.points})),
+    now:'2026-03-10T00:00:00Z', calendar:[
+      {round:1,race_name:'Australian Grand Prix',circuit_name:'Albert Park',race_start_utc:'2026-03-08T04:00:00Z',is_sprint_weekend:false,sprint_date:null},
+      {round:2,race_name:'United States Grand Prix',circuit_name:'Austin',race_start_utc:'2026-10-25T19:00:00Z',is_sprint_weekend:false,sprint_date:null},
+      {round:3,race_name:'Japanese Grand Prix',circuit_name:'Suzuka',race_start_utc:'2026-11-01T05:00:00Z',is_sprint_weekend:false,sprint_date:null},
+    ]})
+  await page.route('**/api/championship',route=>route.fulfill({json:{ok:true,...clinchFixture}}))
+  await page.goto('/championship')
+  await expect(page.getByRole('heading',{name:/CAN THE TITLE BE WON/})).toBeVisible()
+  await expect(page.getByText('AAA CLINCHES THE TITLE',{exact:true})).toBeVisible()
+  await page.getByLabel('Contender race finish',{exact:true}).selectOption('0')
+  const grid=page.getByRole('region',{name:'Title clinching conditions by rival finish'})
+  await expect(grid.getByRole('button',{name:'BBB P6: Impossible classification',exact:true})).toBeDisabled()
+  await grid.getByRole('button',{name:'BBB P1: Still blocks the clinch',exact:true}).click()
+  await expect(grid.getByRole('button',{name:'CCC P1: Place already occupied',exact:true})).toBeDisabled()
+  await grid.getByRole('button',{name:'CCC P2: Cannot stop the title',exact:true}).click()
+  await grid.getByRole('button',{name:'DDD P3: Cannot stop the title',exact:true}).click()
+  await expect(page.getByText('THE TITLE RACE STAYS OPEN',{exact:true})).toBeVisible()
+  await grid.getByRole('button',{name:'BBB P4: Cannot stop the title',exact:true}).click()
+  await expect(page.getByText('AAA CLINCHES THE TITLE',{exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'Reset rivals',exact:true}).click()
+  await page.getByLabel('Title contender',{exact:true}).selectOption('BBB')
+  await expect(page.getByText('BBB CANNOT CLINCH WITH NC',{exact:true})).toBeVisible()
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
 })
