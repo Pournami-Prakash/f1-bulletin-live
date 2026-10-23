@@ -124,47 +124,6 @@ flowchart LR
 
 GitHub Actions orchestrates ingestion, intelligence refreshes, session loading, prediction generation, and post-race scoring. Heavy processing stays in Python and SQL; the public Next.js product reads compact, app-ready data from Neon.
 
-## Data Foundation
-
-### Neon-owned calendar alongside Snowflake
-
-`scripts/neon_calendar_sync.py` refreshes the calendar directly in Neon each hour
-using FastF1's event schedule and the circuit metadata in
-`sql/neon_race_calendar.sql`. Run it with `--season 2026` for an immediate refresh.
-It needs only `NEON_DATABASE_URL`; no Snowflake connection is required.
-
-The authoritative copy is `race_calendar_neon`. The existing `race_calendar`
-remains the app's read interface. A database trigger preserves Neon-owned records
-when another writer sends an outdated calendar, so the existing Snowflake sync
-can keep running without reverting round numbers, times, or circuit details.
-Snowflake code, jobs, seed SQL, and secrets remain independent and intact.
-If the event list changes, the refresh fails rather than assigning another
-race's circuit metadata; update the Neon seed for new events before retrying.
-
-### Keeping predictions current
-
-The prediction workflow checks every six hours Friday through Monday. It processes
-completed rounds in order, loads missing results, preserves existing predictions,
-and scores them before advancing. Missing forecasts are reconstructed under a
-`prod_backfill_` model version. After catching up, it waits until two hours after
-qualifying and before race start to publish the next forecast. Missing practice
-does not prevent scoring; missing qualifying or race results stops catch-up with
-an error so a later round cannot silently skip a gap.
-
-Run `python etl/prediction/weekly.py --season 2026 --plan` for a read-only report,
-or omit `--plan` to reconcile. `--from-round` and `--through-round` bound a run.
-GitHub Actions also supports manual dispatch with a read-only plan option.
-
-Each new forecast rebuilds its feature artifacts in a temporary directory.
-Query-local session filters hide the target race and all later rounds from
-features and prediction queries while retaining that weekend's pre-race sessions.
-Existing calibration artifacts are not reused. Backfills use today's model and
-configuration with historical session data, so they are retrospective evaluations,
-not proof of forecasts issued at the time or a reconstruction of subsequently
-corrected source records. Their real generation timestamps are retained.
-
-The project combines public Formula 1 session data, timing and telemetry, calendar and standings feeds, circuit context, motorsport news sources, and generated prediction artifacts. FastF1 supports session-level analytics, while the remaining sources are processed into product-ready intelligence and context views.
-
 ## Built With
 
 - **Product:** Next.js, React, TypeScript, Framer Motion, Vercel
@@ -180,26 +139,3 @@ F1 Bulletin is the answer I built: one place to understand what happened, why it
 ## Disclaimer
 
 F1 Bulletin is an independent fan project. It is not affiliated with, endorsed by, or associated with Formula 1, Formula One Management, the FIA, or any Formula 1 team. Names and marks belong to their respective owners.
-
-### Prediction quality safeguards
-
-Forecast fields must match the source qualifying entry list, including drivers without a timed lap. The weekly reconciler verifies driver identities in each stored model version and the race classification before scoring. A partial existing forecast is preserved and reported for explicit repair instead of being silently replaced. Publication checks the race start again after computation; post-start reconstructions require a matching historical query boundary and a `backfill_` model version.
-
-The v5 regulation-aware model retains the ML / Monte Carlo blended expected finishing position when assigning the final order. Win and podium probabilities are separate estimates and are no longer adjusted merely to make them decrease down the finish-order table. Tyre-age estimates use within-stint slopes, exclude pit laps and warm-up laps, and apply an explicit 28 ms/lap fuel correction. Estimates outside 0–300 ms/lap, or with fewer than three supported stints, use conservative compound defaults. This fuel correction is an assumption, not measured fuel mass.
-
-The website labels the former confidence percentage as **data evidence**, a data-volume heuristic rather than measured accuracy. Grid labels refer to the grid used by the forecast, not verified race starting positions. Zero points and zero error remain valid displayed values. Model versions distinguish changed forecasts; previously published forecasts remain unchanged for scoring.
-
-Run the regression checks with:
-
-```sh
-.venv/bin/python -m unittest discover -s etl/prediction -p 'test*.py'
-(cd web && node --test tests/predictions.test.mjs)
-```
-
-Compare a candidate chronologically without database writes:
-
-```sh
-.venv/bin/python etl/prediction/backtest_quality.py --rounds 10 12 14 16 --baseline-ref 6cf81d6 --output /tmp/f1-quality-backtest.json
-```
-
-Each race rebuilds both versions' features with its own historical query boundary. The report includes mean absolute position error, winner/podium hits, win Brier score, and the qualifying-order baseline. A small historical comparison is a regression check, not proof of future accuracy.
