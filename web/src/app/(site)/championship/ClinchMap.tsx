@@ -7,7 +7,7 @@ import styles from './championship.module.css'
 const label = (p: number) => p ? `P${p}` : 'NC'
 const pct = (p: number) => `${(p*100).toFixed(1)}%`
 
-export default function ClinchMap({ data }: { data: ChampionshipForecast }) {
+export default function ClinchMap({ data, onExplore }: { data: ChampionshipForecast; onExplore: (code: string) => void }) {
   const [code,setCode] = useState(() => [...data.drivers].sort((a,b)=>a.current_position-b.current_position)[0].driver_code)
   const [finish,setFinish] = useState(1)
   const [rivalFinishes,setRivalFinishes] = useState<Record<string,number>>({})
@@ -16,6 +16,23 @@ export default function ClinchMap({ data }: { data: ChampionshipForecast }) {
   if (!context) return null
   const event = data.remaining.find(e=>e.round===context.round)!
   const candidate = context.drivers.find(d=>d.driver_code===code)!
+  const outlook = data.drivers.find(d=>d.driver_code===code)!
+  const driverSelect = <select aria-label="Championship driver" value={code} onChange={e=>{setCode(e.target.value);setRivalFinishes({});setSprints({})}}>{data.drivers.filter(d=>d.active).sort((a,b)=>a.current_position-b.current_position).map(d=><option key={d.driver_code}>{d.driver_code}</option>)}</select>
+  if (outlook.points_eliminated) {
+    const next = data.races.find(r=>r.round===context.round&&r.driver_code===code)
+    const format = (n:number)=>new Intl.NumberFormat('en-GB',{maximumFractionDigits:1}).format(n)
+    return <section className={styles.clinchSection} aria-labelledby="clinch-heading">
+      <div className={styles.clinchIntro}><span className={styles.kicker}>THE RACE FOR POINTS</span><h2 id="clinch-heading">{code} · THE REMAINING SEASON</h2><p>Out of title contention on points. There are still race positions and championship places to fight for.</p></div>
+      <div className={styles.clinchControls}><label>DRIVER{driverSelect}</label></div>
+      <dl className={styles.outlookSummary}>
+        <div><dt>Projected final points</dt><dd>{format(outlook.points.mean)}</dd><small>{format(outlook.current_points)} now · {format(outlook.points.low)}–{format(outlook.points.high)} typical range</small></div>
+        <div><dt>Championship finish</dt><dd>P{outlook.position.low}–P{outlook.position.high}</dd><small>Middle 80% of simulations</small></div>
+        <div><dt>{event.race_name.replace(' Grand Prix','')} race finish</dt><dd>{next?`P${next.position.low}–P${next.position.high}`:'—'}</dd><small>Middle 80% of simulations</small></div>
+      </dl>
+      <p className={styles.rangeExplanation}><strong>Typical outcomes, not absolute limits.</strong> The ranges use the 10th and 90th percentiles. Rarer outcomes can lie outside them.</p>
+      <button className={styles.exploreDriver} onClick={()=>onExplore(code)}>Explore {code}’s race finishes ↗</button>
+    </section>
+  }
   const positions = [...Array.from({length:context.drivers.filter(d=>d.active).length},(_,i)=>i+1),0]
   const score = (position: number) => RACE_POINTS[position-1] ?? 0
   const sprint = (driver: string) => context.sprint_pending ? SPRINT_POINTS[(sprints[driver]??0)-1] ?? 0 : 0
@@ -53,7 +70,7 @@ export default function ClinchMap({ data }: { data: ChampionshipForecast }) {
   return <section className={styles.clinchSection} aria-labelledby="clinch-heading">
     <div className={styles.clinchIntro}><div><span className={styles.kicker}>THE TITLE EQUATION / ROUND {context.round}</span><h2 id="clinch-heading">CAN THE TITLE BE WON <em>IN {event.race_name.replace(' Grand Prix','').toUpperCase()}?</em></h2></div><p>Choose a finish. See what every rival must do. <b>All rival conditions must happen together.</b></p></div>
     <div className={styles.clinchControls}>
-      <label>IF<select aria-label="Title contender" value={code} onChange={e=>{setCode(e.target.value);setRivalFinishes({});setSprints({})}}>{data.drivers.filter(d=>d.active).sort((a,b)=>a.current_position-b.current_position).map(d=><option key={d.driver_code}>{d.driver_code}</option>)}</select></label>
+      <label>IF{driverSelect}</label>
       <label>FINISHES<select aria-label="Contender race finish" value={finish} onChange={e=>{setFinish(Number(e.target.value));setRivalFinishes({})}}>{positions.map(p=><option key={p} value={p}>{p?`P${p} · +${score(p)} pts`:'Unclassified · 0 pts'}</option>)}</select></label>
       {context.sprint_pending && <label>SPRINT FINISH{sprintSelect(code)}</label>}
       <div className={styles.clinchArithmetic}><strong>{postPoints}</strong><span>points after this race<br />{context.future_points} still available afterwards</span></div>

@@ -104,13 +104,14 @@ test('clinch map combines rival conditions and prevents duplicate finishes', asy
   await grid.getByRole('button',{name:'BBB P4: Cannot stop the title',exact:true}).click()
   await expect(page.getByText('AAA CLINCHES THE TITLE',{exact:true})).toBeVisible()
   await page.getByRole('button',{name:'Reset rivals',exact:true}).click()
-  await page.getByLabel('Title contender',{exact:true}).selectOption('BBB')
+  await page.getByLabel('Championship driver',{exact:true}).selectOption('BBB')
   await expect(page.getByText('BBB CANNOT CLINCH WITH NC',{exact:true})).toBeVisible()
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
 })
 
 
-test('full-season roster stays within the viewport while its odds grid scrolls', async ({page})=>{
+test('full-season roster has consistent scales and collision-free labels for every driver', async ({page})=>{
+  test.setTimeout(60000)
   const roster=Array.from({length:23},(_,i)=>`D${String(i).padStart(2,'0')}`)
   const calendar=[1,2,3,4].map(round=>({round,race_name:round===3?'United States Grand Prix':`Race ${round}`,circuit_name:`Track ${round}`,
     race_start_utc:`2026-${String(round).padStart(2,'0')}-08T04:00:00Z`,is_sprint_weekend:false,sprint_date:null}))
@@ -127,4 +128,50 @@ test('full-season roster stays within the viewport while its odds grid scrolls',
   await page.getByRole('button',{name:'Race finishes',exact:true}).click()
   await expect(field.getByRole('row')).toHaveCount(23)
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
+  const map=page.getByRole('region',{name:'Interactive championship possibility map'})
+  for(const mode of ['Title standings','Race finishes']) {
+    await page.getByRole('button',{name:mode,exact:true}).click()
+    for(const driver of large.drivers.filter(d=>d.active)) {
+      await page.getByRole('button',{name:`Follow ${driver.driver_code}`,exact:true}).click()
+      const overlaps=await map.evaluate(el=>{
+        const labels=[...el.querySelectorAll('svg text')].map(t=>{const b=(t as SVGGraphicsElement).getBBox();return {text:t.textContent,x:b.x,y:b.y,w:b.width,h:b.height}})
+        const collisions:string[]=[]
+        for(let i=0;i<labels.length;i++)for(let j=i+1;j<labels.length;j++){
+          const a=labels[i],b=labels[j]
+          if(Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x)>2&&Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y)>2)collisions.push(`${a.text} / ${b.text}`)
+        }
+        return collisions
+      })
+      expect(overlaps,`${mode}: ${driver.driver_code}`).toEqual([])
+      const bars=await page.locator('[class*="spectrum"] button').evaluateAll(elements=>elements.map(el=>({
+        rank:Number(el.getAttribute('aria-label')!.match(/^P(\d+)/)![1]),
+        ratio:el.querySelector('[class*="bar"]')!.getBoundingClientRect().width/el.querySelector('[class*="track"]')!.getBoundingClientRect().width,
+      })))
+      const event=large.races.find(r=>r.round===4&&r.driver_code===driver.driver_code)!
+      const probabilities=mode==='Title standings'?event.championship_position_probabilities:event.position_probabilities
+      for(const bar of bars) expect(Math.abs(bar.ratio-probabilities[bar.rank-1]),`${driver.driver_code} P${bar.rank} bar scale`).toBeLessThan(.015)
+      await expect(map.getByRole('img')).toHaveAccessibleDescription(/Positions P1 to P2[23].*fixed 0–100% scale/)
+    }
+  }
+})
+
+
+test('eliminated drivers get a points outlook and a direct route to their race finishes',async({page})=>{
+  const out=simulateChampionship({season:2026,results:results.map(r=>({...r,points:r.driver_code==='AAA'?300:r.points})),simulations:100,
+    now:'2026-03-10T00:00:00Z',calendar:[
+      {round:1,race_name:'Australian Grand Prix',circuit_name:'Albert Park',race_start_utc:'2026-03-08T04:00:00Z',is_sprint_weekend:false,sprint_date:null},
+      ...fixture.remaining.map(e=>({...e,is_sprint_weekend:false,sprint_date:null})),
+    ]})
+  await page.route('**/api/championship',r=>r.fulfill({json:{ok:true,...out}}))
+  await page.goto('/championship')
+  await page.getByLabel('Championship driver',{exact:true}).selectOption('BBB')
+  await expect(page.getByRole('heading',{name:'BBB · THE REMAINING SEASON'})).toBeVisible()
+  await expect(page.getByRole('region',{name:'Title clinching conditions by rival finish'})).toHaveCount(0)
+  await expect(page.getByText('Projected final points',{exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'Explore BBB’s race finishes'}).click()
+  await expect(page.getByRole('button',{name:'Race finishes',exact:true})).toHaveAttribute('aria-pressed','true')
+  await expect(page.getByRole('region',{name:'Interactive championship possibility map'}).getByRole('img')).toHaveAccessibleName(/BBB race finishing possibilities/)
+  await expect(page.getByText('Typical outcomes, not absolute limits.',{exact:true})).toHaveCount(2)
+  await page.getByLabel('Championship driver',{exact:true}).selectOption('AAA')
+  await expect(page.getByRole('heading',{name:/CAN THE TITLE BE WON/})).toBeVisible()
 })

@@ -62,7 +62,7 @@
 .spectrum small{font:10px var(--font-mono)}
 .spectrum b{font:400 10px var(--font-mono);text-align:right;color:var(--t1)}
 .track{display:block;height:10px;background:var(--b1)}
-.bar{display:block;height:100%;width:max(2px,var(--probability));background:var(--team);opacity:.75}
+.bar{display:block;height:100%;width:var(--probability);background:var(--team);opacity:.75}
 .spectrum button[aria-pressed=true] .bar,.spectrum button:hover .bar{opacity:1}
 .rare{font-size:9px;line-height:1.7;color:var(--t2);padding:6px 6px 0}
 .probabilityReadout{min-height:42px;font-size:9px;line-height:1.8;color:var(--t2);padding-top:10px}
@@ -188,3 +188,10 @@
 .clinchCell.threshold span{font:700 11px var(--font-mono);color:var(--t1);opacity:1}
 .clinchRow.settled>*{opacity:.4}
 .clinchRow.settled>*:hover{opacity:.8}
+.heatLegend{display:flex;align-items:center;flex-wrap:wrap;gap:12px;font-size:10px;line-height:1.7;color:var(--t2);margin:14px 0 8px}.heatLegend>span{display:flex;align-items:center;gap:6px}.heatLegend>span:first-child{margin-right:8px}.heatLegend i{width:20px;height:12px;display:block;border:1px solid var(--b2)}
+.rosterNote{font-size:10px;line-height:1.8;color:var(--t2);margin-bottom:12px}
+.rangeExplanation{font-size:11px;line-height:1.85;color:var(--t2);padding:12px 0 18px;grid-column:1/-1}.rangeExplanation strong{display:block;color:var(--t1);font-weight:500}
+.barScale{display:flex;justify-content:space-between;gap:10px;color:var(--t2);font-size:9px;padding:10px 6px;border-top:1px solid var(--b2);grid-column:1/-1}
+.outlookSummary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;padding:22px 0;border-block:1px solid var(--b2)}.outlookSummary dt{font-size:11px;color:var(--t2)}.outlookSummary dd{font:400 42px/1 var(--font-bebas);margin:12px 0 8px}.outlookSummary small{font-size:10px;line-height:1.8;color:var(--t2)}
+.exploreDriver{background:var(--red);color:#fff;border:0;min-height:44px;font-size:11px;padding:12px 18px}.spectrum button{min-height:36px}
+@media(max-width:720px){.outlookSummary{grid-template-columns:1fr;gap:20px}.outlookSummary>div{display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:6px 12px}.outlookSummary dd{font-size:34px;margin:0;text-align:right}.outlookSummary small{grid-column:1/-1}.spectrum button{min-height:44px}.rangeExplanation{font-size:10px}.clinchIntro h2{white-space:normal}}
