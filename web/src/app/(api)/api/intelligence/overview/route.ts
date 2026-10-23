@@ -59,9 +59,12 @@ export async function GET() {
       sql`
         SELECT story_id, topic_cluster, story_title, latest_source, latest_url,
           latest_event_ts, events_count, sources_count, max_priority_score,
-          best_priority_tier, driver, heat_index, momentum_score, is_breaking, breaking_tier
+          best_priority_tier, driver, heat_index, momentum_score,
+          (is_breaking AND latest_event_ts >= NOW() - INTERVAL '24 hours') AS is_breaking,
+          CASE WHEN latest_event_ts >= NOW() - INTERVAL '24 hours' THEN breaking_tier ELSE NULL END AS breaking_tier
         FROM story_timeline
-        ORDER BY is_breaking DESC, COALESCE(momentum_score, 0) DESC, latest_event_ts DESC
+        WHERE latest_event_ts >= NOW() - INTERVAL '72 hours'
+        ORDER BY latest_event_ts DESC, COALESCE(momentum_score, 0) DESC
         LIMIT 20
       `,
       sql`

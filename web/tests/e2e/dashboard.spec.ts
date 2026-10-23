@@ -47,3 +47,29 @@ test('API rejects invalid inputs and unauthorized writes; security headers are p
   expect(health.headers()['content-security-policy']).toContain("object-src 'none'");
   expect((await request.get('/api/health?ready=1')).status()).toBe(401);
 });
+
+
+test('intelligence leads each cluster with fresh news ahead of older high scores', async ({ page }) => {
+  const now = Date.now();
+  const story = (id: string, title: string, hours: number, momentum: number) => ({
+    story_id: id, story_title: title, latest_source: 'BBC',
+    latest_url: 'https://www.bbc.com/sport/formula1', events_count: 1,
+    momentum_score: momentum, latest_event_ts: new Date(now - hours * 3600000).toISOString(),
+  });
+  let requestedHours: string | null = null;
+  await page.route('**/api/news/stories?**', route => {
+    requestedHours = new URL(route.request().url()).searchParams.get('hours');
+    return route.fulfill({ json: { ok: true, data: [
+      story('new', 'Ferrari upgrade unveiled today', 1, 20),
+      story('older', 'Ferrari upgrade dominated yesterday', 48, 100),
+    ] } });
+  });
+  await page.goto('/intelligence');
+  await expect(page.getByText('Ferrari upgrade unveiled today').last()).toBeVisible();
+  expect(requestedHours).toBe('72');
+  const cluster = page.getByRole('button', { name: '1 MORE STORIES' }).locator('..');
+  await expect(cluster).toContainText('Ferrari upgrade unveiled today');
+  await expect(cluster).not.toContainText('Ferrari upgrade dominated yesterday');
+  await page.getByRole('button', { name: '1 MORE STORIES' }).click();
+  await expect(page.getByText('Ferrari upgrade dominated yesterday').last()).toBeVisible();
+});

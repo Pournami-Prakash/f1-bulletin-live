@@ -66,8 +66,8 @@ export async function GET(req: Request) {
         driver,
         heat_index,
         momentum_score,
-        is_breaking,
-        breaking_tier,
+        (is_breaking AND latest_event_ts >= NOW() - INTERVAL '24 hours') AS is_breaking,
+        CASE WHEN latest_event_ts >= NOW() - INTERVAL '24 hours' THEN breaking_tier ELSE NULL END AS breaking_tier,
         merge_key
       FROM story_timeline
       WHERE latest_event_ts >= NOW() - (${hours} || ' hours')::interval
@@ -78,7 +78,7 @@ export async function GET(req: Request) {
           OR COALESCE(latest_source, '') ILIKE ${`%${q}%`}
           OR COALESCE(latest_url, '') ILIKE ${`%${q}%`}
         )
-      ORDER BY is_breaking DESC, COALESCE(momentum_score, 0) DESC, latest_event_ts DESC
+      ORDER BY latest_event_ts DESC, COALESCE(momentum_score, 0) DESC
       LIMIT ${limit}
     `;
 

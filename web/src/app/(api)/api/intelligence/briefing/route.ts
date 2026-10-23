@@ -24,9 +24,10 @@ export async function GET() {
       sql`
         SELECT story_id, topic_cluster, story_title, latest_source,
           latest_event_ts, max_priority_score, best_priority_tier,
-          is_breaking, momentum_score
+          (is_breaking AND latest_event_ts >= NOW() - INTERVAL '24 hours') AS is_breaking, momentum_score
         FROM story_timeline
-        ORDER BY is_breaking DESC, COALESCE(momentum_score, 0) DESC, latest_event_ts DESC
+        WHERE latest_event_ts >= NOW() - INTERVAL '72 hours'
+        ORDER BY latest_event_ts DESC, COALESCE(momentum_score, 0) DESC
         LIMIT 30
       `,
     ])

@@ -247,7 +247,7 @@ function buildStoryClusters(stories: Story[], driverNames: string[]): StoryClust
     map.get(label)!.push(s)
   }
   return Array.from(map.entries()).map(([label, clStories]) => {
-    const sorted = [...clStories].sort((a,b)=>safeNum(b.momentum_score)-safeNum(a.momentum_score))
+    const sorted = [...clStories].sort((a,b)=>Date.parse(b.latest_event_ts??'')-Date.parse(a.latest_event_ts??'') || safeNum(b.momentum_score)-safeNum(a.momentum_score))
     const avgMomentum = Math.round(clStories.reduce((s,st)=>s+safeNum(st.momentum_score),0)/clStories.length)
     const mentionedDrivers = driverNames.filter(name=>clStories.some(s=>s.story_title?.toUpperCase().includes(name.toUpperCase()))).slice(0,4)
     const srcCounts: Record<string,number> = {}
@@ -1886,7 +1886,7 @@ export default function IntelligencePage() {
   useEffect(()=>{
     let m=true; setStoriesLoading(true)
     Promise.all([
-      fetch('/api/news/stories?hours=720&limit=80').then(r=>r.ok?r.json():null),
+      fetch('/api/news/stories?hours=72&limit=80').then(r=>r.ok?r.json():null),
       fetch('/api/intelligence/briefing').then(r=>r.ok?r.json():null),
       fetch('/api/intelligence/newsletter?days=30&limit=160').then(r=>r.ok?r.json():null),
     ]).then(([sd,bd,nd])=>{
