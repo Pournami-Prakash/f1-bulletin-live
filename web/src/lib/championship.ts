@@ -5,7 +5,7 @@
  */
 export const RACE_POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
 export const SPRINT_POINTS = [8, 7, 6, 5, 4, 3, 2, 1]
-export const CHAMPIONSHIP_VERSION = 'season_scenarios_v1'
+export const CHAMPIONSHIP_VERSION = 'season_scenarios_v2'
 
 export type CalendarEvent = {
   round: number; race_name: string; circuit_name: string; race_start_utc: string
@@ -21,6 +21,7 @@ export type Band = { low: number; median: number; high: number; mean: number }
 export type RaceScenario = {
   round: number; driver_code: string; position: Band; points: Band; cumulative_points: Band
   championship_position: Band; win_probability: number
+  position_probabilities: number[]; championship_position_probabilities: number[]
 }
 export type ChampionshipDriver = {
   driver_code: string; team: string; active: boolean; current_position: number; current_points: number
@@ -242,15 +243,16 @@ export function simulateChampionship(input: {
   })).sort((a, b) => a.position.mean - b.position.mean || b.points.mean - a.points.mean)
   output.forEach((driver, rank) => { driver.projected_position = rank + 1 })
   const races = remaining.flatMap((event, e) => drivers.flatMap((code, i): RaceScenario[] => {
-    if (!active.has(code)) return []
     const samples = raceSamples[e][i]
     return [{ round: event.round, driver_code: code,
       position: samples.position.length ? summarize(samples.position) : { low: 0, median: 0, high: 0, mean: 0 },
       points: summarize(samples.points), cumulative_points: summarize(samples.cumulative),
-      championship_position: summarizeCounts(samples.championship), win_probability: samples.wins / simulations }]
+      championship_position: summarizeCounts(samples.championship), win_probability: samples.wins / simulations,
+      position_probabilities: Array.from({ length: active.size }, (_, rank) => samples.position.filter(p => p === rank + 1).length / simulations),
+      championship_position_probabilities: samples.championship.map(count => count / simulations) }]
   }))
   const warnings = [
-    'Experimental season scenarios, not calibrated championship probabilities. Best/worst columns are the central 80% of simulated outcomes, not absolute limits.',
+    'Experimental season scenarios, not calibrated championship probabilities. Best/worst ranges are the central 80% of simulated outcomes, not absolute limits.',
     'Uses recent qualifying and finishing form, available pre-race forecasts, and shrunk circuit history. Unknown qualifying, future driver/team form and retirements are simulated.',
     'Assumes the latest complete race roster continues, scheduled events run for full points, and no future penalties or points adjustments. It does not forecast weather or car upgrades.',
   ]

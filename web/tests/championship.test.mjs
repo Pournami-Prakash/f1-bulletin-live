@@ -65,7 +65,7 @@ test('identical inputs are deterministic; inactive drivers retain points without
   assert.equal(old.maximum_points,old.current_points)
   assert.equal(old.points.low,old.current_points)
   assert.equal(old.points.high,old.current_points)
-  assert.equal(forecast.races.some(r=>r.driver_code==='D'),false)
+  assert.ok(forecast.races.filter(r=>r.driver_code==='D').every(r=>r.position_probabilities.every(p=>p===0)&&r.championship_position_probabilities.reduce((a,b)=>a+b,0)>0.999999))
 })
 
 test('season completion collapses ranges and countback resolves equal points',()=>{
@@ -103,4 +103,24 @@ test('partial published grids cannot influence any driver forecast',()=>{
   const data=fixture(),baseline=simulateChampionship(data)
   data.predictions=[{round:3,driver_code:'D',predicted_position:1}]
   assert.deepEqual(simulateChampionship(data),baseline)
+})
+
+
+test('every round exposes normalized race and championship distributions, including inactive standings',()=>{
+  const data=fixture()
+  data.results.find(r=>r.round===2&&r.driver_code==='D').driver_code='NEW'
+  const forecast=simulateChampionship(data)
+  for(const event of forecast.remaining) {
+    const rows=forecast.races.filter(r=>r.round===event.round)
+    assert.equal(rows.length,5)
+    for(const row of rows) {
+      assert.ok(Math.abs(row.championship_position_probabilities.reduce((a,b)=>a+b,0)-1)<1e-9)
+      const active=forecast.drivers.find(d=>d.driver_code===row.driver_code).active
+      assert.ok(Math.abs(row.position_probabilities.reduce((a,b)=>a+b,0)-(active?1:0))<1e-9)
+      if(active) assert.ok(Math.abs(row.position_probabilities[0]-row.win_probability)<1e-9)
+    }
+    for(let rank=0;rank<5;rank++) assert.ok(Math.abs(rows.reduce((sum,r)=>sum+r.championship_position_probabilities[rank],0)-1)<1e-9)
+    for(let rank=0;rank<4;rank++) assert.ok(Math.abs(rows.reduce((sum,r)=>sum+r.position_probabilities[rank],0)-1)<1e-9)
+  }
+  for(const d of forecast.drivers) assert.deepEqual(forecast.races.find(r=>r.round===4&&r.driver_code===d.driver_code).championship_position_probabilities,d.position_probabilities)
 })
