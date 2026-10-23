@@ -95,6 +95,8 @@ test('clinch map combines rival conditions and prevents duplicate finishes', asy
   const grid=page.getByRole('region',{name:'Title clinching conditions by rival finish'})
   await expect(grid.getByRole('button',{name:'BBB P6: Impossible classification',exact:true})).toBeDisabled()
   await grid.getByRole('button',{name:'BBB P1: Still blocks the clinch',exact:true}).click()
+  await expect(page.getByText('THE TITLE RACE STAYS OPEN',{exact:true})).toBeVisible()
+  await expect(page.getByText(/BBB can still catch AAA with this result/)).toBeVisible()
   await expect(grid.getByRole('button',{name:'CCC P1: Place already occupied',exact:true})).toBeDisabled()
   await grid.getByRole('button',{name:'CCC P2: Cannot stop the title',exact:true}).click()
   await grid.getByRole('button',{name:'DDD P3: Cannot stop the title',exact:true}).click()
@@ -104,5 +106,25 @@ test('clinch map combines rival conditions and prevents duplicate finishes', asy
   await page.getByRole('button',{name:'Reset rivals',exact:true}).click()
   await page.getByLabel('Title contender',{exact:true}).selectOption('BBB')
   await expect(page.getByText('BBB CANNOT CLINCH WITH NC',{exact:true})).toBeVisible()
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
+})
+
+
+test('full-season roster stays within the viewport while its odds grid scrolls', async ({page})=>{
+  const roster=Array.from({length:23},(_,i)=>`D${String(i).padStart(2,'0')}`)
+  const calendar=[1,2,3,4].map(round=>({round,race_name:round===3?'United States Grand Prix':`Race ${round}`,circuit_name:`Track ${round}`,
+    race_start_utc:`2026-${String(round).padStart(2,'0')}-08T04:00:00Z`,is_sprint_weekend:false,sprint_date:null}))
+  const classified=[1,2].flatMap(round=>roster.slice(0,round===1?23:22).map((driver_code,i)=>({
+    season:2026,round,session_type:'R' as const,circuit:`Track ${round}`,driver_code,team:'Ferrari',
+    finish_position:i+1,grid_position:i+1,qualifying_position:i+1,status:'Finished',points:RACE_POINTS[i]??0,expected_drivers:round===1?23:22,
+  })))
+  const large=simulateChampionship({season:2026,results:classified,calendar,simulations:100,now:'2026-02-10T00:00:00Z'})
+  await page.route('**/api/championship',route=>route.fulfill({json:{ok:true,...large}}))
+  await page.goto('/championship')
+  const field=page.getByRole('region',{name:'Whole-grid position probabilities'})
+  await expect(field.getByRole('row')).toHaveCount(24)
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
+  await page.getByRole('button',{name:'Race finishes',exact:true}).click()
+  await expect(field.getByRole('row')).toHaveCount(23)
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
 })

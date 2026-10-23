@@ -165,7 +165,7 @@
 .fieldHead{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:12px}
 .fieldHead h3{font:400 30px/1 var(--font-bebas)}
 .fieldHead p{font-size:9px;line-height:1.8;color:var(--t2);max-width:430px}
-.fieldScroll{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;border:1px solid var(--b2)}
+.fieldScroll{position:relative;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;border:1px solid var(--b2)}
 .fieldGrid{border-collapse:collapse;width:100%;min-width:max-content;font:10px var(--font-mono);color:var(--t1)}
 .fieldGrid th,.fieldGrid td{height:30px;padding:0;text-align:center;border-bottom:1px solid var(--b1);font-weight:400}
 .fieldGrid td{min-width:34px;font-variant-numeric:tabular-nums}
