@@ -1,5 +1,6 @@
 'use client'
 
+import type { FeedPolicy } from '@/lib/story-feed'
 import { safeExternalUrl } from '@/lib/external-url'
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -23,6 +24,7 @@ type WindowMode = 'race' | '14' | '30'
 type IntelTab   = 'driver' | 'team'
 
 type Story = {
+  feed_score?: number; feed_section?: 'current' | 'context'
   story_id?: string | number; story_title?: string; latest_source?: string
   latest_url?: string; latest_event_ts?: string; topic_cluster?: string
   best_priority_tier?: string; is_breaking?: boolean; momentum_score?: number
@@ -247,7 +249,7 @@ function buildStoryClusters(stories: Story[], driverNames: string[]): StoryClust
     map.get(label)!.push(s)
   }
   return Array.from(map.entries()).map(([label, clStories]) => {
-    const sorted = [...clStories].sort((a,b)=>Date.parse(b.latest_event_ts??'')-Date.parse(a.latest_event_ts??'') || safeNum(b.momentum_score)-safeNum(a.momentum_score))
+    const sorted = [...clStories].sort((a,b)=>safeNum(b.feed_score)-safeNum(a.feed_score) || Date.parse(b.latest_event_ts??'')-Date.parse(a.latest_event_ts??''))
     const avgMomentum = Math.round(clStories.reduce((s,st)=>s+safeNum(st.momentum_score),0)/clStories.length)
     const mentionedDrivers = driverNames.filter(name=>clStories.some(s=>s.story_title?.toUpperCase().includes(name.toUpperCase()))).slice(0,4)
     const srcCounts: Record<string,number> = {}
@@ -1863,6 +1865,7 @@ export default function IntelligencePage() {
   const [winMode,  setWinMode]  = useState<WindowMode>('30')
   const [intelTab, setIntelTab] = useState<IntelTab>('driver')
   const [stories,  setStories]  = useState<Story[]>([])
+  const [feedPolicy, setFeedPolicy] = useState<FeedPolicy|null>(null)
   const [briefing, setBriefing] = useState<any>(null)
   const [newsletter, setNewsletter] = useState<Newsletter|null>(null)
   const [storiesLoading, setStoriesLoading] = useState(true)
@@ -1886,12 +1889,13 @@ export default function IntelligencePage() {
   useEffect(()=>{
     let m=true; setStoriesLoading(true)
     Promise.all([
-      fetch('/api/news/stories?hours=72&limit=80').then(r=>r.ok?r.json():null),
+      fetch('/api/news/stories?adaptive=1&limit=80').then(r=>r.ok?r.json():null),
       fetch('/api/intelligence/briefing').then(r=>r.ok?r.json():null),
       fetch('/api/intelligence/newsletter?days=30&limit=160').then(r=>r.ok?r.json():null),
     ]).then(([sd,bd,nd])=>{
       if(!m)return
       setStories(sd?.ok?(sd.data??[]):[])
+      setFeedPolicy(sd?.ok?(sd.feed??null):null)
       setBriefing(bd?.ok?(bd.briefing??null):null)
       setNewsletter(nd?.ok?(nd.data??null):null)
     }).finally(()=>{ if(m) setStoriesLoading(false) })
@@ -1962,7 +1966,10 @@ export default function IntelligencePage() {
   const deduped=useMemo(()=>dedupeStories(stories),[stories])
   const driverNames=useMemo(()=>drivers.map(d=>d.driverName),[drivers])
   const driverSentMap=useMemo(()=>Object.fromEntries(drivers.map(d=>[d.driverName.toUpperCase(),d])),[drivers])
-  const clusters=useMemo(()=>buildStoryClusters(deduped,driverNames),[deduped,driverNames])
+  const currentStories=useMemo(()=>deduped.filter(s=>s.feed_section!=='context'),[deduped])
+  const contextStories=useMemo(()=>deduped.filter(s=>s.feed_section==='context'),[deduped])
+  const contextClusters=useMemo(()=>buildStoryClusters(contextStories,driverNames),[contextStories,driverNames])
+  const clusters=useMemo(()=>buildStoryClusters(currentStories,driverNames),[currentStories,driverNames])
   const breaking=useMemo(()=>deduped.filter(s=>s.is_breaking),[deduped])
 
   return (
@@ -2027,8 +2034,12 @@ export default function IntelligencePage() {
           <AnimatePresence mode="wait">
             {mainTab==='stories'&&(
               <motion.div key="stories" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-6}} transition={{duration:.22}} style={{display:'grid',gap:24}}>
+                {feedPolicy&&<div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--t3)',letterSpacing:'.06em'}}>
+                  {feedPolicy.mode==='race-weekend'?'RACE WEEKEND':feedPolicy.mode==='race-build-up'?'RACE BUILD-UP':'LATEST DEVELOPMENTS'}
+                  {feedPolicy.raceName?` · ${feedPolicy.raceName}`:''} · {feedPolicy.windowHours/24}-day coverage
+                </div>}
                 <BreakingBanner stories={breaking}/>
-                {storiesLoading?<div className="sk" style={{height:280,borderRadius:18}}/>:<StoryCarousel stories={deduped.slice(0,8)} onDriverClick={handleDriverTagClick}/>}
+                {storiesLoading?<div className="sk" style={{height:280,borderRadius:18}}/>:currentStories.length>0?<StoryCarousel stories={currentStories.slice(0,8)} onDriverClick={handleDriverTagClick}/>:null}
                 {!storiesLoading&&briefing&&<EditorialBriefing briefing={briefing}/>}
                 {storiesLoading&&<div className="sk" style={{height:90,borderRadius:14}}/>}
                 <div>
@@ -2041,11 +2052,16 @@ export default function IntelligencePage() {
                   {storiesLoading?(
                     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>{Array(4).fill(null).map((_,i)=><div key={i} className="sk" style={{height:120,borderRadius:14}}/>)}</div>
                   ):clusters.length===0?(
-                    <div style={{padding:'40px',textAlign:'center',border:'1px solid rgba(255,255,255,.06)',borderRadius:14,color:'rgba(255,255,255,.3)',fontSize:12}}>No stories found.</div>
+                    <div style={{padding:'40px',textAlign:'center',border:'1px solid rgba(255,255,255,.06)',borderRadius:14,color:'rgba(255,255,255,.3)',fontSize:12}}>No new developments in the current window.</div>
                   ):(
                     <ClusterGrid clusters={clusters} driverSentiment={driverSentMap} onDriverClick={handleDriverTagClick}/>
                   )}
                 </div>
+                {contextClusters.length>0&&<section>
+                  <SectionHead label="Recent context"/>
+                  <p style={{fontSize:12,color:'var(--t3)',margin:'8px 0 16px'}}>Earlier coverage from the last {feedPolicy?feedPolicy.windowHours/24:14} days. Publication dates are shown on each story.</p>
+                  <ClusterGrid clusters={contextClusters} driverSentiment={driverSentMap} onDriverClick={handleDriverTagClick}/>
+                </section>}
               </motion.div>
             )}
 

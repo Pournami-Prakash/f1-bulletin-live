@@ -1,5 +1,6 @@
 import { logEvent } from '@/lib/observability'
 import { NextResponse } from 'next/server'
+import { loadStoryFeed } from '@/lib/story-feed'
 import { getNeonSql } from '@/lib/neon'
 
 export const dynamic = "force-dynamic"
@@ -10,7 +11,7 @@ export async function GET() {
     const cutoff30 = new Date(); cutoff30.setDate(cutoff30.getDate() - 30)
     const cutoff30str = cutoff30.toISOString().split('T')[0]
 
-    const [clusters, drivers, alerts, pipeline, stories, events] = await Promise.all([
+    const [clusters, drivers, alerts, pipeline, feed, events] = await Promise.all([
       sql`
         SELECT cluster_id, cluster_name, summary,
           article_count, momentum_score, sentiment_avg,
@@ -56,17 +57,7 @@ export async function GET() {
           spikes_detected, drivers_updated, duration_seconds, status
         FROM pipeline_run_log ORDER BY run_at DESC LIMIT 1
       `,
-      sql`
-        SELECT story_id, topic_cluster, story_title, latest_source, latest_url,
-          latest_event_ts, events_count, sources_count, max_priority_score,
-          best_priority_tier, driver, heat_index, momentum_score,
-          (is_breaking AND latest_event_ts >= NOW() - INTERVAL '24 hours') AS is_breaking,
-          CASE WHEN latest_event_ts >= NOW() - INTERVAL '24 hours' THEN breaking_tier ELSE NULL END AS breaking_tier
-        FROM story_timeline
-        WHERE latest_event_ts >= NOW() - INTERVAL '72 hours'
-        ORDER BY latest_event_ts DESC, COALESCE(momentum_score, 0) DESC
-        LIMIT 20
-      `,
+      loadStoryFeed(sql, { limit: 20 }),
       sql`
         SELECT url, title, source_type, source, topic_cluster AS cluster_name,
           priority_score, priority_tier, event_ts AS published_at,
@@ -76,6 +67,8 @@ export async function GET() {
         LIMIT 20
       `,
     ])
+
+    const stories = feed.items
 
     const fallbackClusters = stories.slice(0, 8).map((s: any) => ({
       cluster_id: s.story_id,
@@ -143,6 +136,7 @@ export async function GET() {
           sentiment_label: 'neutral',
         })),
         topStories: stories,
+        feed: feed.policy,
         signalsToday: Number((pipeline[0] as any)?.articles_processed || events.length || 0),
         topDriver: drivers[0]?.driver_name ?? null,
         breakingCount: stories.filter((s: any) => s.is_breaking).length,

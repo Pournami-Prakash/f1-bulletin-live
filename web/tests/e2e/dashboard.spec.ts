@@ -56,9 +56,9 @@ test('intelligence leads each cluster with fresh news ahead of older high scores
     latest_url: 'https://www.bbc.com/sport/formula1', events_count: 1,
     momentum_score: momentum, latest_event_ts: new Date(now - hours * 3600000).toISOString(),
   });
-  let requestedHours: string | null = null;
+  let requestedAdaptive: string | null = null;
   await page.route('**/api/news/stories?**', route => {
-    requestedHours = new URL(route.request().url()).searchParams.get('hours');
+    requestedAdaptive = new URL(route.request().url()).searchParams.get('adaptive');
     return route.fulfill({ json: { ok: true, data: [
       story('new', 'Ferrari upgrade unveiled today', 1, 20),
       story('older', 'Ferrari upgrade dominated yesterday', 48, 100),
@@ -66,10 +66,31 @@ test('intelligence leads each cluster with fresh news ahead of older high scores
   });
   await page.goto('/intelligence');
   await expect(page.getByText('Ferrari upgrade unveiled today').last()).toBeVisible();
-  expect(requestedHours).toBe('72');
+  expect(requestedAdaptive).toBe('1');
   const cluster = page.getByRole('button', { name: '1 MORE STORIES' }).locator('..');
   await expect(cluster).toContainText('Ferrari upgrade unveiled today');
   await expect(cluster).not.toContainText('Ferrari upgrade dominated yesterday');
   await page.getByRole('button', { name: '1 MORE STORIES' }).click();
   await expect(page.getByText('Ferrari upgrade dominated yesterday').last()).toBeVisible();
+});
+
+test('quiet-week coverage labels older stories as context below current developments', async ({ page }) => {
+  await page.route('**/api/news/stories?**', route => route.fulfill({ json: {
+    ok: true,
+    feed: { mode: 'between-races', windowHours: 168, currentHours: 72, halfLifeHours: 72, raceName: null, raceTerms: [] },
+    data: [
+      { story_id: 'today', story_title: 'Fresh driver contract confirmed', latest_source: 'fia', latest_event_ts: new Date().toISOString(), feed_section: 'current', feed_score: 40 },
+      { story_id: 'context', story_title: 'Earlier engine rules explained', latest_source: 'BBC', latest_event_ts: new Date(Date.now() - 6 * 86400000).toISOString(), feed_section: 'context', feed_score: 15, is_breaking: false },
+    ],
+  } }));
+  await page.goto('/intelligence');
+  await expect(page.getByText('LATEST DEVELOPMENTS · 7-day coverage')).toBeVisible();
+  const context = page.locator('section').filter({ hasText: 'Recent context' });
+  await expect(context).toContainText('Earlier engine rules explained');
+  await expect(context).toContainText('6d ago');
+  await expect(context).not.toContainText('BREAKING');
+  await expect(context).not.toContainText('Fresh driver contract confirmed');
+  const fresh = page.getByText('Fresh driver contract confirmed').first();
+  await expect(fresh).toBeVisible();
+  expect(await fresh.evaluate((el) => el.getBoundingClientRect().top)).toBeLessThan(await context.evaluate((el) => el.getBoundingClientRect().top));
 });

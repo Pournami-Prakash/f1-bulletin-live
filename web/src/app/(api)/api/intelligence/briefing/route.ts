@@ -1,5 +1,6 @@
 import { publicJson } from '@/lib/api'
 import { logEvent } from '@/lib/observability'
+import { loadStoryFeed } from '@/lib/story-feed'
 import { getNeonSql } from '@/lib/neon'
 
 export const dynamic = "force-dynamic"
@@ -8,7 +9,7 @@ export async function GET() {
   try {
     const sql = getNeonSql()
 
-    const [briefing, stories] = await Promise.all([
+    const [briefing, feed] = await Promise.all([
       sql`
         SELECT briefing_date, headline, lead_paragraph,
           top_story_summary, driver_spotlight,
@@ -21,16 +22,10 @@ export async function GET() {
         ORDER BY briefing_date DESC
         LIMIT 1
       `,
-      sql`
-        SELECT story_id, topic_cluster, story_title, latest_source,
-          latest_event_ts, max_priority_score, best_priority_tier,
-          (is_breaking AND latest_event_ts >= NOW() - INTERVAL '24 hours') AS is_breaking, momentum_score
-        FROM story_timeline
-        WHERE latest_event_ts >= NOW() - INTERVAL '72 hours'
-        ORDER BY latest_event_ts DESC, COALESCE(momentum_score, 0) DESC
-        LIMIT 30
-      `,
+      loadStoryFeed(sql, { limit: 30 }),
     ])
+
+    const stories = feed.items
 
     const mapped = stories.map((s: any) => ({
       type:       s.latest_source?.toLowerCase().includes('reddit') ? 'r'
@@ -51,6 +46,7 @@ export async function GET() {
       ok: true,
       briefing: briefing[0] ?? null,
       stories: mapped,
+      feed: feed.policy,
       count: mapped.length,
     })
   } catch {

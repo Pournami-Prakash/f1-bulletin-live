@@ -1,5 +1,6 @@
 import { logEvent } from '@/lib/observability'
 import { NextResponse } from 'next/server'
+import { loadStoryFeed } from '@/lib/story-feed'
 import { getNeonSql } from '@/lib/neon'
 
 export const dynamic = "force-dynamic"
@@ -38,15 +39,7 @@ export async function GET() {
         lastUpdated: c.last_updated,
       }))
     } else {
-      const stories = await sql`
-        SELECT story_id, topic_cluster, story_title, latest_event_ts,
-          events_count, momentum_score,
-          (is_breaking AND latest_event_ts >= NOW() - INTERVAL '24 hours') AS is_breaking, best_priority_tier
-        FROM story_timeline
-        WHERE latest_event_ts >= NOW() - INTERVAL '72 hours'
-        ORDER BY latest_event_ts DESC, COALESCE(momentum_score, 0) DESC
-        LIMIT 12
-      `
+      const { items: stories } = await loadStoryFeed(sql, { limit: 12 })
       formatted = stories.map((s: any) => ({
         clusterId: s.story_id,
         clusterName: s.topic_cluster || 'GENERAL_F1',

@@ -5,7 +5,8 @@
  * Query params:
  *   cluster  all | TEAM_NEWS | DRIVER_NEWS | ...   (default: all)
  *   q        string full-text search                (default: "")
- *   hours    1–720                                  (default: 720 / 30 days)
+ *   hours    1–720                                  (explicit archive window)
+ *   adaptive 1                                      (calendar + volume based; default without hours)
  *   limit    1–200                                  (default: 100)
  */
 
@@ -13,6 +14,8 @@ import {
   ok, err, methodNotAllowed, toErrorMessage,
   clamp, toInt, toString,
 } from "@/lib/api";
+import { loadStoryFeed } from "@/lib/story-feed";
+import { NextResponse } from "next/server";
 import { getNeonSql } from "@/lib/neon";
 
 interface StoryRow {
@@ -48,6 +51,10 @@ export async function GET(req: Request) {
 
   try {
     const sql = getNeonSql();
+    if (searchParams.get('adaptive') === '1' || !searchParams.has('hours')) {
+      const { items, policy } = await loadStoryFeed(sql, { limit, cluster, q });
+      return NextResponse.json({ ok: true, data: items, count: items.length, feed: policy });
+    }
     const rows = await sql`
       SELECT
         story_id,
