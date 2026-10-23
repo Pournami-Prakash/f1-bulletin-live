@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 
@@ -267,46 +268,6 @@ function AccuracyCard({ accuracy }: { accuracy: NonNullable<RacePrediction['accu
   )
 }
 
-function ChampionshipTable({ rows }: { rows: ChampionshipRow[] }) {
-  const maxP = rows[0]?.projected_total ?? 1
-  return (
-    <div style={{ border: '1px solid rgba(255,255,255,.07)', borderRadius: 10, overflow: 'hidden' }}>
-      <div style={{ padding: '10px 16px', background: 'rgba(0,0,0,.35)', borderBottom: '1px solid rgba(255,255,255,.06)', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 2, height: 14, background: '#F59E0B', borderRadius: 1 }} />
-        <span style={{ fontSize: 9, color: 'rgba(255,255,255,.5)', fontFamily: mono, letterSpacing: '.14em' }}>FULL CHAMPIONSHIP PROJECTION</span>
-        <span style={{ fontSize: 9, color: 'rgba(255,255,255,.15)', fontFamily: mono, marginLeft: 'auto' }}>{rows[0]?.races_done ?? 0} done · {rows[0]?.races_remaining ?? 0} remaining</span>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '32px 150px 1fr 80px 90px', padding: '6px 16px', borderBottom: '1px solid rgba(255,255,255,.05)', background: 'rgba(0,0,0,.4)' }}>
-        {['#', 'DRIVER', 'PROJECTED PACE', 'ACTUAL', 'EST FINAL'].map(h => (
-          <div key={h} style={{ fontSize: 8, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.1em' }}>{h}</div>
-        ))}
-      </div>
-      {rows.slice(0, 10).map((row, i) => {
-        const color = teamColor(row.team)
-        return (
-          <div key={row.driver_code} style={{ display: 'grid', gridTemplateColumns: '32px 150px 1fr 80px 90px', alignItems: 'center', padding: '9px 16px', borderBottom: '1px solid rgba(255,255,255,.03)', background: i % 2 === 0 ? 'rgba(255,255,255,.01)' : 'transparent' }}>
-            <div style={{ fontFamily: bebas, fontSize: i < 3 ? 16 : 12, color: i === 0 ? '#F59E0B' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : 'rgba(255,255,255,.25)' }}>{i + 1}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ width: 2, height: 12, background: color, borderRadius: 1 }} />
-              <div>
-                <div style={{ fontFamily: bebas, fontSize: 13, color: '#fff', letterSpacing: '.04em' }}>{row.driver_code}</div>
-                <div style={{ fontSize: 7, color: 'rgba(255,255,255,.25)', fontFamily: mono }}>{row.team}</div>
-              </div>
-            </div>
-            <div style={{ paddingRight: 16 }}>
-              <div style={{ height: 3, background: 'rgba(255,255,255,.06)', borderRadius: 2, overflow: 'hidden' }}>
-                <div style={{ width: `${(row.projected_total / maxP) * 100}%`, height: '100%', background: color, borderRadius: 2, transition: 'width .8s ease' }} />
-              </div>
-            </div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', fontFamily: mono }}>{row.actual_points} pts</div>
-            <div style={{ fontSize: 11, fontFamily: bebas, color: i === 0 ? '#F59E0B' : 'rgba(255,255,255,.55)', letterSpacing: '.02em' }}>~{row.projected_total}</div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 export default function PredictionsPage() {
   const [data, setData]         = useState<RacePrediction | null>(null)
   const [loading, setLoading]   = useState(true)
@@ -317,7 +278,6 @@ export default function PredictionsPage() {
   const [selectedRound, setSelectedRound]     = useState<number | null>(null)
   const [accuracy, setAccuracy]               = useState<any[]>([])
   const [showHistory, setShowHistory]         = useState(false)
-  const [showChampionship, setShowChampionship] = useState(false)
 
   useEffect(() => {
     fetch(`/api/predictions/rounds?season=${season}`)
@@ -453,8 +413,8 @@ export default function PredictionsPage() {
                 </select>
                 <div style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'rgba(255,255,255,.3)', fontSize: 10 }}>▾</div>
               </div>
-              <button onClick={() => { setShowHistory(p => !p); setShowChampionship(false) }} style={{ flexShrink: 0, background: showHistory ? 'rgba(56,189,248,.1)' : 'transparent', border: `1px solid ${showHistory ? 'rgba(56,189,248,.3)' : 'rgba(255,255,255,.08)'}`, borderRadius: 5, color: showHistory ? '#38BDF8' : 'rgba(255,255,255,.3)', padding: '5px 14px', cursor: 'pointer', fontFamily: mono, fontSize: 10, letterSpacing: '.1em', whiteSpace: 'nowrap' }}>ACCURACY HISTORY</button>
-              <button onClick={() => { setShowChampionship(p => !p); setShowHistory(false) }} style={{ flexShrink: 0, background: showChampionship ? 'rgba(245,158,11,.1)' : 'transparent', border: `1px solid ${showChampionship ? 'rgba(245,158,11,.3)' : 'rgba(255,255,255,.08)'}`, borderRadius: 5, color: showChampionship ? '#F59E0B' : 'rgba(255,255,255,.3)', padding: '5px 14px', cursor: 'pointer', fontFamily: mono, fontSize: 10, letterSpacing: '.1em', whiteSpace: 'nowrap' }}>CHAMPIONSHIP ↓</button>
+              <button onClick={() => { setShowHistory(p => !p) }} style={{ flexShrink: 0, background: showHistory ? 'rgba(56,189,248,.1)' : 'transparent', border: `1px solid ${showHistory ? 'rgba(56,189,248,.3)' : 'rgba(255,255,255,.08)'}`, borderRadius: 5, color: showHistory ? '#38BDF8' : 'rgba(255,255,255,.3)', padding: '5px 14px', cursor: 'pointer', fontFamily: mono, fontSize: 10, letterSpacing: '.1em', whiteSpace: 'nowrap' }}>ACCURACY HISTORY</button>
+              <Link href="/championship" style={{ flexShrink: 0, color: '#F59E0B', padding: '8px 14px', fontFamily: mono, fontSize: 10, letterSpacing: '.1em', whiteSpace: 'nowrap', textDecoration: 'none', minHeight: 44, display: 'flex', alignItems: 'center' }}>CHAMPIONSHIP ↗</Link>
             </div>
           )}
 
@@ -489,16 +449,11 @@ export default function PredictionsPage() {
             </div>
           )}
 
-          {/* ── FULL CHAMPIONSHIP TABLE ── */}
-          {showChampionship && (data?.championship?.length ?? 0) > 0 && (
-            <ChampionshipTable rows={data!.championship} />
-          )}
-
           {loading ? (
             <div style={{ padding: '80px 0', textAlign: 'center' }}>
               <span style={{ fontSize: 9, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.18em' }}>LOADING PREDICTIONS…</span>
             </div>
-          ) : (showHistory || showChampionship) ? null : data ? (
+          ) : showHistory ? null : data ? (
             <>
               {/* ── ACCURACY (if race done) ── */}
               {data.has_actuals && data.accuracy && (

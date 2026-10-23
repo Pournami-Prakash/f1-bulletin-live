@@ -27,6 +27,7 @@ export default function Header({ onReset }: { onReset?: () => void }) {
     { href: '/intelligence', label: 'INTELLIGENCE' },
     { href: '/analytics',    label: 'ANALYTICS'    },
     { href: '/predictions',  label: 'PREDICTION'   },
+    { href: '/championship', label: 'CHAMPIONSHIP' },
     { href: '/standings',    label: 'STANDINGS'    },
     { href: '/circuit',      label: 'CIRCUIT'      },
     { href: '/guide',        label: 'GUIDE'        },
@@ -38,7 +39,7 @@ export default function Header({ onReset }: { onReset?: () => void }) {
         .f1-nav { display: flex; gap: 0; margin-left: 8px; }
         .f1-hamburger { display: none; }
         .f1-dropdown { display: none; }
-        @media (max-width: 768px) {
+        @media (max-width: 1100px) {
           .f1-nav { display: none !important; }
           .f1-hamburger { display: flex !important; }
           .f1-dropdown { display: block !important; }
@@ -114,7 +115,7 @@ export default function Header({ onReset }: { onReset?: () => void }) {
             style={{
               background: 'transparent',
               border: '1px solid var(--b1)',
-              width: 36, height: 36,
+              width: 44, height: 44,
               borderRadius: 8,
               cursor: 'pointer',
               display: 'flex',

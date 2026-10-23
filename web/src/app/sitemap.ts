@@ -5,6 +5,7 @@ const routes = [
   '',
   '/analytics',
   '/circuit',
+  '/championship',
   '/drivers',
   '/guide',
   '/intelligence',
