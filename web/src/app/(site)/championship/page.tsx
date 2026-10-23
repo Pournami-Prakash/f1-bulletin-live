@@ -30,9 +30,24 @@ function distribution(data: ChampionshipForecast, driver: ChampionshipDriver, ro
   const race = data.races.find(r => r.round === round && r.driver_code === driver.driver_code)
   return (view === 'championship' ? race?.championship_position_probabilities : race?.position_probabilities) ?? []
 }
+// Simulated shares never read as certain: a clean sweep of every sample is still only ">99".
+const share = (p: number, simulated: boolean) => simulated && p >= .995 ? '>99' : String(Math.round(p * 100) || '<1')
 const average = (values: number[]) => values.reduce((sum, p, i) => sum + p * (i + 1), 0)
 function curve(path: { x: number; y: number }[]) {
   return path.map((p, i) => i === 0 ? `M${p.x},${p.y}` : `C${(path[i-1].x+p.x)/2},${path[i-1].y} ${(path[i-1].x+p.x)/2},${p.y} ${p.x},${p.y}`).join(' ')
+}
+// Vertical counterpart of curve(), used for the distribution outlines.
+function vcurve(path: { x: number; y: number }[]) {
+  return path.map((p, i) => i === 0 ? `M${p.x},${p.y}` : `C${path[i-1].x},${(path[i-1].y+p.y)/2} ${p.x},${(path[i-1].y+p.y)/2} ${p.x},${p.y}`).join(' ')
+}
+// Push end-of-line labels apart so neighbouring drivers stay readable.
+function spread<T extends { y: number }>(labels: T[], gap: number, min: number, max: number): T[] {
+  const sorted = [...labels].sort((a, b) => a.y - b.y)
+  sorted.forEach((l, i) => { if (i > 0) l.y = Math.max(l.y, sorted[i-1].y + gap) })
+  const overflow = (sorted.at(-1)?.y ?? 0) - max
+  if (overflow > 0) sorted.forEach(l => { l.y -= overflow })
+  sorted.forEach(l => { l.y = Math.max(l.y, min) })
+  return sorted
 }
 
 function FutureMap({ data, driver, round, view, onRound }: {
@@ -40,11 +55,23 @@ function FutureMap({ data, driver, round, view, onRound }: {
 }) {
   const stops = view === 'championship' ? [0, ...data.remaining.map(e => e.round)] : data.remaining.filter(e => e.race_pending).map(e => e.round)
   const ranks = view === 'championship' ? data.drivers.length : data.drivers.filter(d => d.active).length
-  const width = Math.max(740, stops.length * 135), height = Math.max(360, ranks * 23 + 85)
-  const x = (i: number) => 64 + i * (width - 152) / Math.max(1, stops.length - 1)
-  const y = (rank: number) => 50 + (rank - 1) * (height - 98) / Math.max(1, ranks - 1)
-  const color = teamColor(driver.team)
   const selected = stops.map(r => distribution(data, driver, r, view))
+  // Only draw the positions this driver can reach (plus a row of context either side).
+  const reached = selected.flatMap(values => values.flatMap((p, i) => p > 0 ? [i + 1] : []))
+  let top = Math.max(1, Math.min(...reached, driver.current_position) - 1)
+  let bottom = Math.min(ranks, Math.max(...reached, driver.current_position) + 1)
+  while (bottom - top < 5 && (top > 1 || bottom < ranks)) { if (bottom < ranks) bottom++; if (bottom - top < 5 && top > 1) top-- }
+  const rows = bottom - top + 1
+  const row = rows > 12 ? 28 : 38, padTop = 44, padBottom = 46, left = 52, right = 74
+  const width = Math.max(760, stops.length * 140), height = padTop + rows * row + padBottom
+  const column = (width - left - right) / Math.max(1, stops.length)
+  const x = (i: number) => left + column * (i + .5)
+  const y = (rank: number) => padTop + (rank - top + .5) * row
+  const halfMax = Math.min(column * .42, 70)
+  // Scale to the likeliest simulated outcome so spread-out race finishes stay visible; NOW is certain and clamps.
+  const peak = Math.max(.01, ...selected.flatMap((values, i) => stops[i] ? values : []))
+  const widthOf = (p: number) => halfMax * Math.min(1, p / peak)
+  const color = teamColor(driver.team)
   const activeIndex = stops.indexOf(round)
   const scroll = useRef<HTMLDivElement>(null)
   const selectedX = activeIndex >= 0 ? x(activeIndex) : 0
@@ -52,38 +79,92 @@ function FutureMap({ data, driver, round, view, onRound }: {
     const element = scroll.current
     if (element) element.scrollLeft = Math.max(0,selectedX-element.clientWidth/2)
   },[selectedX,view])
+  const others = data.drivers.filter(d => d.driver_code !== driver.driver_code && (view === 'championship' || d.active)).map(d => {
+    const path = stops.flatMap((r,i) => {
+      const values = distribution(data,d,r,view)
+      return values.some(Boolean) ? [{x:x(i),y:y(average(values))}] : []
+    })
+    return { d, path }
+  }).filter(({ path }) => path.some(p => p.y >= padTop && p.y <= height - padBottom))
+  const ownPath = selected.flatMap((values,i) => values.some(Boolean) ? [{x:x(i),y:y(average(values))}] : [])
+  const labels = spread([
+    ...others.filter(o => o.path.length).map(o => ({ code: o.d.driver_code, fill: teamColor(o.d.team), own: false, y: o.path.at(-1)!.y + 4 })),
+    ...(ownPath.length ? [{ code: driver.driver_code, fill: color, own: true, y: ownPath.at(-1)!.y + 4 }] : []),
+  ], 12, padTop + 4, height - padBottom).filter(l => l.y <= height - padBottom + 2)
+  const shape = (values: number[], i: number) => {
+    const first = values.findIndex(p => p > 0) + 1, last = values.findLastIndex(p => p > 0) + 1
+    // Taper to a point half a row beyond the outermost reachable positions.
+    const side = (sign: number) => [
+      { x: x(i), y: y(first) - row * .5 },
+      ...Array.from({ length: last - first + 1 }, (_, k) => ({ x: x(i) + sign * widthOf(values[first + k - 1] ?? 0), y: y(first + k) })),
+      { x: x(i), y: y(last) + row * .5 },
+    ]
+    const right = side(1), leftSide = side(-1).reverse()
+    return `${vcurve(right)} L${leftSide[0].x},${leftSide[0].y} ${vcurve(leftSide).slice(1)} Z`
+  }
   return <div ref={scroll} className={styles.mapScroll} tabIndex={0} role="region" aria-label="Interactive championship possibility map">
     <svg viewBox={`0 0 ${width} ${height}`} style={{ minWidth: width }} role="img" aria-labelledby="future-map-title future-map-description">
       <title id="future-map-title">{driver.driver_code} {view === 'race' ? 'race finishing' : 'championship'} possibilities across remaining races</title>
-      <desc id="future-map-description">Positions run from first at the top to last at the bottom. Thin team-coloured lines show each driver's average position, which can overlap. Wider shapes show more frequent positions for {driver.driver_code}; every non-zero simulated outcome is included. Use the driver buttons and race controls to explore. Exact probabilities are available below.</desc>
-      {Array.from({ length: ranks }, (_, i) => <g key={i}>
-        <line x1="43" x2={width - 32} y1={y(i+1)} y2={y(i+1)} className={styles.gridLine} />
-        <text x="27" y={y(i+1)+4} textAnchor="end" className={i < 3 ? styles.podiumLabel : ''}>{String(i+1).padStart(2,'0')}</text>
+      <desc id="future-map-description">Positions P{top} to P{bottom} run from top to bottom. The shape at each race is wider where {driver.driver_code} is more likely to be; every non-zero simulated outcome is included. Thin lines show nearby drivers' average positions. Exact probabilities are available below.</desc>
+      <defs><clipPath id="future-map-plot"><rect x={left} y={padTop} width={width - left - right} height={rows * row} /></clipPath></defs>
+      {activeIndex >= 0 && <rect x={x(activeIndex) - column / 2} y={padTop - 30} width={column} height={rows * row + 30 + padBottom - 8} className={styles.activeColumn} />}
+      {Array.from({ length: rows }, (_, k) => top + k).map(rank => <g key={rank}>
+        {rank > top && <line x1={left} x2={width - right} y1={y(rank) - row / 2} y2={y(rank) - row / 2} className={styles.gridLine} />}
+        <text x={left - 14} y={y(rank) + 4} textAnchor="end" className={rank <= 3 ? styles.podiumLabel : ''}>P{rank}</text>
       </g>)}
-      {activeIndex >= 0 && <rect x={x(activeIndex)-41} y="27" width="82" height={height-57} fill="var(--t1)" opacity=".035" />}
       {stops.map((r, i) => <g key={r}>
-        <line x1={x(i)} x2={x(i)} y1="32" y2={height-36} className={styles.roundLine} />
-        <text x={x(i)} y="16" textAnchor="middle" className={r === round ? styles.activeRound : ''}>{r ? `R${r}` : 'NOW'}</text>
-        <text x={x(i)} y={height-12} textAnchor="middle">{r ? shortRace(data.remaining.find(e => e.round === r)!.race_name).slice(0,14) : 'Recorded'}</text>
+        <text x={x(i)} y={padTop - 22} textAnchor="middle" className={r === round ? styles.activeRound : styles.roundLabel}>{r ? `R${r}` : 'NOW'}</text>
+        <text x={x(i)} y={padTop - 9} textAnchor="middle" className={r === round ? styles.activeRace : styles.raceLabel}>{r ? shortRace(data.remaining.find(e => e.round === r)!.race_name).slice(0,13) : 'Standings'}</text>
       </g>)}
-      {data.drivers.filter(d => view === 'championship' || d.active).sort((a,b)=>Number(a.driver_code===driver.driver_code)-Number(b.driver_code===driver.driver_code)).map(d => {
-        const path = stops.flatMap((r,i) => {
-          const values = distribution(data,d,r,view)
-          return values.some(Boolean) ? [{x:x(i),y:y(average(values))}] : []
-        })
-        const isSelected = d.driver_code === driver.driver_code
-        return <g key={d.driver_code} opacity={isSelected ? 1 : .45}>
-          <path d={curve(path)} fill="none" stroke={teamColor(d.team)} strokeWidth={isSelected ? 2.5 : 1.2} strokeDasharray={!d.active ? '3 5' : undefined} />
-          {path.length > 0 && <text x={path.at(-1)!.x+14} y={path.at(-1)!.y+4} fill={teamColor(d.team)} className={isSelected ? styles.selectedLabel : styles.driverLabel}>{d.driver_code}</text>}
-        </g>
-      })}
-      {selected.map((values,i) => <g key={stops[i]}>
-        {values.map((p,rank) => p > 0 ? <ellipse key={rank} cx={x(i)} cy={y(rank+1)} rx={Math.max(2,32*Math.sqrt(p))} ry="8" fill={color} opacity={.22+.68*Math.sqrt(p)}><title>{driver.driver_code}, {stops[i] ? `after round ${stops[i]}` : 'now'}, P{rank+1}: {percent(p)}</title></ellipse> : null)}
-        {values.some(Boolean) && <circle cx={x(i)} cy={y(average(values))} r="3.5" fill="var(--bg)" stroke={color} strokeWidth="2" />}
-      </g>)}
+      <g clipPath="url(#future-map-plot)">
+        {others.map(({ d, path }) => <path key={d.driver_code} d={curve(path)} fill="none" stroke={teamColor(d.team)} strokeWidth="1.25" opacity=".38" strokeDasharray={!d.active ? '3 5' : undefined} />)}
+        {selected.map((values,i) => values.some(Boolean) && <path key={stops[i]} d={shape(values, i)} fill={color} fillOpacity={i === activeIndex ? .42 : .22} stroke={color} strokeOpacity={i === activeIndex ? .9 : .5} strokeWidth="1" />)}
+        <path d={curve(ownPath)} fill="none" stroke={color} strokeWidth="2.5" />
+        {ownPath.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="4" fill="var(--bg)" stroke={color} strokeWidth="2" />)}
+      </g>
+      {selected.map((values,i) => values.map((p, rank) => (i === activeIndex ? p >= .03 : p === Math.max(...values)) && rank + 1 >= top && rank + 1 <= bottom
+        ? <text key={`${i}-${rank}`} x={x(i) + widthOf(p) + 7} y={y(rank + 1) + 4} className={i === activeIndex ? styles.shareLabel : styles.shareLabelMuted}>{share(p, stops[i] !== 0)}%</text> : null))}
+      {labels.map(l => <text key={l.code} x={width - right + 12} y={l.y} fill={l.fill} className={l.own ? styles.selectedLabel : styles.driverLabel}>{l.code}</text>)}
+      {stops.map((r, i) => <rect key={r} x={x(i) - column / 2} y={0} width={column} height={height} fill="transparent" className={styles.columnTarget} onClick={() => onRound(r)} aria-hidden="true"><title>{r ? `Inspect round ${r}` : 'Inspect current standings'}</title></rect>)}
     </svg>
-    <div className={styles.chartRaceTargets} style={{ width, gridTemplateColumns: `repeat(${stops.length},1fr)` }}>
-      {stops.map(r => <button key={r} onClick={() => onRound(r)} aria-label={r ? `Inspect round ${r}` : 'Inspect current standings'} aria-pressed={r === round}>{r ? `R${r} ↗` : 'NOW ↗'}</button>)}
+  </div>
+}
+
+function FieldGrid({ data, round, view, code, onDriver }: {
+  data: ChampionshipForecast; round: number; view: View; code: string; onDriver: (code: string) => void
+}) {
+  const rows = data.drivers.filter(d => view === 'championship' || d.active)
+    .map(d => ({ d, values: distribution(data, d, round, view) }))
+    .filter(r => r.values.some(Boolean))
+    .sort((a, b) => average(a.values) - average(b.values))
+  const positions = Math.max(0, ...rows.map(r => r.values.length))
+  // Shade relative to the likeliest cell so spread-out race finishes stay readable.
+  const peak = Math.max(.01, ...rows.flatMap(r => r.values))
+  const event = data.remaining.find(e => e.round === round)
+  const where = event ? shortRace(event.race_name) : 'current standings'
+  return <div className={styles.fieldBlock}>
+    <div className={styles.fieldHead}>
+      <div><span className={styles.kicker}>THE WHOLE GRID / {round ? `ROUND ${round}` : 'NOW'}</span><h3>{view === 'championship' ? `Championship order after ${where}` : `${where} finishing order`}</h3></div>
+      <p>Each cell is the chance of that driver finishing in that {view === 'championship' ? 'championship position' : 'race position'}. Numbers are %; dots are under 5%; “&gt;99” means it happened in every simulation but is not yet certain. Rows sorted by average. Pick a row to follow that driver.</p>
+    </div>
+    <div className={styles.fieldScroll} role="region" tabIndex={0} aria-label="Whole-grid position probabilities">
+      <table className={styles.fieldGrid}>
+        <caption className={styles.srOnly}>All drivers · {view === 'championship' ? 'championship' : 'race finish'} position probabilities · {where}</caption>
+        <thead><tr><th scope="col">Driver</th>{Array.from({ length: positions }, (_, i) => <th scope="col" key={i}>P{i + 1}</th>)}<th scope="col" className={styles.meta}>Avg</th><th scope="col" className={styles.meta}>{view === 'race' ? 'Win' : 'Title'}</th></tr></thead>
+        <tbody>{rows.map(({ d, values }) => {
+          const odds = view === 'race' ? data.races.find(r => r.round === round && r.driver_code === d.driver_code)?.win_probability ?? 0 : d.title_probability
+          return <tr key={d.driver_code} className={d.driver_code === code ? styles.followed : ''} style={{ '--team': teamColor(d.team) } as CSSProperties}>
+            <th scope="row"><button onClick={() => onDriver(d.driver_code)} aria-pressed={d.driver_code === code}><i aria-hidden="true" />{d.driver_code}</button></th>
+            {Array.from({ length: positions }, (_, i) => {
+              const p = values[i] ?? 0, shade = Math.min(1, p / peak) ** .75
+              return <td key={i} title={`${d.driver_code} P${i + 1}: ${round && p === 1 ? `every one of ${data.simulations.toLocaleString('en-GB')} simulations, not yet mathematically certain` : percent(p)}`} className={shade > .6 ? styles.hot : ''} style={{ background: p ? `color-mix(in srgb, var(--red) ${Math.round(3 + shade * 87)}%, transparent)` : undefined }}>
+                {p >= .05 ? share(p, round !== 0) : p > 0 ? <span className={styles.trace} aria-hidden="true" /> : ''}<span className={styles.srOnly}>{p ? percent(p) : '0%'}</span>
+              </td>
+            })}
+            <td className={styles.meta}>{average(values).toFixed(1)}</td><td className={styles.meta}>{percent(odds)}</td>
+          </tr>
+        })}</tbody>
+      </table>
     </div>
   </div>
 }
@@ -158,14 +239,16 @@ export default function ChampionshipPage() {
             return <button key={r} aria-pressed={round===r} onClick={()=>chooseRound(r)}><span className={styles.timelineDot} /><small>{r?`ROUND ${r}`:'START'}</small><b>{e?shortRace(e.race_name):'Now'}</b><span>{e ? new Date(e.race_start_utc).toLocaleDateString('en-GB',{day:'numeric',month:'short',timeZone:'UTC'}) : `${data.completed_races} races in`}{e?.sprint_pending?' + S':''}{i===stops.length-1?' / FINALE':''}</span></button>
           })}</div>
         </div> : <p className={styles.note}>No races remain on the recorded calendar. The map shows the final recorded standings.</p>}
+        <FieldGrid data={data} round={round} view={view} code={code} onDriver={c => {setCode(c);setInspectedPosition(null)}} />
         <div className={styles.visualLayout}>
-          <div className={styles.mapPanel}><div className={styles.mapLegend}><span><i />Average paths · all drivers</span><span style={{color:teamColor(driver.team)}}>● Wider shapes = more likely for {code}</span></div><FutureMap data={data} driver={driver} round={round} view={view} onRound={chooseRound} /><p className={styles.mapHint}>01 = first place · Lines show averages, not a single possible season. Scroll the map sideways on smaller screens.</p></div>
+          <div className={styles.mapPanel}><div className={styles.mapLegend}><span style={{color:teamColor(driver.team)}}><i className={styles.legendShape} />Wider = likelier position for {code}</span><span><i />Nearby drivers’ average paths</span><span>Click a race column to inspect it</span></div><FutureMap data={data} driver={driver} round={round} view={view} onRound={chooseRound} /><p className={styles.mapHint}>Only the positions {code} can reach are shown · Lines show averages, not a single possible season. Scroll the map sideways on smaller screens.</p></div>
           <aside className={styles.inspector} aria-labelledby="inspector-heading" style={{'--team':teamColor(driver.team)} as CSSProperties}>
             <div className={styles.inspectorTop}><span className={styles.kicker}>{round ? `AFTER ROUND ${round}` : 'RECORDED STANDINGS'}</span><h3 id="inspector-heading">{event ? shortRace(event.race_name) : 'Right now'}</h3><p>{event?.circuit_name ?? `After round ${data.as_of_round}`}{event?.sprint_pending ? ' · includes sprint points' : ''}</p>{event?.awaiting_results && <p>Awaiting complete results</p>}</div>
             <div className={styles.driverIdentity}><strong>{code}</strong><span>{driver.team}<br />{mode} position</span></div>
             <div className={styles.range}><b>{round && band ? `P${band.low}` : `P${driver.current_position}`}</b><span>{round ? '80% RANGE' : 'ACTUAL POSITION'}<br />{round ? 'best ↔ worst' : 'recorded'}</span><b>{round && band ? `P${band.high}` : `P${driver.current_position}`}</b></div>
             <div className={styles.spectrum} role="group" aria-label={`${code} exact position probabilities`}>
-              {probabilities.map((p,i) => <button key={i} aria-label={`P${i+1}: ${percent(p)}`} aria-pressed={inspectedPosition===i+1} onClick={() => setInspectedPosition(i+1)} style={{'--probability':`${p*100}%`} as CSSProperties}><span className={styles.bar} /><small>{i===0 || (i+1)%5===0 || i===probabilities.length-1 ? i+1 : ''}</small></button>)}
+              {probabilities.map((p,i) => p >= .01 && <button key={i} aria-label={`P${i+1}: ${percent(p)}`} aria-pressed={inspectedPosition===i+1} onClick={() => setInspectedPosition(i+1)} style={{'--probability':`${p/Math.max(...probabilities)*100}%`} as CSSProperties}><small>P{i+1}</small><span className={styles.track}><span className={styles.bar} /></span><b>{percent(p)}</b></button>)}
+              {probabilities.some(p => p > 0 && p < .01) && <p className={styles.rare}>Rarer positions (&lt;1% each) are on the map and in the selector.</p>}
             </div>
             <label className={styles.positionSelect}>Inspect position<select aria-label="Inspect position" value={inspectedPosition ?? ''} onChange={e=>setInspectedPosition(Number(e.target.value))}><option value="" disabled>Choose a position</option>{probabilities.map((_,i)=><option key={i} value={i+1}>P{i+1} · {percent(probabilities[i])}</option>)}</select></label><p className={styles.probabilityReadout} aria-live="polite">{inspectedPosition ? <>P{inspectedPosition} <b>{percent(probabilities[inspectedPosition-1] ?? 0)}</b> of simulated outcomes</> : 'Tap a position bar to see its probability.'}</p>
             <dl className={styles.stats}><div><dt>{round ? 'Expected total' : 'Current points'}</dt><dd>{points(scenario?.cumulative_points.mean ?? driver.current_points)} <small>PTS</small></dd></div>{round && <div><dt>Weekend points</dt><dd>+{points(scenario?.points.mean ?? 0)} <small>AVG</small></dd></div>}<div><dt>Final title chance</dt><dd>{driver.points_eliminated ? 'Out of reach' : percent(driver.title_probability)}</dd></div></dl>
