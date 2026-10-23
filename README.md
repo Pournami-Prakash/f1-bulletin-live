@@ -1,7 +1,5 @@
 # F1 Bulletin
 
-Operational setup, security remediation, deployment cutover, and recovery procedures are documented in [OPERATIONS.md](OPERATIONS.md).
-
 > **The timing screen tells you who was fastest. F1 Bulletin connects the pace, strategy, circuit, news, and probabilities that explain why—and asks what comes next.**
 
 <p align="center">
@@ -170,7 +168,7 @@ The project combines public Formula 1 session data, timing and telemetry, calend
 ## Built With
 
 - **Product:** Next.js, React, TypeScript, Framer Motion, Vercel
-- **Data and modeling:** Python, FastF1, BGE text embeddings through ONNX Runtime, pgvector, Neon Postgres
+- **Data and modeling:** Python, FastF1, FastEmbed, pgvector, Neon Postgres
 - **Orchestration and enrichment:** GitHub Actions, SQL, Snowflake (optional)
 
 ## Origin
