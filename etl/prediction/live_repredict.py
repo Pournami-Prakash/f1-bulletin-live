@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse, json, os, warnings
 warnings.filterwarnings('ignore')
 import numpy as np
+from survival import retirement_probability
 import requests
 from pathlib import Path
 from dotenv import load_dotenv
@@ -255,9 +256,7 @@ def simulate_from_live(entries: list[dict], live: dict, artifacts: dict) -> dict
                 CD = COMPOUND_DEG
                 shape = e.get("dnf_shape", 0.8)
                 scale = e.get("dnf_scale", 60.0)
-                s_prev = np.exp(-((max(abs_lap - 1, 0) / scale) ** shape))
-                s_now  = np.exp(-((abs_lap / scale) ** shape))
-                if np.random.random() < max(0.0, s_prev - s_now):
+                if np.random.random() < retirement_probability(max(abs_lap-1,0), abs_lap, shape, scale):
                     retired.add(d)
                     continue
 

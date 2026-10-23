@@ -1,6 +1,20 @@
 import { toNumber, type DbNumber } from '@/lib/neon'
 
+export type ForecastDetails = {
+  expected_finish?: number
+  finish_p10: number
+  finish_p90: number
+  position_probabilities?: number[]
+  mc_win_standard_error?: number
+  range_basis?: 'simulation' | 'simulation_calibrated' | 'coherent'
+  range_calibration_races?: number
+  model_rank_spread?: number
+  calibration_method: 'isotonic' | 'shrinkage'
+  calibration_races: number
+}
+
 export type DriverPrediction = {
+  forecast_details?: ForecastDetails | null
   driver_code:        string
   team:               string
   predicted_position: number
@@ -144,6 +158,7 @@ export function shapeRacePrediction(params: {
     has_actuals:      params.predictions.some((p) => p.actual_position !== null),
     championship:     params.championship,
     drivers: params.predictions.map((p) => ({
+      forecast_details:   p.forecast_details ?? null,
       driver_code:        p.driver_code,
       team:               p.team,
       predicted_position: p.predicted_position,

@@ -24,6 +24,9 @@ from dotenv import load_dotenv
 import psycopg2
 from asof import bounded_sql
 import robust_model
+from survival import retirement_probability
+from forecast_quality import fit_calibration, calibrate, finalize, validate_forecast
+from range_calibration import fit_range_calibration, apply_range_calibration
 from tyre_model import FUEL_MS_PER_LAP
 from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor
@@ -568,77 +571,75 @@ def predict_xgboost(model, entries: list[dict]) -> dict[str, float] | None:
 # ─────────────────────────────────────────────────────────────
 # CALIBRATION
 # ─────────────────────────────────────────────────────────────
-MIN_CALIBRATION_RACES = 10
 CALIBRATOR_PATH = FEATURES_DIR / 'calibrator.json'
 
-def fit_calibrator() -> None:
-    scored = query("""
-        SELECT win_probability, podium_probability, actual_position
-        FROM predictions
-        WHERE actual_position IS NOT NULL AND season = 2026
-        ORDER BY predicted_at
-    """)
-    if len(scored) < MIN_CALIBRATION_RACES * 5:
-        step(f"  Calibration: only {len(scored)} rows, need {MIN_CALIBRATION_RACES*5}. Skipping.")
-        return
-    from sklearn.isotonic import IsotonicRegression
-    y_true_win = (scored['actual_position'] == 1).astype(float).values
-    y_prob_win = scored['win_probability'].astype(float).values
-    ir_win = IsotonicRegression(out_of_bounds='clip')
-    ir_win.fit(y_prob_win, y_true_win)
-    y_true_pod = (scored['actual_position'] <= 3).astype(float).values
-    y_prob_pod = scored['podium_probability'].astype(float).values
-    ir_pod = IsotonicRegression(out_of_bounds='clip')
-    ir_pod.fit(y_prob_pod, y_true_pod)
-    calib = {
-        'win':    {'x': ir_win.X_thresholds_.tolist(), 'y': ir_win.y_thresholds_.tolist()},
-        'podium': {'x': ir_pod.X_thresholds_.tolist(), 'y': ir_pod.y_thresholds_.tolist()},
-        'n_rows': len(scored),
-        'fitted_at': str(pd.Timestamp.now()),
-    }
-    with open(CALIBRATOR_PATH, 'w') as f:
-        json.dump(calib, f, indent=2)
-    step(f"  Calibration fitted on {len(scored)} rows")
+def calibration_history(season: int, round_: int, model_version: str) -> pd.DataFrame:
+    # Only genuine forecasts issued before race start are eligible. Raw inputs
+    # prevent fitting a calibrator on probabilities another calibrator transformed.
+    return query("""
+        SELECT p.season, p.round, p.model_version, p.driver_code,
+               (to_jsonb(p)->'forecast_details'->>'raw_win')::float AS raw_win,
+               (to_jsonb(p)->'forecast_details'->>'raw_podium')::float AS raw_podium,
+               (to_jsonb(p)->'forecast_details'->>'raw_finish_p10')::float AS raw_finish_p10,
+               (to_jsonb(p)->'forecast_details'->>'raw_finish_p90')::float AS raw_finish_p90,
+               to_jsonb(p)->'forecast_details'->>'raw_range_method' AS raw_range_method,
+               p.actual_position, p.predicted_at, c.race_start_utc,
+               (SELECT count(DISTINCT q.driver_code) FROM qualifying_laps q JOIN public.sessions s ON s.id=q.session_id
+                WHERE s.season=p.season AND s.round=p.round AND s.session_type='Q') AS expected_drivers
+        FROM predictions p JOIN race_calendar c ON c.season=p.season AND c.round=p.round
+        WHERE p.actual_position IS NOT NULL AND p.model_version=%s
+          AND p.model_version NOT LIKE '%%backfill%%'
+          AND (p.season < %s OR (p.season=%s AND p.round < %s))
+          AND p.predicted_at < c.race_start_utc
+        ORDER BY p.season, p.round, p.driver_code
+    """, (model_version, season, season, round_))
 
-def load_calibrator() -> dict | None:
-    if not CALIBRATOR_PATH.exists():
+
+def fit_calibrator(season: int, round_: int, model_version: str, *, save: bool = True) -> dict | None:
+    scored = calibration_history(season, round_, model_version)
+    calibrator = fit_calibration(scored, season, round_, model_version)
+    if save and calibrator:
+        CALIBRATOR_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CALIBRATOR_PATH.write_text(json.dumps(calibrator, indent=2) + '\n')
+    return calibrator
+
+
+def load_calibrator(season: int | None = None, round_: int | None = None,
+                    model_version: str | None = None) -> dict | None:
+    # Legacy callers without an explicit forecast boundary cannot use a learned curve.
+    if season is None or round_ is None or model_version is None:
         return None
-    try:
-        with open(CALIBRATOR_PATH) as f:
-            c = json.load(f)
-        return c if c.get('n_rows', 0) >= MIN_CALIBRATION_RACES * 5 else None
-    except Exception:
-        return None
+    # Refit on the eligible history: never reuse an unbounded/stale disk artifact.
+    return fit_calibrator(season, round_, model_version, save=False)
+
+
+def load_forecast_calibrators(season: int, round_: int, model_version: str):
+    scored = calibration_history(season, round_, model_version)
+    return (fit_calibration(scored, season, round_, model_version),
+            fit_range_calibration(scored, season, round_, model_version))
+
 
 def apply_calibration(predictions: list[dict], calibrator: dict | None) -> list[dict]:
-    if calibrator is None:
-        n_d    = len(predictions)
-        data_w = predictions[0].get('data_weight_2026', 0.1) if predictions else 0.1
-        alpha  = max(0.04, 0.10 - data_w * 0.07)
-        mean_win = 1.0 / n_d
-        mean_pod = 3.0 / n_d
-        for p in predictions:
-            p['win_probability']    = round(alpha*mean_win + (1-alpha)*p['win_probability'], 4)
-            p['podium_probability'] = round(min(alpha*mean_pod + (1-alpha)*p['podium_probability'], 1.0), 4)
-        total = sum(p['win_probability'] for p in predictions)
-        if total > 0:
-            for p in predictions:
-                p['win_probability'] = round(p['win_probability'] / total, 4)
-        return predictions
-    import numpy as _np
-    win_x = _np.array(calibrator['win']['x'])
-    win_y = _np.array(calibrator['win']['y'])
-    pod_x = _np.array(calibrator['podium']['x'])
-    pod_y = _np.array(calibrator['podium']['y'])
+    return calibrate(predictions, calibrator)
+
+
+def finalize_predictions(predictions: list[dict], simulations: dict,
+                         calibrator: dict | None = None) -> list[dict]:
+    finalized = finalize(apply_calibration(predictions, calibrator), simulations, POINTS_MAP)
+    if finalized:
+        validate_forecast(finalized, POINTS_MAP)
+    return finalized
+
+
+def simulation_uncertainty(predictions: list[dict], simulations: dict,
+                           range_calibrator: dict | None = None) -> list[dict]:
+    """Simulation ranges accompany the established order model without changing it."""
     for p in predictions:
-        p['win_probability']    = round(float(_np.interp(p['win_probability'],    win_x, win_y)), 4)
-        p['podium_probability'] = round(float(_np.interp(p['podium_probability'], pod_x, pod_y)), 4)
-    total = sum(p['win_probability'] for p in predictions)
-    if total > 0:
-        for p in predictions:
-            p['win_probability'] = round(p['win_probability'] / total, 4)
-    step(f"  Calibration applied ({calibrator['n_rows']} training rows)")
-    return predictions
+        samples = np.asarray(simulations[p['driver_code']])
+        low, high = np.quantile(samples, [.1, .9], method='inverted_cdf')
+        p['finish_p10'], p['finish_p90'] = int(low), int(high)
+        p['range_basis'] = 'simulation'
+    return apply_range_calibration(predictions, range_calibrator)
 
 # ─────────────────────────────────────────────────────────────
 # CHAMPIONSHIP PROJECTION
@@ -1344,9 +1345,7 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
 
                 shape   = e.get('dnf_shape', 0.8)
                 scale   = e.get('dnf_scale', 60.0)
-                s_prev  = np.exp(-((max(lap-1,0)/scale)**shape))
-                s_now   = np.exp(-((lap/scale)**shape))
-                if np.random.random() < max(0.0, s_prev - s_now):
+                if np.random.random() < retirement_probability(max(lap-1,0), lap, shape, scale):
                     retired.add(d)
                     continue
 
@@ -1552,6 +1551,7 @@ def compute_predictions(
             'driver_code':        d,
             'team':               e['team'],
             'predicted_position': blended_finish,
+            '_finish_score':      float(blended_finish),
             'win_probability':    round(blended_win, 4),
             'podium_probability': round(blended_pod, 4),
             'points_expected':    round(points_exp, 2),
@@ -1567,6 +1567,18 @@ def compute_predictions(
             'is_upset_pick':      is_upset,
             'upset_score':        round(float(upset_score), 3),
         })
+
+    # Disagreement among order estimators is a stability diagnostic, not accuracy.
+    component_scores = [
+        {p['driver_code']: p['_finish_score'] for p in predictions},
+        {d: float(np.mean(values)) for d, values in sim_results.items() if values},
+    ]
+    component_scores.extend(scores for scores in (ridge_preds, rf_preds) if scores)
+    ranks = [{d: rank for rank, d in enumerate(sorted(scores, key=lambda d: (scores[d], d)), 1)}
+             for scores in component_scores]
+    for p in predictions:
+        values = [rank[p['driver_code']] for rank in ranks if p['driver_code'] in rank]
+        p['model_rank_spread'] = max(values)-min(values)
 
     # Minimum win floor: top-10 starters always get at least some signal
     grid_to_entry = {e['driver_code']: e['grid_position'] for e in entries}
@@ -1623,6 +1635,8 @@ def validate_publication(predictions: list[dict]) -> None:
 
 def write_predictions(predictions: list[dict]) -> None:
     validate_publication(predictions)
+    if any('v7_coherent' in p['model_version'] for p in predictions):
+        validate_forecast(predictions, POINTS_MAP)
     conn = get_conn()
     cur  = conn.cursor()
     for p in predictions:
@@ -1634,13 +1648,13 @@ def write_predictions(predictions: list[dict]) -> None:
                 predicted_position, win_probability, podium_probability, points_expected,
                 confidence, model_version, simulation_runs, data_weight_2026, training_seasons,
                 elo_rating, grid_position, gap_to_pole_ms, rolling_avg_finish,
-                is_upset_pick, upset_score, predicted_at
+                is_upset_pick, upset_score, forecast_details, predicted_at
             ) VALUES (
                 %s,%s,%s,%s,%s,%s,
                 %s,%s,%s,%s,
                 %s,%s,%s,%s,%s,
                 %s,%s,%s,%s,
-                %s,%s, NOW()
+                %s,%s,%s::jsonb, NOW()
             )
             ON CONFLICT (season, round, driver_code, model_version)
             DO UPDATE SET
@@ -1661,6 +1675,7 @@ def write_predictions(predictions: list[dict]) -> None:
                 rolling_avg_finish  = EXCLUDED.rolling_avg_finish,
                 is_upset_pick       = EXCLUDED.is_upset_pick,
                 upset_score         = EXCLUDED.upset_score,
+                forecast_details    = EXCLUDED.forecast_details,
                 position_error      = CASE
                     WHEN predictions.actual_position IS NOT NULL
                     THEN EXCLUDED.predicted_position - predictions.actual_position
@@ -1677,6 +1692,13 @@ def write_predictions(predictions: list[dict]) -> None:
             f(p['data_weight_2026']), p['training_seasons'],
             f(p['elo_rating']), i(p['grid_position']), i(p['gap_to_pole_ms']),
             f(p['rolling_avg_finish']), bool(p['is_upset_pick']), f(p['upset_score']),
+            json.dumps({key: p[key] for key in (
+                'raw_win', 'raw_podium', 'calibration_method', 'calibration_races',
+                'expected_finish', 'finish_p10', 'finish_p90', 'position_probabilities',
+                'mc_win_standard_error', 'model_rank_spread', 'range_basis',
+                'raw_finish_p10', 'raw_finish_p90', 'raw_range_method',
+                'range_target_coverage', 'range_calibration_method', 'range_calibration_races',
+                'range_padding') if key in p}),
         ))
     conn.commit()
     cur.close()
@@ -1815,11 +1837,17 @@ def main():
     parser.add_argument("--production",     action="store_true",
                         help="Publish under the prod_ model namespace used by the site")
     parser.add_argument("--fit-calibrator", action="store_true")
+    parser.add_argument("--model-version", help="Exact version for calibration history")
+    parser.add_argument("--coherent", action="store_true",
+                        help="Experimental: reconcile ranking and points with calibrated position marginals")
     args = parser.parse_args()
 
     if args.fit_calibrator:
         step("Fitting calibration curves...")
-        fit_calibrator()
+        if not args.season or not args.round_ or not args.model_version:
+            parser.error('--fit-calibrator requires --season, --round and --model-version')
+        calibrator = fit_calibrator(args.season, args.round_, args.model_version)
+        step(f"Calibration: {calibrator['n_races']} eligible races" if calibrator else "Calibration: fewer than 10 complete eligible races; using shrinkage")
         return
 
     if args.score:
@@ -1878,7 +1906,6 @@ def main():
     if rf_preds:
         step(f"  Random Forest predictions computed")
 
-    calibrator = load_calibrator()
 
     step("Projecting championship standings...")
     champ = project_championship(season)
@@ -1907,12 +1934,18 @@ def main():
     else:
         step("  Insufficient history — using the simulation/ML blend")
 
+    family = 'v7_coherent' if args.coherent else 'v7_calibrated'
+    MODEL_VERSION = MODEL_VERSION.replace('v6_robust', family + '_robust').replace('v5_regaware', family)
+    calibrator, range_calibrator = load_forecast_calibrators(season, round_, MODEL_VERSION)
     step("Computing final predictions...")
     predictions = compute_predictions(
         entries, sim_results, priors, season, round_, gp_name,
         ridge_preds=ridge_preds, rf_preds=rf_preds, n_2026_races=n_2026_races, robust=robust,
     )
-    predictions = apply_calibration(predictions, calibrator)
+    if args.coherent:
+        predictions = finalize_predictions(predictions, sim_results, calibrator)
+    else:
+        predictions = simulation_uncertainty(apply_calibration(predictions, calibrator), sim_results, range_calibrator)
 
     print_predictions(predictions, gp_name)
 

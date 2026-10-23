@@ -8,6 +8,7 @@ import Footer from '@/components/Footer'
 type DriverPrediction = {
   driver_code: string; team: string; predicted_position: number
   win_probability: number; podium_probability: number; points_expected: number
+  forecast_details?: { finish_p10: number; finish_p90: number; model_rank_spread?: number; mc_win_standard_error?: number; range_basis?: 'simulation' | 'simulation_calibrated' | 'coherent'; range_calibration_races?: number } | null
   confidence: number; elo_rating: number; grid_position: number | null
   gap_to_pole_ms: number | null; rolling_avg_finish: number
   is_upset_pick: boolean; upset_score: number | null
@@ -139,6 +140,7 @@ function PodiumCard({ driver, position, mounted, gridLabel }: { driver: DriverPr
         <div style={{ padding: '12px 0 14px' }}>
           <div style={{ fontFamily: bebas, fontSize: nameSize[position], color, lineHeight: 0.88, letterSpacing: '.02em' }}>{driver.driver_code}</div>
           <div style={{ fontSize: 8, color: 'rgba(255,255,255,.35)', fontFamily: mono, letterSpacing: '.06em', marginTop: 3 }}>{driver.team}</div>
+          <ForecastUncertainty driver={driver} />
           <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
             <div>
               <div style={{ fontSize: 7, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.1em' }}>WIN</div>
@@ -183,6 +185,7 @@ function DriverRow({ driver, index, mounted }: { driver: DriverPrediction; index
               {driver.is_upset_pick && <span style={{ fontSize: 9, color: '#F59E0B', marginLeft: 5, fontFamily: mono }}>⚡</span>}
             </div>
             <div style={{ fontSize: 7, color: 'rgba(255,255,255,.25)', fontFamily: mono, letterSpacing: '.04em' }}>{driver.team}</div>
+            <ForecastUncertainty driver={driver} />
           </div>
         </div>
         <div style={{ paddingRight: 12 }}>
@@ -223,11 +226,25 @@ function DriverRow({ driver, index, mounted }: { driver: DriverPrediction; index
             {isDone && <div style={{ fontSize: 9, color: resultColor, fontFamily: mono }}>P{driver.actual_position}</div>}
           </div>
         </div>
+        <ForecastUncertainty driver={driver} />
         <div style={{ height: 3, background: 'rgba(255,255,255,.06)', borderRadius: 2, overflow: 'hidden' }}>
           <div style={{ width: `${driver.win_probability * 100}%`, height: '100%', background: color, borderRadius: 2 }} />
         </div>
       </div>
     </>
+  )
+}
+
+function ForecastUncertainty({ driver }: { driver: DriverPrediction }) {
+  const details = driver.forecast_details
+  if (!details) return null
+  return (
+    <div style={{ fontSize: 10, color: 'rgba(255,255,255,.6)', fontFamily: mono, marginTop: 4 }}
+      title="Ranges target 80% coverage, not a guarantee. History-adjusted ranges expand simulation ranges using errors from complete earlier races of the same model version. Unadjusted ranges have not been corrected for historical undercoverage. Rank spread measures disagreement between models, not forecast accuracy.">
+      <div>P{details.finish_p10}–P{details.finish_p90} · {details.range_basis === 'simulation_calibrated' ? '80% target, history-adjusted' : '80% nominal range'}</div>
+      {details.range_basis === 'simulation_calibrated' && details.range_calibration_races != null && <div>Based on {details.range_calibration_races} earlier races</div>}
+      {details.model_rank_spread != null && <div>Model rank spread: {details.model_rank_spread} places</div>}
+    </div>
   )
 }
 

@@ -97,7 +97,8 @@ export async function GET(request: Request) {
              p.elo_rating, p.grid_position, p.gap_to_pole_ms, p.rolling_avg_finish,
              p.is_upset_pick, p.upset_score,
              p.actual_position, p.actual_points, p.position_error,
-             p.predicted_at, p.gp_name, p.circuit
+             p.predicted_at, p.gp_name, p.circuit,
+             to_jsonb(p)->'forecast_details' AS forecast_details
       FROM predictions p
       WHERE p.season = ${targetSeason}
         AND p.round  = ${targetRound}

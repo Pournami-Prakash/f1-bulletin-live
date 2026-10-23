@@ -4,3 +4,4 @@
 scikit-learn>=1.8,<2
 xgboost>=3,<4
 pyarrow>=23,<27
+scipy>=1.17.1,<2

@@ -24,3 +24,15 @@ for (const value of [0, '0', null]) {
     assert.equal(response.accuracy.brier_score, value === null ? null : 0)
   })
 }
+
+test('forecast details survive API shaping and older forecasts remain readable', () => {
+  const details = { expected_finish: 4.2, finish_p10: 2, finish_p90: 10,
+    position_probabilities: [.1, .2], mc_win_standard_error: .01,
+    model_rank_spread: 3, calibration_method: 'shrinkage', calibration_races: 0,
+    raw_finish_p10: 3, raw_finish_p90: 9, raw_range_method: 'simulation_quantiles_v1',
+    range_basis: 'simulation_calibrated', range_calibration_races: 12 }
+  const response = shapeRacePrediction({ season: 2026, round: 1,
+    predictions: [{ forecast_details: details }, {}], championship: [], accuracy: [] })
+  assert.deepEqual(response.drivers[0].forecast_details, details)
+  assert.equal(response.drivers[1].forecast_details, null)
+})

@@ -94,3 +94,34 @@ test('quiet-week coverage labels older stories as context below current developm
   await expect(fresh).toBeVisible();
   expect(await fresh.evaluate((el) => el.getBoundingClientRect().top)).toBeLessThan(await context.evaluate((el) => el.getBoundingClientRect().top));
 });
+
+test('predictions show model ranges and disagreement on desktop and mobile', async ({ page }) => {
+  await page.route(url => url.pathname === '/api/predictions/rounds', route => route.fulfill({ json: { rounds: [{ round: 10, gp_name: 'Test Grand Prix' }] } }));
+  await page.route(url => url.pathname === '/api/predictions', route => route.fulfill({ json: {
+    season: 2026, round: 10, gp_name: 'Test Grand Prix', circuit: 'Test',
+    model_version: 'prod_v7_coherent_robust_xgb_mc', confidence: .5,
+    simulation_runs: 500, data_weight_2026: .9, training_seasons: '2021,2022,2023,2024,2025,2026',
+    predicted_at: '2026-10-01T12:00:00Z', has_actuals: false, accuracy: null, championship: [],
+    drivers: ['VER','NOR','LEC'].map((driver_code, i) => ({
+      driver_code, team: 'Test Team', predicted_position: i+1, grid_position: i+1,
+      win_probability: [0.5,0.3,0.2][i], podium_probability: 1,
+      points_expected: 20-i, confidence: .5, elo_rating: 1500,
+      gap_to_pole_ms: i*100, rolling_avg_finish: 3, is_upset_pick: false,
+      upset_score: 0, actual_position: null, actual_points: null, position_error: null,
+      forecast_details: { finish_p10: 1, finish_p90: 3, model_rank_spread: 2, mc_win_standard_error: .02,
+        range_basis: i === 0 ? 'simulation_calibrated' : 'simulation', range_calibration_races: i === 0 ? 12 : 0 },
+    })),
+  } }));
+  await page.goto('/predictions');
+  await expect(page.getByText('P1–P3 · 80% nominal range').first()).toBeVisible();
+  await expect(page.getByText('P1–P3 · 80% target, history-adjusted').first()).toBeVisible();
+  await expect(page.getByText('Based on 12 earlier races').first()).toBeVisible();
+  await expect(page.getByText('Model rank spread: 2 places').first()).toBeVisible();
+  for (const range of await page.getByText(/P1–P3 · 80%/).all()) {
+    if (!await range.isVisible()) continue;
+    const bounds = await range.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+  }
+});

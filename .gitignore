@@ -56,3 +56,7 @@ web/playwright-report/
 
 # Vercel local project linkage
 .vercel/
+
+# reproducible prediction research inputs and outputs
+etl/research/suite_data/
+etl/research/suite_results/

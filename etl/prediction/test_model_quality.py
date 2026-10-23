@@ -23,6 +23,21 @@ class QualityTests(unittest.TestCase):
             self.assertAlmostEqual(sum(p['win_probability'] for p in result), 1, places=3)
             self.assertAlmostEqual(sum(p['podium_probability'] for p in result), 3, places=3)
 
+    def test_default_safeguards_preserve_order_and_expected_points(self):
+        rows = [dict(driver_code=str(i), season=2026, round=5,
+                     model_version='prod_v7_calibrated_robust_ridge_mc',
+                     predicted_position=i, points_expected=20-i,
+                     win_probability=.8 if i==1 else .1, podium_probability=1.)
+                for i in range(1,4)]
+        original = [(p['driver_code'],p['predicted_position'],p['points_expected']) for p in rows]
+        output = predict.simulation_uncertainty(predict.apply_calibration(rows,None),
+                                               {str(i):[i]*10 for i in range(1,4)})
+        self.assertEqual(original,[(p['driver_code'],p['predicted_position'],p['points_expected']) for p in output])
+        self.assertEqual(output[0]['range_basis'],'simulation')
+        self.assertEqual((output[0]['finish_p10'],output[0]['finish_p90']),(1,1))
+        self.assertAlmostEqual(sum(p['win_probability'] for p in output),1)
+        self.assertAlmostEqual(sum(p['podium_probability'] for p in output),3)
+
     def test_tyre_fit_removes_pace_and_fuel_confounding(self):
         rows = [dict(season=2025, round=1, driver_code=str(driver), lap_number=age,
                      tyre_life=age, compound='SOFT', lap_time_ms=90000+driver*5000+(100-28)*age,
