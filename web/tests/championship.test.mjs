@@ -183,3 +183,53 @@ test('a proposed classification has enough classified cars to fill every selecte
   assert.equal(feasibleClassification(4,[1,1]),false)
   assert.equal(feasibleClassification(4,[0,0,0,0]),false)
 })
+
+test('automatic overview finds the Austin path for all 22 starters without selections',()=>{
+  const {automaticClinchPaths}=loaded.exports
+  const context={round:18,future_points:125,future_races:5,sprint_pending:false,conditional:[{driver_code:'ANT',position:1,samples:888,clinches:168}],
+    drivers:Array.from({length:22},(_,i)=>({driver_code:['ANT','RUS','HAM'][i]??`D${i}`,active:true,current_points:[340,238,229][i]??0,race_finishes:[[8],[3],[1]][i]??[]}))}
+  context.drivers.push({driver_code:'OLD',active:false,current_points:1,race_finishes:[]})
+  const overview=automaticClinchPaths(context)
+  assert.equal(overview.length,22)
+  const ant=overview.find(d=>d.driver_code==='ANT')
+  assert.equal(ant.status,'paths')
+  assert.deepEqual(ant.paths,[{position:1,qualifying_needed:false,requirements:[
+    {driver_code:'RUS',positions:[...Array.from({length:14},(_,i)=>i+9),0]},
+    {driver_code:'HAM',positions:[...Array.from({length:18},(_,i)=>i+5),0]},
+  ],samples:888,clinches:168}])
+  assert.equal(overview.find(d=>d.driver_code==='RUS').status,'not_this_weekend')
+  assert.equal(overview.find(d=>d.driver_code==='D3').status,'eliminated')
+  context.sprint_pending=true
+  assert.equal(automaticClinchPaths(context)[0].status,'sprint_pending')
+  context.drivers[0].current_points=1000
+  assert.equal(automaticClinchPaths(context)[0].status,'secured')
+})
+
+test('automatic paths agree with exhaustive valid classifications, including inactive rivals and countback ties',()=>{
+  const {automaticClinchPaths,clinchAgainst,feasibleClassification}=loaded.exports
+  const classifications=[]
+  for(let a=0;a<=4;a++)for(let b=0;b<=4;b++)for(let c=0;c<=4;c++)for(let d=0;d<=4;d++) {
+    const positions=[a,b,c,d]
+    if(feasibleClassification(4,positions)) classifications.push(positions)
+  }
+  for(let trial=0;trial<30;trial++) {
+    const context={round:2,future_points:trial%3*25,future_races:trial%3,sprint_pending:false,conditional:[],drivers:
+      Array.from({length:5},(_,i)=>({driver_code:`D${i}`,active:i<4,current_points:(trial*17+i*13)%90,race_finishes:[(trial+i)%4,0,0,0]}))}
+    const overview=automaticClinchPaths(context)
+    for(let i=0;i<4;i++) {
+      const candidate=context.drivers[i],row=overview[i]
+      for(let position=0;position<=4;position++) {
+        const possible=classifications.filter(grid=>grid[i]===position)
+        const results=possible.map(grid=>context.drivers.filter((_,j)=>i!==j).map(rival=>clinchAgainst(candidate,rival,position,rival.active?grid[context.drivers.indexOf(rival)]:0,context)))
+        const guaranteed=results.some(status=>status.every(s=>s==='safe'))
+        const tied=results.some(status=>status.every(s=>s==='safe'||s==='tie'))
+        const path=row.paths.find(p=>p.position===position)
+        if(row.status==='secured') assert.ok(guaranteed)
+        else {
+          assert.equal(Boolean(path),tied,`trial ${trial}, D${i} P${position}`)
+          if(path) assert.equal(path.qualifying_needed,!guaranteed)
+        }
+      }
+    }
+  }
+})

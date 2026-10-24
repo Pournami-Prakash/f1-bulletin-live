@@ -7,6 +7,7 @@ import Footer from '@/components/Footer'
 import type { ChampionshipForecast, ChampionshipDriver } from '@/lib/championship'
 import styles from './championship.module.css'
 import ClinchMap from './ClinchMap'
+import ClinchOverview from './ClinchOverview'
 
 type View = 'championship' | 'race'
 const points = (n: number) => new Intl.NumberFormat('en-GB', { maximumFractionDigits: 1 }).format(n)
@@ -229,15 +230,19 @@ export default function ChampionshipPage() {
     {error && <div className={styles.state} role="alert"><h2>Season outlook unavailable</h2><p>{error}</p><button onClick={() => setAttempt(a => a+1)}>Try again</button></div>}
     {data && driver && <>
       <div className={styles.snapshot}><span>{data.season} / AFTER R{data.as_of_round}</span><span>{data.remaining.filter(e => e.race_pending).length} RACES LEFT</span><span>{data.remaining.filter(e => e.sprint_pending).length} SPRINTS LEFT</span><span>{data.simulations.toLocaleString('en-GB')} SIMULATED SEASONS</span></div>
+      <ClinchOverview data={data} />
+      {data.next_race_clinch && <details className={styles.customScenario}><summary>Build a custom scenario (optional)</summary>
       <ClinchMap data={data} onExplore={c=>{
         setCode(c);setView('race');chooseRound(data.next_race_clinch?.round??data.remaining.find(e=>e.race_pending)?.round??0)
         document.getElementById('map-heading')?.focus()
       }} />
+      </details>}
       <section aria-labelledby="map-heading" className={styles.explorer}>
         <div className={styles.toolbar}><div><span className={styles.kicker}>THE POSSIBILITY MAP</span><h2 id="map-heading" tabIndex={-1}>THE BATTLES AHEAD</h2></div><div className={styles.mode} role="group" aria-label="Forecast view">{(['championship','race'] as const).map(v => <button key={v} aria-pressed={view===v} disabled={v==='race' && !data.remaining.some(e => e.race_pending)} onClick={() => {
           setView(v);setPlaying(false);setInspectedPosition(null)
           if (v==='race') { if (!event?.race_pending) setRound(data.remaining.find(e=>e.race_pending)?.round ?? 0); if (!driver.active) setCode(data.drivers.find(d=>d.active)!.driver_code) }
         }}>{v==='championship' ? 'Title standings' : 'Race finishes'}</button>)}</div></div>
+        <p className={styles.rosterNote}>The full grid is shown automatically. Driver buttons only change the highlighted driver.</p>
         <div className={styles.driverPicker} role="group" aria-label="Follow a driver">{data.drivers.map(d => <button key={d.driver_code} style={{'--team':teamColor(d.team)} as CSSProperties} disabled={view==='race' && !d.active} aria-pressed={code===d.driver_code} aria-label={`Follow ${d.driver_code}${!d.active?' (inactive)':''}`} onClick={() => {setCode(d.driver_code);setInspectedPosition(null)}}><i aria-hidden="true" />{d.driver_code}</button>)}</div>
         {data.remaining.length ? <div className={styles.timeline}>
           <div className={styles.scrubber}><button className={styles.play} aria-label={playing?'Pause season':'Play season'} onClick={() => {

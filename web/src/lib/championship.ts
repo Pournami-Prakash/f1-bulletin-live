@@ -63,6 +63,80 @@ export function clinchAgainst(candidate: ClinchDriver, rival: ClinchDriver, cand
   return 'tie'
 }
 
+export type AutomaticClinchPath = {
+  position: number; qualifying_needed: boolean
+  requirements: { driver_code: string; positions: number[] }[]
+  samples: number; clinches: number
+}
+export type AutomaticClinchDriver = {
+  driver_code: string
+  status: 'secured' | 'paths' | 'not_this_weekend' | 'eliminated' | 'sprint_pending'
+  paths: AutomaticClinchPath[]
+}
+/** Tests a complete race classification, including unclassified cars. Matching
+ * prevents independent rival conditions from promising an impossible joint grid.
+ */
+function matchingRace(field: number, candidatePosition: number, rivals: { active: boolean; allowed: number[] }[]): boolean {
+  if (rivals.some(r=>!r.allowed.length)) return false
+  const starters = rivals.filter(r=>r.active)
+  for (let classified=field-(candidatePosition===0?1:0); classified>=Math.max(1,candidatePosition); classified--) {
+    const slots = [...Array.from({length:classified},(_,i)=>i+1),...Array<number>(field-classified).fill(0)]
+    slots.splice(slots.indexOf(candidatePosition),1)
+    const assigned = Array<number>(slots.length).fill(-1)
+    const place = (driver: number, seen: Set<number>): boolean => {
+      for(let slot=0;slot<slots.length;slot++) {
+        if(seen.has(slot)||!starters[driver].allowed.includes(slots[slot])) continue
+        seen.add(slot)
+        if(assigned[slot]<0||place(assigned[slot],seen)) {assigned[slot]=driver;return true}
+      }
+      return false
+    }
+    if(starters.every((_,driver)=>place(driver,new Set()))) return true
+  }
+  return false
+}
+export function automaticClinchPaths(context: ClinchContext): AutomaticClinchDriver[] {
+  const active = context.drivers.filter(d=>d.active), field = active.length
+  const positions = [...Array.from({length:field},(_,i)=>i+1),0]
+  const available = context.future_points+25+(context.sprint_pending?8:0)
+  const leaderPoints = Math.max(...context.drivers.map(d=>d.current_points))
+  return active.map(candidate=>{
+    const rivals=context.drivers.filter(d=>d.driver_code!==candidate.driver_code)
+    const base={driver_code:candidate.driver_code,paths:[] as AutomaticClinchPath[]}
+    if(rivals.every(r=>clinchAgainst(candidate,r,0,0,{future_points:available,future_races:context.future_races+1})==='safe')) return {...base,status:'secured'}
+    if(candidate.current_points+available<leaderPoints) return {...base,status:'eliminated'}
+    if(context.sprint_pending) return {...base,status:'sprint_pending'}
+    for(const position of positions) {
+      const rows=rivals.map(rival=>{
+        const possible=(rival.active?positions:[0]).filter(p=>!rival.active||feasibleClassification(field,[position,p]))
+        const status=(p:number)=>clinchAgainst(candidate,rival,position,p,context)
+        return {driver_code:rival.driver_code,active:rival.active,possible,
+          safe:possible.filter(p=>status(p)==='safe'),
+          tied:possible.filter(p=>status(p)==='safe'||status(p)==='tie')}
+      })
+      let qualifying_needed=false
+      if(!matchingRace(field,position,rows.map(r=>({...r,allowed:r.safe})))) {
+        if(!matchingRace(field,position,rows.map(r=>({...r,allowed:r.tied})))) continue
+        qualifying_needed=true
+      }
+      const requirements=rows.flatMap(r=>{
+        const accepted=qualifying_needed?r.tied:r.safe
+        if(accepted.length===r.possible.length) return []
+        // The contender's occupied place is immaterial to a real race result.
+        // Fill a gap inside an accepted range to keep equivalent paths grouped.
+        const positive=accepted.filter(p=>p>0)
+        const display=[...accepted]
+        if(position>0&&positive.length&&position>Math.min(...positive)&&position<Math.max(...positive)) display.push(position)
+        display.sort((a,b)=>(a||field+1)-(b||field+1))
+        return [{driver_code:r.driver_code,positions:display}]
+      })
+      const sample=context.conditional.find(c=>c.driver_code===candidate.driver_code&&c.position===position)
+      base.paths.push({position,qualifying_needed,requirements,samples:sample?.samples??0,clinches:sample?.clinches??0})
+    }
+    return {...base,status:base.paths.length?'paths':'not_this_weekend'}
+  })
+}
+
 export type ChampionshipForecast = {
   season: number; model_version: string; generated_at: string; as_of_round: number
   next_race_clinch: ClinchContext | null
