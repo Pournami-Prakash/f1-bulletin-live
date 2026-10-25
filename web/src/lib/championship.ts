@@ -138,7 +138,7 @@ export function automaticClinchPaths(context: ClinchContext): AutomaticClinchDri
 }
 
 export type ChampionshipForecast = {
-  season: number; model_version: string; generated_at: string; as_of_round: number
+  season: number; model_version: string; generated_at: string; as_of_round: number; as_of_race_name?: string
   next_race_clinch: ClinchContext | null
   simulations: number; range_level: number; completed_races: number; completed_sprints: number
   remaining: (CalendarEvent & { race_pending: boolean; sprint_pending: boolean; awaiting_results: boolean })[]
@@ -404,6 +404,7 @@ export function simulateChampionship(input: {
   if (remaining.some(r => r.awaiting_results)) warnings.push('A scheduled race has started without a complete result in the database; its outcome remains uncertain here.')
   if (unresolvedTies) warnings.push('Identical race and qualifying countback ties share title probability; display order is not an official tie ruling.')
   return { season, model_version: CHAMPIONSHIP_VERSION, generated_at: now.toISOString(), as_of_round: last.round,
+    as_of_race_name: calendar.find(e => e.round === last.round)?.race_name,
     next_race_clinch: nextClinch, simulations, range_level: .8, completed_races: currentRaces.length,
     completed_sprints: calendar.filter(e => complete(groups.get(`${season}:${e.round}:S`) ?? [])).length,
     remaining, drivers: output, races, warnings, unresolved_tie_probability: unresolvedTies / simulations }

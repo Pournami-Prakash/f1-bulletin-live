@@ -1,6 +1,5 @@
 'use client'
 
-import { useMemo } from 'react'
 import { automaticClinchPaths, type AutomaticClinchPath, type ChampionshipForecast } from '@/lib/championship'
 import styles from './championship.module.css'
 
@@ -20,8 +19,7 @@ function grouped(paths: AutomaticClinchPath[]) {
   return [...groups.values()]
 }
 
-export default function ClinchOverview({data}:{data:ChampionshipForecast}) {
-  const drivers=useMemo(()=>data.next_race_clinch?automaticClinchPaths(data.next_race_clinch):[],[data.next_race_clinch])
+export default function ClinchOverview({data,drivers}:{data:ChampionshipForecast;drivers:ReturnType<typeof automaticClinchPaths>}) {
   const context=data.next_race_clinch
   if(!context) return null
   const event=data.remaining.find(e=>e.round===context.round)!

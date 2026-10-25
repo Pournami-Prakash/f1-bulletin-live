@@ -13,10 +13,41 @@ const fixture = simulateChampionship({ season: 2026, simulations: 100, results, 
     { round: 3, race_name: 'Japanese Grand Prix', circuit_name: 'Suzuka', race_start_utc: '2026-03-29T05:00:00Z', is_sprint_weekend: false, sprint_date: null },
   ] })
 
+test.beforeEach(async ({page}) => {
+  await page.route('**/api/standings?*', route => route.fulfill({json:{standings:[]}}))
+})
+
+test('quick summary, full names and optional grid keep the driver outlook first', async ({page}) => {
+  await page.route('**/api/championship', route => route.fulfill({json:{ok:true,...fixture}}))
+  await page.route('**/api/standings?*', route => route.fulfill({json:{standings:[
+    {Driver:{code:'AAA',givenName:'Alex',familyName:'Example'}},
+    {Driver:{code:'BBB',givenName:'Blair',familyName:'Example'}},
+  ]}}))
+  await page.goto('/championship')
+  const summary=page.getByRole('region',{name:'Championship at a glance'})
+  await expect(summary).toContainText('Alex Example')
+  await expect(summary).toContainText('7 pts')
+  await expect(page.getByText(/Updated after Australian Grand Prix/)).toBeVisible()
+  await expect(page.getByRole('button',{name:'Follow Alex Example',exact:true})).toBeVisible()
+  const grid=page.getByRole('region',{name:'Whole-grid position probabilities'})
+  await expect(grid).toBeHidden()
+  const disclosure=page.getByText('Show all drivers’ position chances',{exact:true})
+  const inspector=page.locator('aside[aria-labelledby="inspector-heading"]')
+  expect(await inspector.evaluate((el)=>Boolean(el.compareDocumentPosition(document.querySelector('details[class*="gridDisclosure"]')!) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true)
+  await disclosure.click()
+  await expect(grid).toBeVisible()
+  await expect(grid.getByRole('button',{name:'Alex Example AAA',exact:true})).toBeVisible()
+  await disclosure.click()
+  await expect(grid).toBeHidden()
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
+  await page.evaluate(()=>window.scrollTo(0,0))
+  await page.screenshot({path:`/tmp/championship-${test.info().project.name}.png`,fullPage:true})
+})
+
 test('championship possibility map supports drivers, race scrubbing and exact probabilities', async ({ page }) => {
   await page.route('**/api/championship', route => route.fulfill({ json: { ok: true, ...fixture } }))
   await page.goto('/championship')
-  await expect(page.getByRole('heading', { name: /THOUSANDS OF FUTURES/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /CHAMPIONSHIP OUTLOOK/ })).toBeVisible()
   await expect(page.getByText('2 RACES LEFT')).toBeVisible()
   await expect(page.getByText('1 SPRINTS LEFT')).toBeVisible()
   await page.getByText('Build a custom scenario (optional)', { exact: true }).click()
@@ -38,8 +69,9 @@ test('championship possibility map supports drivers, race scrubbing and exact pr
   await expect(page.locator('[aria-live="polite"]').filter({hasText:'of simulated outcomes'})).toContainText(`${(probability*100).toFixed(1)}%`)
   await page.getByRole('button', { name: 'Race finishes', exact: true }).click()
   await expect(map.getByRole('img')).toHaveAccessibleName(/CCC race finishing possibilities/)
-  await page.getByLabel('SCRUB THE SEASON', { exact: true }).fill('1')
+  await page.getByLabel('Choose a race', { exact: true }).fill('1')
   await expect(page.getByRole('heading', { name: 'Japanese', exact: true })).toBeVisible()
+  await page.getByText('Show all drivers’ position chances', {exact:true}).click()
   const field = page.getByRole('region', { name: 'Whole-grid position probabilities' })
   await expect(page.getByRole('heading', { name: 'Japanese finishing order' })).toBeVisible()
   for (const code of ['AAA','BBB','CCC','DDD']) await expect(field.getByRole('button', { name: code, exact: true })).toBeVisible()
@@ -113,7 +145,8 @@ test('clinch map combines rival conditions and prevents duplicate finishes', asy
 
 
 test('full-season roster has consistent scales and collision-free labels for every driver', async ({page})=>{
-  test.setTimeout(60000)
+  // Exercise 44 driver/view combinations, including WebKit scrolling between panels.
+  test.setTimeout(120000)
   const roster=Array.from({length:23},(_,i)=>`D${String(i).padStart(2,'0')}`)
   const calendar=[1,2,3,4].map(round=>({round,race_name:round===3?'United States Grand Prix':`Race ${round}`,circuit_name:`Track ${round}`,
     race_start_utc:`2026-${String(round).padStart(2,'0')}-08T04:00:00Z`,is_sprint_weekend:false,sprint_date:null}))
@@ -124,6 +157,7 @@ test('full-season roster has consistent scales and collision-free labels for eve
   const large=simulateChampionship({season:2026,results:classified,calendar,simulations:100,now:'2026-02-10T00:00:00Z'})
   await page.route('**/api/championship',route=>route.fulfill({json:{ok:true,...large}}))
   await page.goto('/championship')
+  await page.getByText('Show all drivers’ position chances', {exact:true}).click()
   const field=page.getByRole('region',{name:'Whole-grid position probabilities'})
   await expect(field.getByRole('row')).toHaveCount(24)
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
@@ -131,7 +165,7 @@ test('full-season roster has consistent scales and collision-free labels for eve
   await expect(field.getByRole('row')).toHaveCount(23)
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
   const map=page.getByRole('region',{name:'Interactive championship possibility map'})
-  for(const mode of ['Title standings','Race finishes']) {
+  for(const mode of ['Championship positions','Race finishes']) {
     await page.getByRole('button',{name:mode,exact:true}).click()
     for(const driver of large.drivers.filter(d=>d.active)) {
       await page.getByRole('button',{name:`Follow ${driver.driver_code}`,exact:true}).click()
@@ -150,7 +184,7 @@ test('full-season roster has consistent scales and collision-free labels for eve
         ratio:el.querySelector('[class*="bar"]')!.getBoundingClientRect().width/el.querySelector('[class*="track"]')!.getBoundingClientRect().width,
       })))
       const event=large.races.find(r=>r.round===4&&r.driver_code===driver.driver_code)!
-      const probabilities=mode==='Title standings'?event.championship_position_probabilities:event.position_probabilities
+      const probabilities=mode==='Championship positions'?event.championship_position_probabilities:event.position_probabilities
       for(const bar of bars) expect(Math.abs(bar.ratio-probabilities[bar.rank-1]),`${driver.driver_code} P${bar.rank} bar scale`).toBeLessThan(.015)
       await expect(map.getByRole('img')).toHaveAccessibleDescription(/Positions P1 to P2[23].*fixed 0–100% scale/)
     }
@@ -198,4 +232,29 @@ test('automatic title paths and the full field are visible without choosing a dr
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
   await page.getByText('Build a custom scenario (optional)',{exact:true}).click()
   await expect(page.getByLabel('Championship driver',{exact:true})).toBeVisible()
+})
+
+
+test('zero sampled titles are distinct from mathematical points elimination', async ({page}) => {
+  const data=structuredClone(fixture)
+  const contender=data.drivers.find(d=>d.driver_code==='BBB')!
+  contender.title_probability=0
+  contender.points_eliminated=false
+  const eliminated=data.drivers.find(d=>d.driver_code==='DDD')!
+  eliminated.current_points=0
+  eliminated.maximum_points=0
+  eliminated.title_probability=0
+  eliminated.points_eliminated=true
+  await page.route('**/api/championship',r=>r.fulfill({json:{ok:true,...data}}))
+  await page.goto('/championship')
+  await expect(page.getByRole('heading',{level:1})).toHaveText('CHAMPIONSHIP OUTLOOK')
+  await page.getByRole('button',{name:'Follow BBB',exact:true}).click()
+  await expect(page.locator('aside')).toContainText('No sampled titles')
+  await page.getByText('Show all drivers’ position chances',{exact:true}).click()
+  const grid=page.getByRole('region',{name:'Whole-grid position probabilities'})
+  await expect(grid.getByRole('columnheader',{name:'Season title chance',exact:true})).toBeVisible()
+  await expect(grid.getByRole('row').filter({has:page.getByRole('button',{name:'BBB',exact:true})})).toContainText('No sampled titles')
+  await expect(grid.getByRole('row').filter({has:page.getByRole('button',{name:'DDD',exact:true})})).toContainText('Out on points')
+  await expect(page.getByText(/Season title chance covers all remaining races/)).toBeVisible()
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
 })
