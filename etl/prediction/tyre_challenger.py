@@ -64,7 +64,10 @@ def pipeline(model):
     return make_pipeline(SimpleImputer(strategy='median', keep_empty_features=True), StandardScaler(), model)
 
 
-def forecast_pair(train, target, range_history=None):
+def forecast_pair(train, target, range_history=None, tyre_features=None):
+    chosen = TYRE_FEATURES if tyre_features is None else list(tyre_features)
+    if not set(chosen).issubset(TYRE_FEATURES):
+        raise ValueError('Unknown experimental tyre feature')
     season, number = int(target.season.iloc[0]), int(target['round'].iloc[0])
     train = train[(train.season < season) | ((train.season == season) & (train['round'] < number))].copy()
     train = train[train.finish.notna()]
@@ -81,7 +84,7 @@ def forecast_pair(train, target, range_history=None):
                   trained_through=list(max(zip(train.season.astype(int), train['round'].astype(int)))),
                   challenger_status='experimental' if supported else 'insufficient_practice_history',
                   scope='refitted robust-family baseline versus tyre-feature challenger; uncalibrated event models')
-    for name, features in [('baseline', FEATURES), ('challenger', FEATURES+TYRE_FEATURES if supported else FEATURES)]:
+    for name, features in [('baseline', FEATURES), ('challenger', FEATURES+chosen if supported else FEATURES)]:
         position = pipeline(HuberRegressor(alpha=1., epsilon=1.35, max_iter=500)).fit(train[features], train.finish)
         scores = position.predict(target[features])
         rank = np.argsort(np.argsort(scores, kind='stable'), kind='stable')+1

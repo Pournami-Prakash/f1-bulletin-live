@@ -14,6 +14,7 @@ import pandas as pd
 from tyre_observations import normalize, persist
 from tyre_shadow import connect
 from tyre_analysis import dumps
+from event_identity import resolve
 
 
 def name(value):
@@ -22,21 +23,20 @@ def name(value):
 
 def import_cache(directory, persist_batches=False):
     directory=Path(directory);cache=directory/'openf1_cache'
-    races=pd.read_parquet(directory/'races.parquet')[['season','round','gp_name']].drop_duplicates()
+    races=pd.read_parquet(directory/'races.parquet')[['season','round','gp_name','circuit','date']].drop_duplicates()
     observations=[];batches=[];skipped=[]
     for season in sorted(races.season.unique()):
         sp,mp=cache/f'sessions_year-{season}.json',cache/f'meetings_year-{season}.json'
         if not sp.exists() or not mp.exists():continue
         sessions=json.loads(sp.read_text());meetings=json.loads(mp.read_text())
         for race in races[races.season.eq(season)].sort_values('round').itertuples():
-            matching=[m for m in meetings if name(m['meeting_name'])==name(race.gp_name)]
-            if len(matching)!=1:
-                skipped.append(dict(season=int(season),round=int(race.round),reason=f'Unverified event identity: {race.gp_name}'))
+            try:
+                meeting,provider_race=resolve(race._asdict(),meetings,sessions)
+            except ValueError as error:
+                skipped.append(dict(season=int(season),round=int(race.round),reason=str(error)))
                 continue
-            weekend=[s for s in sessions if s['meeting_key']==matching[0]['meeting_key']]
-            race_sessions=[s for s in weekend if s['session_name']=='Race' and not s.get('is_cancelled')]
-            if len(race_sessions)!=1:raise ValueError('Ambiguous race session')
-            boundary=race_sessions[0]['date_start']
+            weekend=[s for s in sessions if s['meeting_key']==meeting['meeting_key']]
+            boundary=provider_race['date_start']
             if pd.Timestamp(boundary)>pd.Timestamp.now(tz='UTC'):continue
             for session in weekend:
                 if not session['session_name'].startswith('Practice') or session.get('is_cancelled'):continue

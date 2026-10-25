@@ -71,7 +71,9 @@ def qualifying_bundle(season, number):
             calendar = cursor.fetchone()
     if not calendar or not calendar[3]:
         raise RuntimeError('Calendar race start unavailable for OpenF1 match')
-    sessions = get('sessions', year=season, country_name=calendar[2])
+    # Relocated events may retain their original country identity upstream.
+    # Resolve by race date and venue below, not a country-name prefilter.
+    sessions = get('sessions', year=season)
     races = [s for s in sessions if s['session_name'] == 'Race'
              and s['location'].casefold() == calendar[1].casefold()
              and abs(pd.Timestamp(s['date_start']) - pd.Timestamp(calendar[3])) < pd.Timedelta(hours=24)]

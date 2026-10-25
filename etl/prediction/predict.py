@@ -1244,10 +1244,33 @@ def bayesian_prior(entries: list[dict], n_2026_races: int = 0) -> dict[str, floa
 # ─────────────────────────────────────────────────────────────
 # MONTE CARLO RACE SIMULATION
 # ─────────────────────────────────────────────────────────────
+SIMULATION_VERSION = 'symmetric_lap_state_v1'
+
+
+def lap_paces(entries, base_pace, compounds, ages, ranks, lap, distance, artifacts=None,
+              noise=None, safety_car=False):
+    """One shared lap snapshot and one pace formula for every car, in milliseconds."""
+    output = {}
+    for driver in sorted(base_pace):
+        entry = entries[driver]
+        compound = compounds[driver]
+        defaults = COMPOUND_DEG.get(compound, COMPOUND_DEG['MEDIUM'])
+        age = ages[driver] * traffic_tyre_factor(ranks[driver])
+        curve = (artifacts or {}).get('tyre_deg_gp', {}).get(entry.get('circuit',''), {}).get(compound, {})
+        degradation = curve.get('quad',0)*age**2 + curve.get('linear',defaults['deg_ms_per_lap'])*age
+        jitter = (noise or {}).get(driver,0.)
+        output[driver] = (jitter if safety_car else
+                          base_pace[driver]+degradation+(distance-lap)*FUEL_MS_PER_LAP+jitter)
+    return output
+
+
 def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict | None = None) -> dict[str, list[int]]:
     n = len(entries)
     if n == 0:
         return {}
+    if race_distance < 1 or len({e['driver_code'] for e in entries}) != n:
+        raise ValueError('Simulation requires a positive race distance and unique entrants')
+    entries = sorted(entries, key=lambda e:(e.get('effective_grid_position',e['grid_position']),e['driver_code']))
 
     results       = {e['driver_code']: [] for e in entries}
     entry_by_driver = {e['driver_code']: e for e in entries}
@@ -1284,6 +1307,7 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
         positions = {e['driver_code']: float(e.get('effective_grid_position', e['grid_position'])) for e in entries}
         start_pos = {e['driver_code']: e.get('effective_grid_position', e['grid_position']) for e in entries}
         retired      = set()
+        retirement_lap = {}
         pace_ms      = {}
         tyre_age     = {e['driver_code']: 0 for e in entries}
         tyre_type    = {e['driver_code']: e['start_compound'] for e in entries}
@@ -1317,6 +1341,7 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
             if np.random.random() < assisted_lap1_risk:
                 if np.random.random() < 0.3:
                     retired.add(d)
+                    retirement_lap[d] = 0
                 else:
                     positions[d] = min(int(positions[d]) + np.random.randint(2, 6), n)
 
@@ -1335,19 +1360,23 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
 
             pos_sorted = sorted(
                 [d for d in positions if d not in retired],
-                key=lambda d: positions[d],
+                key=lambda d: (positions[d], d),
             )
-
-            for i, d in enumerate(pos_sorted):
-                e           = next(x for x in entries if x['driver_code'] == d)
-                current_pos = i + 1
+            # Advance all cars before any driver is allowed to compare states.
+            for d in pos_sorted:
+                e = entry_by_driver[d]
                 tyre_age[d] += 1
-
                 shape   = e.get('dnf_shape', 0.8)
                 scale   = e.get('dnf_scale', 60.0)
                 if np.random.random() < retirement_probability(max(lap-1,0), lap, shape, scale):
                     retired.add(d)
-                    continue
+                    retirement_lap[d] = lap-1
+            pos_sorted = [d for d in pos_sorted if d not in retired]
+            before_stops = dict(tyre_age)
+
+            for i, d in enumerate(pos_sorted):
+                e = entry_by_driver[d]
+                current_pos = i+1
 
                 compound  = tyre_type[d]
                 comp_data = COMPOUND_DEG.get(compound, COMPOUND_DEG['MEDIUM'])
@@ -1373,9 +1402,8 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
                 undercut_threat = False
                 if i < len(pos_sorted) - 1:
                     car_behind = pos_sorted[i + 1]
-                    behind_e   = next(x for x in entries if x['driver_code'] == car_behind)
                     if (pace_ms[car_behind] < pace_ms[d] - 300 and
-                            tyre_age[car_behind] < tyre_age[d] * 0.7):
+                            before_stops[car_behind] < before_stops[d] * 0.7):
                         undercut_threat = True
 
                 should_pit = (
@@ -1401,18 +1429,20 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
                     pos_loss     = int(round(pit_pos_loss * (pit_variance / 2.5)))
                     positions[d] = min(positions[d] + max(1, pos_loss), n)
 
-                gp_data    = (artifacts or {}).get('tyre_deg_gp', {}).get(e.get('circuit',''), {}).get(compound, None)
-                if gp_data and effective_age > 0:
-                    deg_factor = gp_data.get('quad',0)*effective_age**2 + gp_data.get('linear', comp_data['deg_ms_per_lap'])*effective_age
-                else:
-                    deg_factor = comp_data['deg_ms_per_lap'] * effective_age
-
-                fuel_penalty   = (race_distance - lap) * FUEL_MS_PER_LAP
-                lap_noise      = np.random.normal(0, 60)
-                effective_pace = pace_ms[d] + deg_factor + fuel_penalty + lap_noise
-                if sc_active:
-                    effective_pace = np.random.normal(0, 50)
-
+            # Pit updates have finished. Compare the same post-stop compounds,
+            # ages, fitted curves, common fuel term and one noise draw per car.
+            order = sorted(pos_sorted, key=lambda d:(positions[d],d))
+            ranks = {d:i+1 for i,d in enumerate(order)}
+            noise = {d:np.random.normal(0,50 if sc_active else 60) for d in sorted(order)}
+            current_pace = lap_paces(entry_by_driver, {d:pace_ms[d] for d in order},
+                                     tyre_type,tyre_age,ranks,lap,race_distance,artifacts,noise,sc_active)
+            swapped = set()
+            for index in range(len(order)-1,0,-1):
+                d, other = order[index],order[index-1]
+                if sc_active or d in swapped or other in swapped:
+                    continue
+                e = entry_by_driver[d]
+                current_pos = ranks[d]
                 pos_overtake_factor = (
                     0.4 if current_pos <= 3 else
                     0.7 if current_pos <= 8 else
@@ -1426,20 +1456,11 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
                     active_aero_factor *= (1.0 + x_mode_drag * 0.15)
                     active_aero_factor *= wet_factor
                 base_overtake = e['arw_effectiveness'] * 0.15 * pos_overtake_factor * active_aero_factor
-                for j, other in enumerate(pos_sorted):
-                    if other == d or other in retired:
-                        continue
-                    if positions[d] > positions[other]:
-                        other_pace = (
-                            pace_ms[other] +
-                            COMPOUND_DEG.get(tyre_type[other], COMPOUND_DEG['MEDIUM'])['deg_ms_per_lap'] * tyre_age[other] +
-                            np.random.normal(0, 60)
-                        )
-                        # Overtake Mode: +0.5MJ bonus when directly behind the car ahead (within ~1 position)
-                        overtake_mode_mult = (1.0 + overtake_bonus_mj * 0.8) if abs(positions[d] - positions[other]) <= 1.5 else 1.0
-                        if effective_pace - other_pace < -80 and np.random.random() < base_overtake * overtake_mode_mult:
-                            positions[d]     -= 1
-                            positions[other] += 1
+                overtake_mode_mult = 1.0+overtake_bonus_mj*.8
+                if current_pace[d]-current_pace[other] < -80 and np.random.random() < base_overtake*overtake_mode_mult:
+                    order[index-1],order[index] = d,other
+                    swapped.update([d,other])
+            positions.update({d:i+1 for i,d in enumerate(order)})
 
         active = [d for d in positions if d not in retired]
         active.sort(key=lambda d: positions[d])
@@ -1459,7 +1480,7 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
             capped = start_pos[d] - max_gain if gained > max_gain else active.index(d) + 1
             final_order.append((d, capped))
         final_order.sort(key=lambda x: x[1])
-        retired_list = list(retired)
+        retired_list = sorted(retired,key=lambda d:(-retirement_lap[d],positions[d],d))
         ordered      = [d for d, _ in final_order] + retired_list
         for pos, driver in enumerate(ordered, 1):
             results[driver].append(pos)
@@ -1480,7 +1501,14 @@ def compute_predictions(
     rf_preds:     dict[str, float] | None = None,
     n_2026_races: int = 0,
     robust:       dict[str, dict] | None = None,
+    ranking_source: str = 'auto',
 ) -> list[dict]:
+    if ranking_source not in {'auto','robust','simulation','blend'}:
+        raise ValueError('Unknown ranking source')
+    if robust and set(robust) != {e['driver_code'] for e in entries}:
+        raise ValueError('Robust scores must cover the complete entrant field')
+    if ranking_source == 'robust' and (not robust or any(e['driver_code'] not in robust for e in entries)):
+        raise ValueError('Explicit robust ranking requires scores for every entrant')
     n_2026       = n_2026_races
     reg_era      = entries[0].get('regulation_era', 0) if entries else 0
     live_w       = entries[0].get('live_weekend_weight', 0.35) if entries else 0.35
@@ -1529,8 +1557,12 @@ def compute_predictions(
         # Walk-forward over 107 races: the robust model orders the field better than qualifying
         # (p=0.002) and its podium probability has 13% lower log-loss (p=0.004). Its win
         # probability is not significantly better than the simulation, so the two are averaged.
+        source = ('robust' if robust and d in robust else 'blend') if ranking_source == 'auto' else ranking_source
+        if source == 'simulation':
+            blended_finish = mean_pos
         if robust and d in robust:
-            blended_finish = robust[d]['score']
+            if source == 'robust':
+                blended_finish = robust[d]['score']
             blended_pod    = ROBUST_PODIUM_WEIGHT * robust[d]['podium'] + (1 - ROBUST_PODIUM_WEIGHT) * blended_pod
             blended_win    = ROBUST_WIN_WEIGHT * robust[d]['win'] + (1 - ROBUST_WIN_WEIGHT) * blended_win
 
@@ -1558,6 +1590,10 @@ def compute_predictions(
             'confidence':         round(e['confidence'], 3),
             'model_version':      MODEL_VERSION,
             'simulation_runs':    MC_RUNS,
+            'ranking_source':     source,
+            'simulation_version': SIMULATION_VERSION,
+            'simulation_expected_finish': mean_pos,
+            'robust_score':       robust[d]['score'] if robust and d in robust else None,
             'data_weight_2026':   round(data_weight, 3),
             'training_seasons':   ','.join(str(s) for s in sorted(SEASON_WEIGHTS.keys()) if s < season or s == season),
             'elo_rating':         round(e['elo_rating'], 1),
@@ -1635,7 +1671,7 @@ def validate_publication(predictions: list[dict]) -> None:
 
 def write_predictions(predictions: list[dict]) -> None:
     validate_publication(predictions)
-    if any('v7_coherent' in p['model_version'] for p in predictions):
+    if any('_coherent' in p['model_version'] for p in predictions):
         validate_forecast(predictions, POINTS_MAP)
     conn = get_conn()
     cur  = conn.cursor()
@@ -1698,7 +1734,8 @@ def write_predictions(predictions: list[dict]) -> None:
                 'mc_win_standard_error', 'model_rank_spread', 'range_basis',
                 'raw_finish_p10', 'raw_finish_p90', 'raw_range_method',
                 'range_target_coverage', 'range_calibration_method', 'range_calibration_races',
-                'range_padding') if key in p}),
+                'range_padding', 'ranking_source', 'simulation_version',
+                'simulation_expected_finish', 'robust_score') if key in p}),
         ))
     conn.commit()
     cur.close()
@@ -1840,6 +1877,8 @@ def main():
     parser.add_argument("--model-version", help="Exact version for calibration history")
     parser.add_argument("--coherent", action="store_true",
                         help="Experimental: reconcile ranking and points with calibrated position marginals")
+    parser.add_argument('--ranking-source', choices=['auto','robust','simulation','blend'],default='auto',
+                        help='Explicit finishing-order route; probabilities keep their documented ensemble')
     args = parser.parse_args()
 
     if args.fit_calibrator:
@@ -1934,13 +1973,16 @@ def main():
     else:
         step("  Insufficient history — using the simulation/ML blend")
 
-    family = 'v7_coherent' if args.coherent else 'v7_calibrated'
+    family = 'v8_coherent' if args.coherent else 'v8_calibrated'
+    if args.ranking_source != 'auto':
+        family += '_rank_'+args.ranking_source
     MODEL_VERSION = MODEL_VERSION.replace('v6_robust', family + '_robust').replace('v5_regaware', family)
     calibrator, range_calibrator = load_forecast_calibrators(season, round_, MODEL_VERSION)
     step("Computing final predictions...")
     predictions = compute_predictions(
         entries, sim_results, priors, season, round_, gp_name,
         ridge_preds=ridge_preds, rf_preds=rf_preds, n_2026_races=n_2026_races, robust=robust,
+        ranking_source=args.ranking_source,
     )
     if args.coherent:
         predictions = finalize_predictions(predictions, sim_results, calibrator)

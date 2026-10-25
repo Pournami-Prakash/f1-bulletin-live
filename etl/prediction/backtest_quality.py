@@ -49,7 +49,8 @@ def evaluate(directory, source, season, number, history=None, *, coherent=False,
     flavor = 'xgb' if model.XGBOOST_AVAILABLE and completed >= model.XGB_TRIGGER_RACES else 'ridge'
     family = 'v6_robust' if kwargs.get('robust') else 'v5_regaware'
     if candidate:
-        prefix = 'v7_coherent' if coherent else 'v7_calibrated'
+        generation = 'v8' if hasattr(model, 'SIMULATION_VERSION') else 'v7'
+        prefix = generation + ('_coherent' if coherent else '_calibrated')
         family = prefix + ('_robust' if kwargs.get('robust') else '')
     model.MODEL_VERSION = f'prod_{family}_{flavor}_mc'
     predictions = model.compute_predictions(entries, sims, priors, season, number, gp,

@@ -13,7 +13,7 @@ import pandas as pd
 
 from tyre_model import DEFAULT_DEG, FUEL_MS_PER_LAP
 
-PROTOCOL_VERSION = 'tyre-shadow-v1'
+PROTOCOL_VERSION = 'tyre-shadow-v2'
 FUEL_SCENARIOS = (0., 14., 28., 42., 56.)
 MIN_LAPS = 6
 BOOTSTRAP_DRAWS = 200
@@ -21,7 +21,9 @@ BOOTSTRAP_DRAWS = 200
 
 def protocol_manifest():
     here = Path(__file__).parent
-    files = ['tyre_observations.py', 'tyre_analysis.py', 'tyre_challenger.py', 'tyre_allocations.json']
+    files = ['tyre_observations.py', 'tyre_analysis.py', 'tyre_challenger.py', 'tyre_allocations.json',
+             'event_identity.py', 'tyre_benchmark.py', 'evaluation_foundations.py',
+             'predict.py', 'robust_model.py', 'robust_features.py']
     return dict(version=PROTOCOL_VERSION, estimator='within-stint median pairwise slope',
                 fuel_scenarios_ms_per_lap=list(FUEL_SCENARIOS), minimum_fit_laps=MIN_LAPS,
                 bootstrap_draws=BOOTSTRAP_DRAWS, relative_lap_screen=.06,

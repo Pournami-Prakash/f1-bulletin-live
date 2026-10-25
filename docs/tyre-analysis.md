@@ -62,7 +62,7 @@ These commands require local research inputs; they are not needed for the deploy
 
 ## Initial verification
 
-The initial archive import validated 40 historical practice sessions containing 21,385 observed laps. A 2026 Bahrain event-name mismatch was explicitly excluded. Austin's three practice sessions contain 1,519 observed lap records and support 37 fitted stint diagnostics under the current screen.
+The reconciled archive contains 41 historical practice sessions and 21,999 observed laps. The initially excluded Bahrain event was resolved by separating its cancelled Sakhir meeting from the active Kuala Lumpur meeting with the same name. Austin's three practice sessions contain 1,519 observed lap records and support 37 fitted stint diagnostics under the current screen.
 
 The 17-race 2026 paired reconstruction gave the challenger an average position-error change of **+0.0321 positions** (worse), with a paired race-block interval of **[-0.0321, +0.0963]**. Win Brier score improved by 0.00115, podium Brier worsened by 0.00037, and winner log loss improved by 0.0612. Seven races had sufficient earlier residual history for finish-range scoring; both variants covered 84.4% of observed finishes with a mean width of 8.64 positions. These exploratory results do not support promotion.
 
@@ -73,3 +73,5 @@ Validation uses analytic and labelled synthetic fixtures, plus observed API and 
 - [OpenF1 endpoint and age definitions](https://openf1.org/docs/)
 - [Pirelli 2026 Austin allocation](https://press.pirelli.com/the-compound-selection-for-austin-mexico-city-and-so-paulo/)
 - [Pirelli 2025 Austin allocation](https://press.pirelli.com/changes-and-status-quo-when-it-comes-to-compound-choices-for-the-rest-of-the-season0/)
+
+See [prediction foundations](prediction-foundations.md) for the v8 simulator corrections, event-identity repair, simple baselines, error attribution, single-feature ablations and shuffled controls.

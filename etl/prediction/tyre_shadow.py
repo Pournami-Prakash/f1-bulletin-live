@@ -47,7 +47,7 @@ def collect(event, input_dir=None):
         for path in Path(input_dir).glob('sessions_*.json'):
             sessions.extend(json.loads(path.read_text()))
     else:
-        sessions = get('sessions', year=event['season'], country_name=event['country'])
+        sessions = get('sessions', year=event['season'])
     candidates = [s for s in sessions if s['session_name'] in {'Practice 1', 'Practice 2', 'Practice 3'}
                   and s['location'].casefold() == event['city'].casefold()
                   and start-pd.Timedelta(days=5) <= pd.Timestamp(s['date_start']) < start
@@ -166,15 +166,15 @@ def score_event(event):
         cur.execute('''SELECT r.driver_code,r.finish_position FROM results r JOIN sessions s ON s.id=r.session_id
             WHERE s.season=%s AND s.round=%s AND s.session_type='R' AND r.finish_position IS NOT NULL''', (event['season'],event['round']))
         actual = dict(cur.fetchall())
-        cur.execute('SELECT id,predictions,kind,forecast_cutoff FROM tyre_shadow_runs WHERE season=%s AND round=%s AND scores IS NULL',
+        cur.execute('SELECT id,predictions,kind,forecast_cutoff,protocol_version FROM tyre_shadow_runs WHERE season=%s AND round=%s AND scores IS NULL',
                     (event['season'],event['round']))
         pending = cur.fetchall()
         scored = []
-        for run_id, predictions, kind, cutoff in pending:
+        for run_id, predictions, kind, cutoff, protocol in pending:
             if kind != 'prospective' or pd.Timestamp(cutoff) >= pd.Timestamp(event['race_start_utc']):
                 continue
             scores = {name:metrics(predictions[name], actual) for name in ['baseline','challenger']}
-            scores['kind'] = 'prospective'; scores['protocol_version'] = PROTOCOL_VERSION
+            scores['kind'] = 'prospective'; scores['protocol_version'] = protocol
             scores['actual_positions'] = actual
             cur.execute('UPDATE tyre_shadow_runs SET scores=%s,scored_at=now() WHERE id=%s AND scores IS NULL', (Json(scores),run_id))
             scored.append(dict(run_id=run_id, **scores))
