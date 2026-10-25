@@ -30,8 +30,10 @@ import psycopg2
 from psycopg2.extras import execute_batch
 import os
 from dotenv import load_dotenv
+from prediction.requests_compat import repair_requests_type_hints
 
 # ── Config ────────────────────────────────────────────────────────────────────
+repair_requests_type_hints()
 load_dotenv(Path(__file__).resolve().parents[1] / "web" / ".env.local")
 DATABASE_URL = os.environ.get("NEON_DATABASE_URL")
 if not DATABASE_URL:

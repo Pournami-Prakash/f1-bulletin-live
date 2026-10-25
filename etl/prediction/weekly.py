@@ -15,12 +15,15 @@ import sys
 import tempfile
 
 import fastf1
+from requests_compat import repair_requests_type_hints
+from openf1_weekend import qualifying_bundle, load_qualifying as load_openf1_qualifying
 import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
 from official_results import reconcile, result_urls, classification, SLUGS
 
 ETL = Path(__file__).resolve().parents[1]
+repair_requests_type_hints()
 load_dotenv(ETL.parent / "web" / ".env.local")
 
 
@@ -56,13 +59,18 @@ def expected_roster(season, round_number, *, event_name=None, urls=None):
         if not urls or slug not in urls:
             raise RuntimeError(f"No official classification URL for {event_name}")
         return {row[0] for row in classification(urls[slug])}
-    session = fastf1.get_session(season, round_number, 'Q')
-    session.load(laps=False, telemetry=False, weather=False, messages=False)
-    codes = session.results['Abbreviation'].dropna().astype(str)
-    roster = set(codes[codes.str.fullmatch(r'[A-Z]{3}')])
-    if len(roster) < (22 if season == 2026 else 20) or len(roster) != len(session.results):
-        raise RuntimeError(f"R{round_number}: complete qualifying entry list unavailable")
-    return roster
+    try:
+        session = fastf1.get_session(season, round_number, 'Q')
+        session.load(laps=False, telemetry=False, weather=False, messages=False)
+        codes = session.results['Abbreviation'].dropna().astype(str)
+        roster = set(codes[codes.str.fullmatch(r'[A-Z]{3}')])
+        if len(roster) < (22 if season == 2026 else 20) or len(roster) != len(session.results):
+            raise RuntimeError(f"R{round_number}: complete qualifying entry list unavailable")
+        return roster
+    except Exception as error:
+        print(f'R{round_number}: FastF1 roster unavailable ({error}); checking OpenF1', flush=True)
+        _, _, rows, _ = qualifying_bundle(season, round_number)
+        return {row[0] for row in rows}
 
 
 def validate_qualifying(season, round_number, expected):
@@ -137,6 +145,7 @@ def main():
     parser.add_argument("--from-round", type=int, default=1)
     parser.add_argument("--through-round", type=int)
     parser.add_argument("--plan", action="store_true", help="Read-only status; no ingestion or writes")
+    parser.add_argument("--refresh", action="store_true", help="Regenerate an existing pre-race forecast")
     args = parser.parse_args()
     now = pd.Timestamp.now(tz="UTC")
     schedule = fastf1.get_event_schedule(args.season, include_testing=False)
@@ -168,12 +177,15 @@ def main():
             actuals, qualifying, predictions = state(args.season, number)
             if actuals != field_size:
                 raise RuntimeError(f"R{number}: actual results unavailable; refusing to skip ahead")
-        if predictions == 0:
+        if predictions == 0 or (args.refresh and not completed):
             if qualifying != field_size:
                 run("load_fastf1_v4.py", *common, "--quali-only")
                 _, qualifying, _ = state(args.season, number)
                 if qualifying != field_size:
-                    raise RuntimeError(f"R{number}: qualifying unavailable; refusing to invent a grid")
+                    load_openf1_qualifying(args.season, number)
+                    _, qualifying, _ = state(args.season, number)
+                    if qualifying != field_size:
+                        raise RuntimeError(f"R{number}: qualifying unavailable; refusing to invent a grid")
             validate_qualifying(args.season, number, expected)
             # Practice is helpful but optional; missing practice must not block scoring.
             run("load_fastf1_v4.py", *common, "--fp-only")

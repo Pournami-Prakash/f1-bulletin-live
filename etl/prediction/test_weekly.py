@@ -23,12 +23,13 @@ class WeeklyTests(unittest.TestCase):
         self.assertIn(", points AS", sql)
         self.assertTrue(sql.endswith("season=%s"))
 
-    def execute(self, events, state):
+    def execute(self, events, state, *args):
         with patch.object(weekly.fastf1, "get_event_schedule", return_value=pd.DataFrame(events)), \
              patch.object(weekly, "state", side_effect=state), \
              patch.object(weekly, "expected_roster", return_value=set(map(str, range(22)))), \
              patch.object(weekly, "validate_fields"), \
-             patch.object(weekly.sys, "argv", ["weekly.py", "--season", "2020"]), \
+             patch.object(weekly, "validate_qualifying"), \
+             patch.object(weekly.sys, "argv", ["weekly.py", "--season", "2020", *args]), \
              patch.object(weekly, "result_urls", return_value={}), \
              patch.object(weekly, "reconcile") as reconcile, \
              patch.object(weekly.psycopg2, "connect"), \
@@ -36,6 +37,20 @@ class WeeklyTests(unittest.TestCase):
             weekly.main()
             self.reconciled = reconcile.call_count
             return run.call_args_list
+
+    def test_manual_refresh_regenerates_existing_pre_race_forecast(self):
+        now = pd.Timestamp.now(tz='UTC')
+        upcoming = dict(event(), Session4DateUtc=now-pd.Timedelta(hours=3),
+                        Session5DateUtc=now+pd.Timedelta(days=1))
+        with patch.object(weekly, 'forecast') as forecast:
+            self.execute([upcoming], [(0, 22, 22)], '--refresh')
+        forecast.assert_called_once_with(2020, 1, False)
+
+    def test_refresh_keeps_completed_forecasts_and_plan_read_only(self):
+        with patch.object(weekly, 'forecast') as forecast:
+            self.execute([event()], [(22, 22, 22)], '--refresh')
+            self.assertEqual(self.execute([event()], [(22, 22, 22)], '--refresh', '--plan'), [])
+        forecast.assert_not_called()
 
     def test_existing_forecast_scored_without_practice(self):
         calls = self.execute([event()], [(22, 0, 22)])
@@ -61,7 +76,8 @@ class WeeklyTests(unittest.TestCase):
         from unittest.mock import MagicMock
         session = MagicMock()
         session.results = pd.DataFrame({'Abbreviation': [f'A{chr(65+i//26)}{chr(65+i%26)}' for i in range(19)]})
-        with patch.object(weekly.fastf1, 'get_session', return_value=session):
+        with patch.object(weekly.fastf1, 'get_session', return_value=session), \
+             patch.object(weekly, 'qualifying_bundle', side_effect=RuntimeError('complete qualifying entry list unavailable')):
             with self.assertRaisesRegex(RuntimeError, 'complete qualifying entry list unavailable'):
                 weekly.expected_roster(2026, 1)
 

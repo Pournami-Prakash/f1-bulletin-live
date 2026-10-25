@@ -18,6 +18,10 @@ on:
         description: 'Read-only status, no ingestion or database writes'
         default: false
         type: boolean
+      refresh:
+        description: 'Regenerate an existing pre-race forecast'
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -58,10 +62,12 @@ jobs:
           SEASON: ${{ inputs.season }}
           FROM_ROUND: ${{ inputs.from_round }}
           PLAN: ${{ inputs.plan }}
+          REFRESH: ${{ inputs.refresh }}
         shell: bash
         run: |
           args=()
           if [[ -n "$SEASON" ]]; then args+=(--season "$SEASON"); fi
           if [[ -n "$FROM_ROUND" ]]; then args+=(--from-round "$FROM_ROUND"); fi
           if [[ "$PLAN" == 'true' ]]; then args+=(--plan); fi
+          if [[ "$REFRESH" == 'true' ]]; then args+=(--refresh); fi
           python etl/prediction/weekly.py "${args[@]}"

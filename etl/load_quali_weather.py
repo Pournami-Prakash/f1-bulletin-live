@@ -17,8 +17,10 @@ import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
 from psycopg2.extras import execute_values
+from prediction.requests_compat import repair_requests_type_hints
 
 ROOT = Path(__file__).resolve().parents[1]
+repair_requests_type_hints()
 load_dotenv(ROOT / "web" / ".env.local")
 fastf1.Cache.enable_cache(str(ROOT / "etl" / "cache")) if (ROOT / "etl" / "cache").exists() else None
 
