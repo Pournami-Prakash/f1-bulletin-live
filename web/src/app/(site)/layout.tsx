@@ -1,6 +1,7 @@
 // app/layout.tsx
 import type { Metadata } from 'next'
 import { Bebas_Neue, JetBrains_Mono } from 'next/font/google'
+import { Analytics } from '@vercel/analytics/next'
 import { siteDescription, siteName, siteUrl } from '@/lib/site-metadata'
 import './globals.css'
 
@@ -68,7 +69,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${bebas.variable} ${mono.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+      </body>
     </html>
   )
 }
