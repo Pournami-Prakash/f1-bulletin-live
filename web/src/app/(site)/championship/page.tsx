@@ -8,6 +8,7 @@ import { automaticClinchPaths, type ChampionshipForecast, type ChampionshipDrive
 import styles from './championship.module.css'
 import ClinchMap from './ClinchMap'
 import ClinchOverview from './ClinchOverview'
+import PointsRunway from './PointsRunway'
 
 type View = 'championship' | 'race'
 const points = (n: number) => new Intl.NumberFormat('en-GB', { maximumFractionDigits: 1 }).format(n)
@@ -278,14 +279,11 @@ export default function ChampionshipPage() {
       </section>
       <section className={styles.titleFight} aria-labelledby="title-fight-heading">
         <div className={styles.fightHeading}><h2 id="title-fight-heading">The title fight</h2><span>{titleDrivers.length} {titleDrivers.length===1?'driver remains':'drivers remain'} in contention</span></div>
-        <div className={styles.contenderList}>
-          <div className={styles.contenderColumns} aria-hidden="true"><span>Contender</span><span>Points</span><span>Gap</span><span>Maximum total</span><span>Gain to lead outright</span></div>
-          {titleDrivers.map(d=><button key={d.driver_code} className={styles.contenderRow} style={{'--team':teamColor(d.team)} as CSSProperties} aria-controls="season-explorer" aria-expanded={exploring && code===d.driver_code} aria-label={`Explore ${names[d.driver_code] ?? d.driver_code} championship outlook`} onClick={()=>{setCode(d.driver_code);setView('championship');setIncludeOthers(false);setInspectedPosition(null);setExploring(true);requestAnimationFrame(()=>document.getElementById('map-heading')?.focus())}}>
-            <span><b>{names[d.driver_code] ?? d.driver_code}</b><small>{d.team}{names[d.driver_code] ? ` · ${d.driver_code}` : ''}</small></span>
-            <span><small>Points</small>{points(d.current_points)}</span><span><small>Gap</small>{leader && d.driver_code!==leader.driver_code ? `−${points(leader.current_points-d.current_points)}` : 'Leader'}</span><span><small>Maximum total</small>{points(d.maximum_points)}</span><span><small>Gain to lead outright</small>{leader && d.driver_code!==leader.driver_code ? `+${points(Math.floor(leader.current_points-d.current_points)+1)} vs leader` : 'Defend the lead'}</span>
-          </button>)}
-        </div>
-        <p className={styles.fightNote}>Gain to lead is the net points a challenger must earn over the current leader to move ahead outright. A points tie may still be decided by countback. Maximum totals assume full points and no penalties; these are scoring bounds, not predictions.</p>
+        <PointsRunway drivers={titleDrivers} leader={leader} names={names} color={teamColor} selected={code} expanded={exploring} onDriver={c=>{
+          setCode(c);setView('championship');setIncludeOthers(false);setInspectedPosition(null);setExploring(true)
+          requestAnimationFrame(()=>document.getElementById('map-heading')?.focus())
+        }} />
+        <p className={styles.fightNote}>Striped ranges show the full-points ceiling, not a forecast. Net gain means points earned over the current leader; a tied total may use countback. Assumes no future penalties.</p>
       </section>
       <div id="title-scenarios" className={styles.titleScenarios}>
         <ClinchOverview data={data} drivers={clinchDrivers} />

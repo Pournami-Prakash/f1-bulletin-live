@@ -332,7 +332,9 @@ test('main championship tracker uses scoring facts and keeps uncalibrated freque
   await page.goto('/championship')
   const fight=page.getByRole('region',{name:'The title fight',exact:true})
   const challenger=fight.getByRole('button',{name:'Explore BBB championship outlook',exact:true})
-  await expect(challenger).toContainText('+8 vs leader')
+  await expect(challenger).toContainText('Gain +8 net to pass leader')
+  await expect(page.getByRole('group',{name:'Championship points and remaining potential',exact:true})).toBeVisible()
+  await expect(challenger.getByRole('img')).toHaveAccessibleName(/18 recorded points, 76 maximum total; leader has 25 points/)
   await expect(challenger).toContainText('76') // 18 recorded points + 2 races (50) + 1 sprint (8).
   await expect(fight).not.toContainText('%')
   await expect(page.getByText('58 POINTS AVAILABLE',{exact:true})).toBeVisible()
