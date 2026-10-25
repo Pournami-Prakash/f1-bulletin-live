@@ -23,7 +23,8 @@ def protocol_manifest():
     here = Path(__file__).parent
     files = ['tyre_observations.py', 'tyre_analysis.py', 'tyre_challenger.py', 'tyre_allocations.json',
              'event_identity.py', 'tyre_benchmark.py', 'evaluation_foundations.py',
-             'predict.py', 'robust_model.py', 'robust_features.py']
+             'predict.py', 'robust_model.py', 'robust_features.py',
+             'tyre_shadow.py', 'prospective_gate.py']
     return dict(version=PROTOCOL_VERSION, estimator='within-stint median pairwise slope',
                 fuel_scenarios_ms_per_lap=list(FUEL_SCENARIOS), minimum_fit_laps=MIN_LAPS,
                 bootstrap_draws=BOOTSTRAP_DRAWS, relative_lap_screen=.06,

@@ -264,6 +264,8 @@ def main():
     data = data.merge(evidence,on=KEYS,how='left',validate='one_to_one')
     target = data[(data.season==args.season)&(data['round']==args.number)].sort_values('driver_code')
     predictions = forecast_pair(data,target,range_history(event))
+    from prospective_gate import qualifying_order
+    predictions['qualifying'] = qualifying_order(target)
     predictions['published_snapshot'] = published_snapshot(event)
     predictions['input_mode'] = 'retrospective research archive' if args.history_dir else 'versioned observation database'
     try: report['code_revision'] = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()

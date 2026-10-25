@@ -1,0 +1,39 @@
+{
+  "policy_version": "prospective-ranking-v1",
+  "registered_at": "2026-10-25T04:21:30.113685+00:00",
+  "minimum_races": 10,
+  "minimum_mae_gain": 0.1,
+  "race_block_size": 3,
+  "bootstrap_draws": 10000,
+  "seed": 42,
+  "assessment": "first 10 eligible races only; no rolling significance checks",
+  "protocol": {
+    "version": "tyre-shadow-v2",
+    "estimator": "within-stint median pairwise slope",
+    "fuel_scenarios_ms_per_lap": [
+      0.0,
+      14.0,
+      28.0,
+      42.0,
+      56.0
+    ],
+    "minimum_fit_laps": 6,
+    "bootstrap_draws": 200,
+    "relative_lap_screen": 0.06,
+    "selection": "fixed protocol; no automatic model promotion",
+    "source_sha256": {
+      "tyre_observations.py": "0c99f6b29d99e29983d416b73ac4256c29551e78b76d3d923ac25dfb72d1dea5",
+      "tyre_analysis.py": "5c5f9d50ba55f9baf5fec2d5285fc6b3c8f56e824d258ba5a6428e51bd7eeb48",
+      "tyre_challenger.py": "4824ad51a7a3cc186ff889582e64ebc198ec95a3a2cfaf287675d88cdbe9e6e9",
+      "tyre_allocations.json": "2920cff1f6582b0a7aafeb9969e037431ab9fa5833320a261e2eeba7c57f5472",
+      "event_identity.py": "8f8d235280e0e14e9c57830ee52130691d6a66ec3fc75c03aec5280e5eae5b78",
+      "tyre_benchmark.py": "31f00232c04b0242d336f7436ba84d7eda82d66b5ddf8241b67ca2aa6dd60eea",
+      "evaluation_foundations.py": "a6750b48770c6c0f3bbf869ae253fd40229c9a66a46bb67118c9ebd7c6d82487",
+      "predict.py": "a59e1d0986b3a5fc36d8522dae2b5c765579435ebabcbe7b82daf9999224809c",
+      "robust_model.py": "91abe2fd4e133dee5de184866a37f729fc9a56d5ae6a22b6cc87b60cf6650d9d",
+      "robust_features.py": "5f6f6bb3f16220c507ec330f4a15469b730e38d1f9f04d0eefcae39bcd8c97f0",
+      "tyre_shadow.py": "641e68757d050ca4e8bdf28777e8d41b1e5242541369305975874724a54bbf66",
+      "prospective_gate.py": "2b7a08dfeab1bd7e2d48c062f523ccd3bfc487a99f3e85f74254b87410dbc3f1"
+    }
+  }
+}

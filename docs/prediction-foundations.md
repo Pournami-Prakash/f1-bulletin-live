@@ -53,3 +53,13 @@ Across 17 races in 2026, mean position error was 3.3690 for the robust model and
 The 303 finishing entries have mean position error 2.779; the 71 nonfinishing entries have mean error 5.887 and account for 33.2% of total absolute error. That identifies where error is concentrated, not how much is predictable before the race.
 
 Unit tests cover common-fuel cancellation, symmetric fitted curves, post-stop state, complete/deterministic fields, safety-car passing, explicit ranking routes, cancelled/relocated identities, matched baseline cohorts, and outcome-preserving reproducible negative controls. Additional paired historical simulator checks use identical bounded inputs and seeds; correctness fixes are not presented as proof of improved forecast accuracy.
+
+## Prospective freeze and review gate
+
+Feature additions are frozen under `etl/prediction/prospective_policy.json`, which records registration time and source hashes. The scheduled prediction workflow continues collecting practice and freezing pre-race forecasts. Each new shadow forecast also stores qualifying order and the as-issued production snapshot. Results are scored only after publication; old retrospective results do not count toward this review.
+
+`prospective_gate.py` exports `artifacts/tyre-analysis/prospective-review.json` on each workflow run. It selects the earliest eligible forecast per race with the exact registered protocol, complete matched classifications, and a production snapshot issued before the race. Refreshes never add observations or replace the first eligible forecast. Changes to hashed code start a different protocol and are excluded from this frozen review.
+
+The predeclared assessment uses the first **10 eligible new races**, across seasons if necessary. The tyre challenger must reduce mean finishing-position error by at least **0.10 positions** against each of qualifying order, the frozen production snapshots, and its refitted no-tyre baseline. Each paired 95% interval must also exclude zero improvement, using contiguous three-race circular bootstrap blocks (10,000 draws, seed 42). These are practical review thresholds, not guarantees of future performance. There is one assessment on that cohort; the gate does not keep checking larger samples until significance appears.
+
+Passing makes the challenger eligible for review only. It never changes production routing, approves promotion, or establishes probability calibration. Until there is sufficient evidence, the existing robust ranking remains in production. Optional shadow-data failures remain visible in workflow logs; an incomplete evidence stream cannot pass the gate.
