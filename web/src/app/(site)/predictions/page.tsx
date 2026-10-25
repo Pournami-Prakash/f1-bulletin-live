@@ -491,13 +491,6 @@ export default function PredictionsPage() {
 
               {/* ── PODIUM ── */}
               <div style={{ border: '1px solid rgba(255,255,255,.07)', borderRadius: 10, overflow: 'hidden' }}>
-                <div style={{ padding: '10px 16px', background: 'rgba(0,0,0,.35)', borderBottom: '1px solid rgba(255,255,255,.06)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 2, height: 14, background: '#E10600', borderRadius: 1 }} />
-                  <span style={{ fontSize: 9, color: 'rgba(255,255,255,.5)', fontFamily: mono, letterSpacing: '.14em' }}>FINISH-ORDER RANKING</span>
-                </div>
-                <div role="region" aria-label="Ranking and win probability explained" style={{padding:'14px 20px',fontFamily:mono,fontSize:13,lineHeight:1.8,color:'rgba(255,255,255,.75)',borderBottom:'1px solid rgba(255,255,255,.07)'}}>
-                  <div><strong>Finish-order leader: {top3[0]?.driver_code}</strong>{winFavorite && <> · <strong>Highest win chance: {winFavorite.driver_code} ({(winFavorite.win_probability*100).toFixed(1)}%)</strong></>}</div>
-                </div>
                 <div style={{ padding: '20px 20px 0', background: 'rgba(0,0,0,.15)' }}>
                   <div className="pred-podium-order" style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                     {top3[1] && <div style={{ flex: 1, alignSelf: 'flex-end' }}><PodiumCard driver={top3[1]} position={2} mounted={mounted} gridLabel={gridInfo.short} fieldSize={rankedDrivers.length} winFavorite={winFavorite?.driver_code === top3[1]?.driver_code} /></div>}
