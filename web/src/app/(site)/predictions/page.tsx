@@ -104,7 +104,7 @@ function PodiumCard({ driver, position, mounted, gridLabel }: { driver: DriverPr
   const delays   = { 1: 100, 2: 200, 3: 300 }
   const imgSrc   = DRIVER_IMAGES[driver.driver_code]
   const nameSize = { 1: 64, 2: 52, 3: 44 }
-  const labels   = { 1: 'RACE WINNER', 2: 'PODIUM P2', 3: 'PODIUM P3' }
+  const labels   = { 1: 'PREDICTED FINISH · P1', 2: 'PREDICTED FINISH · P2', 3: 'PREDICTED FINISH · P3' }
   const podiumH  = { 1: 120, 2: 68, 3: 48 }
 
   return (
@@ -321,7 +321,9 @@ export default function PredictionsPage() {
       .catch(() => {})
   }, [])
 
-  const top3      = data?.drivers.slice(0, 3) ?? []
+  const rankedDrivers = [...(data?.drivers ?? [])].sort((a, b) => a.predicted_position - b.predicted_position)
+  const top3      = rankedDrivers.slice(0, 3)
+  const winFavorite = [...rankedDrivers].sort((a, b) => b.win_probability - a.win_probability || a.predicted_position - b.predicted_position)[0]
   const upsets    = data?.drivers.filter(d => d.is_upset_pick) ?? []
   const gridInfo   = gridContext()
 
@@ -334,6 +336,8 @@ export default function PredictionsPage() {
           .pred-podium-order { flex-direction: column !important; gap: 12px !important; }
           .pred-podium-order > * { flex: none !important; width: 100% !important; }
           .pred-champ-strip { flex-direction: column !important; }
+          .pred-masthead { flex-direction: column; align-items: center !important; }
+          .pred-masthead-spacer { display: none; }
         }
       `}</style>
 
@@ -354,9 +358,9 @@ export default function PredictionsPage() {
                 </span>
               )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24 }}>
+            <div className="pred-masthead" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24 }}>
 
-              <div style={{ minWidth: 100, flexShrink: 0 }} />
+              <div className="pred-masthead-spacer" style={{ minWidth: 100, flexShrink: 0 }} />
 
               <div style={{ textAlign: 'center', flex: 1 }}>
                 <div style={{ fontFamily: bebas, fontSize: 'clamp(38px,5.5vw,70px)', letterSpacing: '.02em', lineHeight: .9 }}>
@@ -489,8 +493,11 @@ export default function PredictionsPage() {
               <div style={{ border: '1px solid rgba(255,255,255,.07)', borderRadius: 10, overflow: 'hidden' }}>
                 <div style={{ padding: '10px 16px', background: 'rgba(0,0,0,.35)', borderBottom: '1px solid rgba(255,255,255,.06)', display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ width: 2, height: 14, background: '#E10600', borderRadius: 1 }} />
-                  <span style={{ fontSize: 9, color: 'rgba(255,255,255,.5)', fontFamily: mono, letterSpacing: '.14em' }}>PREDICTED PODIUM</span>
-                  <span style={{ fontSize: 9, color: 'rgba(255,255,255,.15)', fontFamily: mono, marginLeft: 'auto' }}>Win probability from {data.simulation_runs} simulated races</span>
+                  <span style={{ fontSize: 9, color: 'rgba(255,255,255,.5)', fontFamily: mono, letterSpacing: '.14em' }}>PREDICTED FINISH ORDER</span>
+                </div>
+                <div style={{ padding: '12px 16px', fontSize: 12, lineHeight: 1.6, color: 'rgba(255,255,255,.7)' }}>
+                  {winFavorite && <p style={{ margin: 0 }}><strong>Highest win chance: {winFavorite.driver_code} · {(winFavorite.win_probability * 100).toFixed(1)}%</strong></p>}
+                  <p style={{ margin: '4px 0 0' }}>Cards show predicted finishing positions. Win and podium chances are estimated separately, so the driver ranked first can have a lower win chance.</p>
                 </div>
                 <div style={{ padding: '20px 20px 0', background: 'rgba(0,0,0,.15)' }}>
                   <div className="pred-podium-order" style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
@@ -515,7 +522,7 @@ export default function PredictionsPage() {
                 <div className="pred-row-mobile" style={{ display: 'none', padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,.05)', background: 'rgba(0,0,0,.4)' }}>
                   <span style={{ fontSize: 8, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.1em' }}># · {gridInfo.table} · DRIVER · WIN%</span>
                 </div>
-                {data.drivers.map((driver, i) => (
+                {rankedDrivers.map((driver, i) => (
                   <DriverRow key={driver.driver_code} driver={driver} index={i} mounted={mounted} />
                 ))}
               </div>
@@ -524,7 +531,7 @@ export default function PredictionsPage() {
                 <div style={{ fontSize: 9, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.14em', marginBottom: 12 }}>MODEL NOTES</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
                   {[
-                    { label: 'METHOD',          value: data.model_version.includes('v6_robust_') ? 'Robust pace-based finish order (Huber) + logistic podium/win models blended with Monte Carlo simulation' : data.model_version.includes('v5_regaware_') ? 'ML ensemble finish order + Bayesian / Monte Carlo probabilities' : data.model_version.includes('v4_regaware_') ? 'Bayesian + Monte Carlo; legacy ML estimates excluded from final order' : `Archived model: ${data.model_version}` },
+                    { label: 'METHOD',          value: /v[678]_.*robust_/.test(data.model_version) ? 'Robust model finish order; win and podium probabilities combine model estimates with race simulations.' : data.model_version.includes('v5_regaware_') ? 'ML ensemble finish order + Bayesian / Monte Carlo probabilities' : data.model_version.includes('v4_regaware_') ? 'Bayesian + Monte Carlo; legacy ML estimates excluded from final order' : `Model: ${data.model_version}` },
                     { label: 'SIMULATIONS',      value: `${data.simulation_runs.toLocaleString()} race simulations` },
                     { label: '2026 DATA WEIGHT', value: `${(data.data_weight_2026 * 100).toFixed(0)}% (grows each race)` },
                     { label: 'VALIDATION', value: 'See scored forecasts below; data evidence is not calibrated accuracy' },
