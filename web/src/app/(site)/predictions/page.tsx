@@ -243,15 +243,8 @@ function ForecastUncertainty({ driver, fieldSize }: { driver: DriverPrediction; 
   const wide = details.finish_p90 - details.finish_p10 + 1 >= fieldSize * .75
   const rangeLabel = details.range_basis === 'simulation_calibrated' ? '80% target, history-adjusted' : '80% target, unadjusted'
   return (
-    <div style={{ fontSize: 11, color: 'rgba(255,255,255,.65)', fontFamily: mono, marginTop: 6, lineHeight:1.7 }}>
+    <div title={`P${details.finish_p10}–P${details.finish_p90} · ${rangeLabel}`} style={{ fontSize: 11, color: 'rgba(255,255,255,.65)', fontFamily: mono, marginTop: 6, lineHeight:1.7 }}>
       <div>{wide ? 'Wide finishing uncertainty' : `Estimated range: P${details.finish_p10}–P${details.finish_p90}`}</div>
-      <details>
-        <summary style={{cursor:'pointer',minHeight:44,padding:'10px 0'}}>Uncertainty details</summary>
-        <div>P{details.finish_p10}–P{details.finish_p90} · {rangeLabel}</div>
-        {details.range_basis === 'simulation_calibrated' && details.range_calibration_races != null && <div>Based on {details.range_calibration_races} earlier races</div>}
-        <p style={{margin:'6px 0'}}>This is an outcome range, not a guaranteed finish. Unadjusted ranges have not been corrected for historical coverage.</p>
-        {details.model_rank_spread != null && <p style={{margin:'6px 0'}}>Model disagreement: {details.model_rank_spread} {details.model_rank_spread === 1 ? 'place' : 'places'}. This compares different models’ rankings; it is separate from the outcome range above.</p>}
-      </details>
     </div>
   )
 }
@@ -504,7 +497,6 @@ export default function PredictionsPage() {
                 </div>
                 <div role="region" aria-label="Ranking and win probability explained" style={{padding:'14px 20px',fontFamily:mono,fontSize:13,lineHeight:1.8,color:'rgba(255,255,255,.75)',borderBottom:'1px solid rgba(255,255,255,.07)'}}>
                   <div><strong>Finish-order leader: {top3[0]?.driver_code}</strong>{winFavorite && <> · <strong>Highest win chance: {winFavorite.driver_code} ({(winFavorite.win_probability*100).toFixed(1)}%)</strong></>}</div>
-                  <p style={{margin:'6px 0 0'}}>The cards rank the model’s overall finishing-order estimate. Win chance measures the probability of finishing first. These are different outputs; the top-ranked driver can have a lower win chance.</p>
                 </div>
                 <div style={{ padding: '20px 20px 0', background: 'rgba(0,0,0,.15)' }}>
                   <div className="pred-podium-order" style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>

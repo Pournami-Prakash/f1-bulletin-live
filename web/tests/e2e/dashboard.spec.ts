@@ -95,7 +95,7 @@ test('quiet-week coverage labels older stories as context below current developm
   expect(await fresh.evaluate((el) => el.getBoundingClientRect().top)).toBeLessThan(await context.evaluate((el) => el.getBoundingClientRect().top));
 });
 
-test('predictions show model ranges and disagreement on desktop and mobile', async ({ page }) => {
+test('predictions show concise ranges without expandable details on desktop and mobile', async ({ page }) => {
   await page.route(url => url.pathname === '/api/predictions/rounds', route => route.fulfill({ json: { rounds: [{ round: 10, gp_name: 'Test Grand Prix' }] } }));
   await page.route(url => url.pathname === '/api/predictions', route => route.fulfill({ json: {
     season: 2026, round: 10, gp_name: 'Test Grand Prix', circuit: 'Test',
@@ -114,13 +114,10 @@ test('predictions show model ranges and disagreement on desktop and mobile', asy
   } }));
   await page.goto('/predictions');
   await expect(page.getByText('Wide finishing uncertainty').first()).toBeVisible();
-  await page.getByText('Uncertainty details',{exact:true}).first().click();
-  await page.getByText('Uncertainty details',{exact:true}).nth(1).click();
-  await expect(page.getByText('P1–P3 · 80% target, unadjusted').first()).toBeVisible();
-  await expect(page.getByText('P1–P3 · 80% target, history-adjusted').first()).toBeVisible();
-  await expect(page.getByText('Based on 12 earlier races').first()).toBeVisible();
-  await expect(page.getByText('Model disagreement: 2 places. This compares different models’ rankings; it is separate from the outcome range above.').first()).toBeVisible();
-  for (const range of await page.getByText(/P1–P3 · 80%/).all()) {
+  await expect(page.getByText('Uncertainty details',{exact:true})).toHaveCount(0);
+  await expect(page.locator('[title="P1–P3 · 80% target, unadjusted"]').first()).toBeVisible();
+  await expect(page.locator('[title="P1–P3 · 80% target, history-adjusted"]').first()).toBeVisible();
+  for (const range of await page.getByText('Wide finishing uncertainty',{exact:true}).all()) {
     if (!await range.isVisible()) continue;
     const bounds = await range.boundingBox();
     expect(bounds).not.toBeNull();
@@ -151,8 +148,7 @@ test('prediction screenshot distinguishes rank from win chance and preserves wid
   await expect(page.getByText('1 places',{exact:false})).toHaveCount(0)
   for(const card of await page.locator('.pred-podium-order > div > div').all()) await expect(card).toHaveCSS('opacity','1')
   await page.getByText('FINISH-ORDER RANKING',{exact:true}).locator('..').locator('..').screenshot({animations:'disabled',style:'header { visibility: hidden !important; }',path:`/tmp/prediction-labels-${test.info().project.name}.png`})
-  await page.getByText('Uncertainty details',{exact:true}).first().click()
-  await expect(page.getByText('P1–P20 · 80% target, unadjusted').first()).toBeVisible()
-  await expect(page.getByText(/Model disagreement: 1 place\./).first()).toBeVisible()
+  await expect(page.getByText('Uncertainty details',{exact:true})).toHaveCount(0)
+  await expect(page.locator('[title="P1–P20 · 80% target, unadjusted"]').first()).toBeVisible()
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
 })
