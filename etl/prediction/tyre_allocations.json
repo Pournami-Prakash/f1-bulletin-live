@@ -1,0 +1,12 @@
+{
+  "2025:Austin": {
+    "HARD": "C1", "MEDIUM": "C3", "SOFT": "C4",
+    "source": "https://press.pirelli.com/changes-and-status-quo-when-it-comes-to-compound-choices-for-the-rest-of-the-season0/",
+    "available_from": "2025-10-01T00:00:00Z"
+  },
+  "2026:Austin": {
+    "HARD": "C2", "MEDIUM": "C3", "SOFT": "C4",
+    "source": "https://press.pirelli.com/the-compound-selection-for-austin-mexico-city-and-so-paulo/",
+    "available_from": "2026-10-09T00:00:00Z"
+  }
+}

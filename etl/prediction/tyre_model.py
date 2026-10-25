@@ -31,6 +31,10 @@ def fit_tyre_curve(laps, compound):
             slopes.append(slope)
     estimate = float(np.median(slopes)) if len(slopes) >= 3 else float('nan')
     supported = np.isfinite(estimate) and 0 <= estimate <= 300
+    reason = ('insufficient_stints' if len(slopes) < 3 else 'negative_estimate' if estimate < 0
+              else 'extreme_estimate' if estimate > 300 else None)
     return {'quad': 0.0, 'linear': round(estimate if supported else DEFAULT_DEG[compound], 3),
+            'raw_linear': round(estimate, 3) if np.isfinite(estimate) else None,
+            'fallback_reason': reason, 'assumed_fuel_ms_per_lap': FUEL_MS_PER_LAP,
             'n_laps': len(clean), 'n_stints': len(slopes),
             'method': 'within_stint_fuel_adjusted' if supported else 'conservative_fallback'}

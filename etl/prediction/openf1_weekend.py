@@ -13,13 +13,20 @@ from psycopg2.extras import execute_values
 import requests
 
 BASE = 'https://api.openf1.org/v1'
+_last_request = 0.
 
 
 def get(endpoint, **params):
+    global _last_request
     for attempt in range(4):
+        # Public tier: at most 30 requests/minute, including retries.
+        delay = 2.1 - (time.monotonic() - _last_request)
+        if delay > 0:
+            time.sleep(delay)
         response = requests.get(f'{BASE}/{endpoint}', params=params, timeout=30)
+        _last_request = time.monotonic()
         if response.status_code == 429 and attempt < 3:
-            time.sleep(2 * (attempt + 1))
+            time.sleep(min(60, max(5, float(response.headers.get('Retry-After', 5)))))
             continue
         response.raise_for_status()
         rows = response.json()

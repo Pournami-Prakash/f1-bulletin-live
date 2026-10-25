@@ -49,6 +49,8 @@ class QualityTests(unittest.TestCase):
             row['lap_time_ms'] = 90000 - row['tyre_life']*1000
         curve = fit_tyre_curve(pd.DataFrame(rows), 'SOFT')
         self.assertEqual(curve['method'], 'conservative_fallback')
+        self.assertLess(curve['raw_linear'], 0)
+        self.assertEqual(curve['fallback_reason'], 'negative_estimate')
         self.assertGreaterEqual(curve['linear'], 0)
 
     def test_partial_forecast_cannot_pass_with_15_drivers(self):

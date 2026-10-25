@@ -29,6 +29,7 @@ class WeeklyTests(unittest.TestCase):
              patch.object(weekly, "expected_roster", return_value=set(map(str, range(22)))), \
              patch.object(weekly, "validate_fields"), \
              patch.object(weekly, "validate_qualifying"), \
+             patch.object(weekly, "tyre_shadow"), \
              patch.object(weekly.sys, "argv", ["weekly.py", "--season", "2020", *args]), \
              patch.object(weekly, "result_urls", return_value={}), \
              patch.object(weekly, "reconcile") as reconcile, \

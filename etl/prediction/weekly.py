@@ -139,6 +139,15 @@ def forecast(season, round_number, completed):
             "--production", env=env)
 
 
+def tyre_shadow(season, round_number, completed):
+    try:
+        run('prediction/tyre_shadow.py', '--season', season, '--round', round_number,
+            '--score' if completed else '--persist')
+    except Exception as error:
+        # Report missing optional evidence; do not alter or block production.
+        print(f'R{round_number}: tyre shadow unavailable ({error})', flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--season", type=int, default=datetime.now(timezone.utc).year)
@@ -199,7 +208,9 @@ def main():
                 reconcile(connection, args.season, number, event["EventName"], official_urls)
             validate_fields(args.season, number, expected, actuals=True)
             run("prediction/predict.py", "--season", args.season, "--round", number, "--score")
+            tyre_shadow(args.season, number, True)
         else:
+            tyre_shadow(args.season, number, False)
             break
 
 

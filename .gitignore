@@ -60,3 +60,4 @@ web/playwright-report/
 # reproducible prediction research inputs and outputs
 etl/research/suite_data/
 etl/research/suite_results/
+artifacts/tyre-analysis/
