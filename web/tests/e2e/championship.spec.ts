@@ -246,6 +246,8 @@ test('automatic title paths and the full field are visible without choosing a dr
   await page.screenshot({path:`/tmp/championship-title-fight-${test.info().project.name}.png`,fullPage:true})
   await expect(path.getByText('BBB',{exact:true})).toBeVisible()
   await expect(path.getByText('P3–P4 or unclassified',{exact:true})).toBeVisible()
+  await expect(path.getByText('25.0%',{exact:true})).toBeHidden()
+  await path.getByText('Explore simulation estimate',{exact:true}).click()
   await expect(path.getByText('25.0%',{exact:true})).toBeVisible()
   const fight=page.getByRole('region',{name:'The title fight',exact:true})
   for(const code of ['AAA','BBB','CCC','DDD']) await expect(fight.getByRole('button',{name:`Explore ${code} championship outlook`,exact:true})).toBeVisible()
@@ -276,12 +278,68 @@ test('zero sampled titles are distinct from mathematical points elimination', as
   await expect(page.getByRole('region',{name:'Interactive championship possibility map'})).toBeHidden()
   await fight.getByRole('button',{name:'Explore BBB championship outlook',exact:true}).click()
   await page.getByRole('button',{name:'Follow BBB',exact:true}).click()
-  await expect(page.locator('aside')).toContainText('No sampled titles')
+  await expect(page.locator('aside').locator('dl > div').filter({hasText:'Simulated title share'}).locator('dd')).toHaveText('—')
   await page.getByText('Show all drivers’ position chances',{exact:true}).click()
   const grid=page.getByRole('region',{name:'Whole-grid position probabilities'})
-  await expect(grid.getByRole('columnheader',{name:'Season title chance',exact:true})).toBeVisible()
-  await expect(grid.getByRole('row').filter({has:page.getByRole('button',{name:'BBB',exact:true})})).toContainText('No sampled titles')
+  await expect(grid.getByRole('columnheader',{name:'Simulated title share',exact:true})).toBeVisible()
+  await expect(grid.getByRole('row').filter({has:page.getByRole('button',{name:'BBB',exact:true})}).getByRole('cell').last()).toHaveText('—')
+  await expect(page.getByText('No sampled titles',{exact:false})).toHaveCount(0)
   await expect(grid.getByRole('row').filter({has:page.getByRole('button',{name:'DDD',exact:true})})).toContainText('Out on points')
-  await expect(page.getByText(/Season title chance covers all remaining races/)).toBeVisible()
+  await expect(page.getByText(/Simulated title share covers all remaining races/)).toBeVisible()
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
+})
+
+
+test('contender map omits empty positions and preserves rare outcomes across the timeline',async({page})=>{
+  const data=structuredClone(fixture)
+  // A long season roster should not force empty positions into a contender-only chart.
+  for(let i=0;i<19;i++) data.drivers.push({...data.drivers[0],driver_code:`X${i}`,current_position:i+5,active:false,points_eliminated:true,title_probability:0})
+  for(const d of data.drivers) {
+    const values=Array(23).fill(0)
+    values[Math.min(d.current_position,23)-1]=1
+    d.position_probabilities=values
+  }
+  for(const r of data.races) {
+    r.championship_position_probabilities=[...r.championship_position_probabilities,...Array(19).fill(0)]
+  }
+  // One rare P7 outcome at a different round must remain in the axis range.
+  const rare=data.races.find(r=>r.driver_code==='BBB'&&r.round===2)!
+  const donor=rare.championship_position_probabilities.findIndex(p=>p>.001)
+  rare.championship_position_probabilities[donor]-=.001
+  rare.championship_position_probabilities[6]=.001
+  await page.route('**/api/championship',r=>r.fulfill({json:{ok:true,...data}}))
+  await page.goto('/championship')
+  await page.getByRole('button',{name:'Explore AAA championship outlook',exact:true}).click()
+  const map=page.getByRole('region',{name:'Interactive championship possibility map'})
+  await expect(map.getByRole('img')).toHaveAccessibleDescription(/Positions P1 to P7/)
+  await expect(map.getByText('P7',{exact:true})).toBeVisible()
+  await expect(map.getByText('P8',{exact:true})).toHaveCount(0)
+  const box=await map.getByRole('img').getAttribute('viewBox')
+  await page.getByRole('button',{name:'Follow BBB',exact:true}).click()
+  await page.getByRole('group',{name:'Choose a remaining race'}).getByRole('button',{name:/ROUND 2 Chinese/}).click()
+  await expect(map.getByRole('img')).toHaveAttribute('viewBox',box!)
+  await page.getByText('Other drivers’ season outlooks',{exact:false}).click()
+  await page.getByRole('group',{name:'Other drivers',exact:true}).getByRole('button',{name:/X18/}).click()
+  await expect(map.getByRole('img')).toHaveAccessibleDescription(/Positions P1 to P23/)
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
+})
+
+
+test('main championship tracker uses scoring facts and keeps uncalibrated frequencies optional',async({page})=>{
+  const data=structuredClone(fixture)
+  data.drivers.find(d=>d.driver_code==='BBB')!.title_probability=0
+  await page.route('**/api/championship',r=>r.fulfill({json:{ok:true,...data}}))
+  await page.goto('/championship')
+  const fight=page.getByRole('region',{name:'The title fight',exact:true})
+  const challenger=fight.getByRole('button',{name:'Explore BBB championship outlook',exact:true})
+  await expect(challenger).toContainText('+8 vs leader')
+  await expect(challenger).toContainText('76') // 18 recorded points + 2 races (50) + 1 sprint (8).
+  await expect(fight).not.toContainText('%')
+  await expect(page.getByText('58 POINTS AVAILABLE',{exact:true})).toBeVisible()
+  await expect(page.getByRole('region',{name:'Interactive championship possibility map'})).toBeHidden()
+  await page.screenshot({path:`/tmp/championship-facts-${test.info().project.name}.png`,fullPage:true})
+  await challenger.click()
+  await expect(page.getByText(/percentages describe this model’s outcomes/)).toBeVisible()
+  await expect(page.locator('aside')).toContainText('Simulated title share')
+  await expect(page.getByText(/calibrated against historical title races/)).toBeVisible()
 })

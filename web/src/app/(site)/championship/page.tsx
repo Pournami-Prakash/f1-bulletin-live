@@ -12,7 +12,7 @@ import ClinchOverview from './ClinchOverview'
 type View = 'championship' | 'race'
 const points = (n: number) => new Intl.NumberFormat('en-GB', { maximumFractionDigits: 1 }).format(n)
 const percent = (n: number) => n === 0 ? '0%' : n < .001 ? '<0.1%' : n > .999 ? '>99.9%' : `${(n * 100).toFixed(1)}%`
-const titleChance = (driver: ChampionshipDriver) => driver.points_eliminated ? 'Out on points' : driver.title_probability === 0 ? 'No sampled titles' : percent(driver.title_probability)
+const titleChance = (driver: ChampionshipDriver) => driver.points_eliminated ? 'Out on points' : driver.title_probability === 0 ? '—' : percent(driver.title_probability)
 const shortRace = (name: string) => name.replace(' Grand Prix', '').replace('City', '').trim()
 const teamColor = (name: string) => {
   const key = name.toLowerCase()
@@ -56,15 +56,21 @@ function FutureMap({ data, driver, round, view, includeOthers, onRound }: {
   data: ChampionshipForecast; driver: ChampionshipDriver; round: number; view: View; includeOthers: boolean; onRound: (round: number) => void
 }) {
   const stops = view === 'championship' ? [0, ...data.remaining.map(e => e.round)] : data.remaining.filter(e => e.race_pending).map(e => e.round)
-  const ranks = view === 'championship' ? data.drivers.length : data.drivers.filter(d => d.active).length
+  const visibleDrivers = data.drivers.filter(d => d.driver_code === driver.driver_code ||
+    (view === 'race' ? d.active : includeOthers || !d.points_eliminated))
   const selected = stops.map(r => distribution(data, driver, r, view))
-  // A fixed field and linear 0–100% scale allow comparisons between drivers.
-  const top = 1, bottom = ranks, rows = ranks
+  // Fit all visible drivers across the entire timeline, including every rare outcome.
+  // Keep the range stable while changing rounds or switching between contenders.
+  const supportedPositions = visibleDrivers.flatMap(d => stops.flatMap(r =>
+    distribution(data,d,r,view).flatMap((p,i) => p > 0 ? [i+1] : [])))
+  const top = supportedPositions.length ? Math.min(...supportedPositions) : 1
+  const bottom = supportedPositions.length ? Math.max(...supportedPositions) : 1
+  const rows = bottom-top+1
   const row = 28, padTop = 44, padBottom = 76, left = 52, right = 152
   const width = Math.max(980,stops.length*140), height = padTop+rows*row+padBottom
   const column = (width-left-right)/Math.max(1,stops.length)
   const x = (i: number) => left+column*(i+.5)
-  const y = (rank: number) => padTop+(rank-.5)*row
+  const y = (rank: number) => padTop+(rank-top+.5)*row
   const halfMax = 42
   const widthOf = (p: number) => halfMax*p
   const color = teamColor(driver.team)
@@ -80,7 +86,7 @@ function FutureMap({ data, driver, round, view, includeOthers, onRound }: {
     observer.observe(element)
     return () => observer.disconnect()
   },[selectedX,view])
-  const others = data.drivers.filter(d => d.driver_code !== driver.driver_code && (view === 'championship' || d.active) && (includeOthers || view === 'race' || !d.points_eliminated)).map(d => {
+  const others = visibleDrivers.filter(d => d.driver_code !== driver.driver_code).map(d => {
     const path = stops.flatMap((r,i) => {
       const values = distribution(data,d,r,view)
       return values.some(Boolean) ? [{x:x(i),y:y(average(values))}] : []
@@ -106,7 +112,7 @@ function FutureMap({ data, driver, round, view, includeOthers, onRound }: {
   return <div ref={scroll} className={styles.mapScroll} tabIndex={0} role="region" aria-label="Interactive championship possibility map">
     <svg viewBox={`0 0 ${width} ${height}`} style={{ width, minWidth: width }} role="img" aria-labelledby="future-map-title" aria-describedby="future-map-description">
       <title id="future-map-title">{driver.driver_code} {view === 'race' ? 'race finishing' : 'championship'} possibilities across remaining races</title>
-      <desc id="future-map-description">Positions P{top} to P{bottom} run from top to bottom. The full field uses the same position axis for every driver. Shape width is proportional to probability on a fixed 0–100% scale; every non-zero simulated outcome is included. Thin lines show nearby drivers' average positions. Exact probabilities are available below.</desc>
+      <desc id="future-map-description">Positions P{top} to P{bottom} run from top to bottom. The position axis fits all non-zero outcomes for the displayed drivers across the entire timeline; unused positions above and below are omitted. Shape width is proportional to probability on a fixed 0–100% scale; every non-zero simulated outcome is included. Thin lines show nearby drivers' average positions. Exact probabilities are available below.</desc>
       <defs><clipPath id="future-map-plot"><rect x={left} y={padTop} width={width - left - right} height={rows * row} /></clipPath></defs>
       {activeIndex >= 0 && <rect x={x(activeIndex) - column / 2} y={padTop - 30} width={column} height={rows * row + 30 + padBottom - 8} className={styles.activeColumn} />}
       {Array.from({ length: rows }, (_, k) => top + k).map(rank => <g key={rank}>
@@ -159,7 +165,7 @@ function FieldGrid({ data, round, view, code, names, onDriver }: {
     <div className={styles.fieldScroll} role="region" tabIndex={0} aria-label="Whole-grid position probabilities">
       <table className={styles.fieldGrid}>
         <caption className={styles.srOnly}>All drivers · {view === 'championship' ? 'championship' : 'race finish'} position probabilities · {where}</caption>
-        <thead><tr><th scope="col">Driver</th>{Array.from({ length: positions }, (_, i) => <th scope="col" key={i}>P{i + 1}</th>)}<th scope="col" className={styles.meta}>Avg</th><th scope="col" className={styles.meta}>{view === 'race' ? 'Race win chance' : 'Season title chance'}</th></tr></thead>
+        <thead><tr><th scope="col">Driver</th>{Array.from({ length: positions }, (_, i) => <th scope="col" key={i}>P{i + 1}</th>)}<th scope="col" className={styles.meta}>Avg</th><th scope="col" className={styles.meta}>{view === 'race' ? 'Race win chance' : 'Simulated title share'}</th></tr></thead>
         <tbody>{rows.map(({ d, values }) => {
           const odds = view === 'race' ? data.races.find(r => r.round === round && r.driver_code === d.driver_code)?.win_probability ?? 0 : d.title_probability
           return <tr key={d.driver_code} className={d.driver_code === code ? styles.followed : ''} style={{ '--team': teamColor(d.team) } as CSSProperties}>
@@ -175,7 +181,7 @@ function FieldGrid({ data, round, view, code, names, onDriver }: {
         })}</tbody>
       </table>
     </div>
-    <p className={styles.rosterNote}>{view === 'championship' ? 'Season title chance covers all remaining races, regardless of the round selected above. “No sampled titles” means 0 title wins in this simulation run; it does not prove the title is impossible. “Out on points” means the driver cannot reach the leader’s current points total.' : '“No sampled wins” means the driver won none of the simulated races; it does not prove a win is impossible.'}</p>
+    <p className={styles.rosterNote}>{view === 'championship' ? 'Simulated title share covers all remaining races, regardless of the selected round. It is a model frequency, not a calibrated probability. “Out on points” means the driver cannot reach the leader’s current points total.' : '“No sampled wins” means the driver won none of the simulated races; it does not prove a win is impossible.'}</p>
   </div>
 }
 
@@ -226,6 +232,7 @@ export default function ChampionshipPage() {
   const clinchDrivers = useMemo(() => data?.next_race_clinch ? automaticClinchPaths(data.next_race_clinch) : [], [data])
   const titleDrivers = data?.drivers.filter(d=>!d.points_eliminated).sort((a,b)=>a.current_position-b.current_position) ?? []
   const otherDrivers = data?.drivers.filter(d=>d.points_eliminated).sort((a,b)=>a.current_position-b.current_position) ?? []
+  const pointsRemaining = data?.remaining.reduce((sum,e)=>sum+(e.race_pending?25:0)+(e.sprint_pending?8:0),0) ?? 0
   const leader = data?.drivers.find(d => d.current_position === 1)
   const runnerUp = data?.drivers.find(d => d.current_position === 2)
   const secured = clinchDrivers.find(d => d.status === 'secured')
@@ -254,15 +261,15 @@ export default function ChampionshipPage() {
   const currentIndex = Math.max(0,stops.indexOf(round))
   const mode = view === 'championship' ? 'championship' : 'race finish'
   return <><Header /><main className={styles.page} id="main-content">
-    <div className={styles.eyebrow}>CHAMPIONSHIP LAB <span>EXPERIMENTAL</span><Link href="/predictions">Race predictions ↗</Link></div>
-    <header className={styles.masthead}><h1>CHAMPIONSHIP <em>OUTLOOK</em></h1><p>Explore each driver’s season outlook<br />and the results that could decide the title.</p></header>
+    <div className={styles.eyebrow}>CHAMPIONSHIP TRACKER<Link href="/predictions">Race predictions ↗</Link></div>
+    <header className={styles.masthead}><h1>CHAMPIONSHIP <em>OUTLOOK</em></h1><p>The points, remaining races, and results<br />that can decide the championship.</p></header>
     {!data && !error && <div className={styles.state} role="status">Mapping the possible futures…</div>}
     {error && <div className={styles.state} role="alert"><h2>Season outlook unavailable</h2><p>{error}</p><button onClick={() => setAttempt(a => a+1)}>Try again</button></div>}
     {data && driver && <>
-      <div className={styles.snapshot}><span>{data.season} / AFTER R{data.as_of_round}</span><span>{data.remaining.filter(e => e.race_pending).length} RACES LEFT</span><span>{data.remaining.filter(e => e.sprint_pending).length} SPRINTS LEFT</span><span>{data.simulations.toLocaleString('en-GB')} SIMULATED SEASONS</span></div>
+      <div className={styles.snapshot}><span>{data.season} / AFTER R{data.as_of_round}</span><span>{data.remaining.filter(e => e.race_pending).length} RACES LEFT</span><span>{data.remaining.filter(e => e.sprint_pending).length} SPRINTS LEFT</span><span>{points(pointsRemaining)} POINTS AVAILABLE</span></div>
       <div className={styles.freshness}>
         <span>Updated after {data.as_of_race_name ?? `round ${data.as_of_round}`} · <time dateTime={data.generated_at}>{new Date(data.generated_at).toLocaleString('en-GB', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZoneName:'short'})}</time></span>
-        <span className={styles.estimate}>Experimental estimates · not guarantees</span>
+        <span>Recorded points · full-points scenarios</span>
       </div>
       <section className={styles.summary} aria-label="Championship at a glance">
         <div><span>Championship leader</span><strong>{leader ? names[leader.driver_code] ?? leader.driver_code : 'Standings unavailable'}</strong><p>{leader ? `${points(leader.current_points)} points` : 'Waiting for recorded standings'}</p></div>
@@ -272,13 +279,13 @@ export default function ChampionshipPage() {
       <section className={styles.titleFight} aria-labelledby="title-fight-heading">
         <div className={styles.fightHeading}><h2 id="title-fight-heading">The title fight</h2><span>{titleDrivers.length} {titleDrivers.length===1?'driver remains':'drivers remain'} in contention</span></div>
         <div className={styles.contenderList}>
-          <div className={styles.contenderColumns} aria-hidden="true"><span>Contender</span><span>Points</span><span>To leader</span><span>Season title chance</span></div>
+          <div className={styles.contenderColumns} aria-hidden="true"><span>Contender</span><span>Points</span><span>Gap</span><span>Maximum total</span><span>Gain to lead outright</span></div>
           {titleDrivers.map(d=><button key={d.driver_code} className={styles.contenderRow} style={{'--team':teamColor(d.team)} as CSSProperties} aria-controls="season-explorer" aria-expanded={exploring && code===d.driver_code} aria-label={`Explore ${names[d.driver_code] ?? d.driver_code} championship outlook`} onClick={()=>{setCode(d.driver_code);setView('championship');setIncludeOthers(false);setInspectedPosition(null);setExploring(true);requestAnimationFrame(()=>document.getElementById('map-heading')?.focus())}}>
             <span><b>{names[d.driver_code] ?? d.driver_code}</b><small>{d.team}{names[d.driver_code] ? ` · ${d.driver_code}` : ''}</small></span>
-            <span><small>Points</small>{points(d.current_points)}</span><span><small>To leader</small>{leader && d.driver_code!==leader.driver_code ? `−${points(leader.current_points-d.current_points)}` : 'Leader'}</span><span><small>Season title chance</small>{titleChance(d)}</span>
+            <span><small>Points</small>{points(d.current_points)}</span><span><small>Gap</small>{leader && d.driver_code!==leader.driver_code ? `−${points(leader.current_points-d.current_points)}` : 'Leader'}</span><span><small>Maximum total</small>{points(d.maximum_points)}</span><span><small>Gain to lead outright</small>{leader && d.driver_code!==leader.driver_code ? `+${points(Math.floor(leader.current_points-d.current_points)+1)} vs leader` : 'Defend the lead'}</span>
           </button>)}
         </div>
-        <p className={styles.fightNote}>Experimental title estimates. “No sampled titles” means no title wins in the simulations, not mathematical elimination. Select a contender for their season projection.</p>
+        <p className={styles.fightNote}>Gain to lead is the net points a challenger must earn over the current leader to move ahead outright. A points tie may still be decided by countback. Maximum totals assume full points and no penalties; these are scoring bounds, not predictions.</p>
       </section>
       <div id="title-scenarios" className={styles.titleScenarios}>
         <ClinchOverview data={data} drivers={clinchDrivers} />
@@ -288,6 +295,7 @@ export default function ChampionshipPage() {
       </div>
       <details id="season-explorer" className={styles.explorerDisclosure} open={exploring} onToggle={e=>{setExploring(e.currentTarget.open);if(!e.currentTarget.open)setPlaying(false)}}>
         <summary>Explore contender projections</summary>
+        <p className={styles.simulationContext}>Exploratory simulations · {data.simulations.toLocaleString('en-GB')} sampled seasons. These percentages describe this model’s outcomes; they have not been calibrated against historical title races.</p>
       <section aria-labelledby="map-heading" className={styles.explorer}>
         <div className={styles.toolbar}><div><span className={styles.kicker}>THE POSSIBILITY MAP</span><h2 id="map-heading" tabIndex={-1}>SEASON PROJECTIONS</h2></div></div>
         <details className={styles.raceDisclosure} onToggle={e=>{if(!e.currentTarget.open){setView('championship');setPlaying(false);setInspectedPosition(null)}}}>
@@ -310,9 +318,9 @@ export default function ChampionshipPage() {
         </div> : <p className={styles.note}>No races remain on the recorded calendar. The map shows the final recorded standings.</p>}
 
         <div className={styles.visualLayout}>
-          <div className={styles.mapPanel}><div className={styles.mapLegend}><span style={{color:teamColor(driver.team)}}><i className={styles.legendShape} />Shape width = probability · fixed 0–100%</span><span><i />{includeOthers || view==='race' ? 'Other drivers’ average paths' : 'Other contenders’ average paths'}</span><span>Click a race column to inspect it</span></div><FutureMap data={data} driver={driver} round={round} view={view} includeOthers={includeOthers} onRound={chooseRound} /><p className={styles.mapHint}>{includeOthers || view==='race' ? 'Full field shown' : 'Title contenders shown'} on the same position scale · Lines show averages, not a single possible season. Scroll the map sideways on smaller screens.</p></div>
+          <div className={styles.mapPanel}><div className={styles.mapLegend}><span style={{color:teamColor(driver.team)}}><i className={styles.legendShape} />Shape width = probability · fixed 0–100%</span><span><i />{includeOthers || view==='race' ? 'Other drivers’ average paths' : 'Other contenders’ average paths'}</span><span>Click a race column to inspect it</span></div><FutureMap data={data} driver={driver} round={round} view={view} includeOthers={includeOthers} onRound={chooseRound} /><p className={styles.mapHint}>{includeOthers || view==='race' ? 'Full field shown' : 'Title contenders shown'} · Position range fits all their sampled outcomes across the season. Lines show averages, not a single possible season. Scroll the map sideways on smaller screens.</p></div>
           <aside className={styles.inspector} aria-labelledby="inspector-heading" style={{'--team':teamColor(driver.team)} as CSSProperties}>
-            <p className={styles.estimate}>Experimental estimates</p><div className={styles.inspectorTop}><span className={styles.kicker}>{round ? `AFTER ROUND ${round}` : 'RECORDED STANDINGS'}</span><h3 id="inspector-heading">{event ? shortRace(event.race_name) : 'Right now'}</h3><p>{event?.circuit_name ?? `After round ${data.as_of_round}`}{event?.sprint_pending ? ' · includes sprint points' : ''}</p>{event?.awaiting_results && <p>Awaiting complete results</p>}</div>
+            <p className={styles.estimate}>Exploratory simulation · uncalibrated</p><div className={styles.inspectorTop}><span className={styles.kicker}>{round ? `AFTER ROUND ${round}` : 'RECORDED STANDINGS'}</span><h3 id="inspector-heading">{event ? shortRace(event.race_name) : 'Right now'}</h3><p>{event?.circuit_name ?? `After round ${data.as_of_round}`}{event?.sprint_pending ? ' · includes sprint points' : ''}</p>{event?.awaiting_results && <p>Awaiting complete results</p>}</div>
             <div className={styles.driverIdentity}><strong>{code}</strong><span>{names[code] && <>{names[code]}<br /></>}{driver.team}<br />{mode} position</span></div>
             <div className={styles.range}><b>{round && band ? `P${band.low}` : `P${driver.current_position}`}</b><span>{round ? 'MIDDLE 80%' : 'ACTUAL POSITION'}<br />{round ? 'usual range' : 'recorded'}</span><b>{round && band ? `P${band.high}` : `P${driver.current_position}`}</b></div>
             {round>0 && <p className={styles.rangeExplanation}><strong>Typical outcomes, not absolute limits.</strong></p>}
@@ -322,7 +330,7 @@ export default function ChampionshipPage() {
               {probabilities.some(p => p > 0 && p < .01) && <p className={styles.rare}>Rarer positions (&lt;1% each) are on the map and in the selector.</p>}
             </div>
             <label className={styles.positionSelect}>Inspect position<select aria-label="Inspect position" value={inspectedPosition ?? ''} onChange={e=>setInspectedPosition(Number(e.target.value))}><option value="" disabled>Choose a position</option>{probabilities.map((_,i)=><option key={i} value={i+1}>P{i+1} · {percent(probabilities[i])}</option>)}</select></label><p className={styles.probabilityReadout} aria-live="polite">{inspectedPosition ? <>P{inspectedPosition} <b>{percent(probabilities[inspectedPosition-1] ?? 0)}</b> of simulated outcomes</> : 'Tap a position bar to see its probability.'}</p>
-            <dl className={styles.stats}><div><dt>{round ? 'Expected total' : 'Current points'}</dt><dd>{points(scenario?.cumulative_points.mean ?? driver.current_points)} <small>PTS</small></dd></div>{round && <div><dt>Weekend points</dt><dd>+{points(scenario?.points.mean ?? 0)} <small>AVG</small></dd></div>}<div><dt>{driver.points_eliminated ? view==='race'?'Race top-10 chance':'Top-10 championship chance' : 'Final title chance'}</dt><dd>{driver.points_eliminated ? percent(probabilities.slice(0,10).reduce((sum,p)=>sum+p,0)) : titleChance(driver)}</dd></div></dl>
+            <dl className={styles.stats}><div><dt>{round ? 'Expected total' : 'Current points'}</dt><dd>{points(scenario?.cumulative_points.mean ?? driver.current_points)} <small>PTS</small></dd></div>{round && <div><dt>Weekend points</dt><dd>+{points(scenario?.points.mean ?? 0)} <small>AVG</small></dd></div>}<div><dt>{driver.points_eliminated ? view==='race'?'Race top-10 chance':'Top-10 championship chance' : 'Simulated title share'}</dt><dd>{driver.points_eliminated ? percent(probabilities.slice(0,10).reduce((sum,p)=>sum+p,0)) : titleChance(driver)}</dd></div></dl>
           </aside>
         </div>
 
@@ -337,7 +345,7 @@ export default function ChampionshipPage() {
         <p>These drivers cannot reach the leader’s current points total. Explore their remaining races and championship positions.</p>
         <div className={styles.driverPicker} role="group" aria-label="Other drivers">{otherDrivers.map(d=><button key={d.driver_code} onClick={()=>{setCode(d.driver_code);setView('championship');setIncludeOthers(true);setExploring(true);setInspectedPosition(null);requestAnimationFrame(()=>document.getElementById('map-heading')?.focus())}}>{names[d.driver_code] ?? d.driver_code}<small>Explore outlook ↗</small></button>)}</div>
       </details>}
-      <details className={styles.method}><summary>How to read this forecast</summary>{data.warnings.map(w=><p key={w}>{w}</p>)}<p>The 80% range runs from the 10th to the 90th percentile. Rarer finishes can fall outside it. Zero sampled outcomes do not establish impossibility. Distributions are marginal: different drivers’ best cases cannot all happen together. Team-coloured lines connect average positions; they can cross or overlap and are not a predicted finishing order.</p><p>Absolute points bounds for {code}: {points(driver.current_points)}–{points(driver.maximum_points)}, assuming no future penalties. Snapshot: {new Date(data.generated_at).toLocaleString('en-GB')} · {data.model_version}. <a href="https://www.fia.com/system/files/documents/fia_2026_f1_regulations_-_section_a_general_provisions_-_iss_03_-_2026-06-25.pdf" target="_blank" rel="noopener noreferrer">FIA championship scoring and countback rules ↗</a></p>
+      <details className={styles.method}><summary>How to read this forecast</summary><p>Current points and gaps come from recorded results. Points available, maximum totals and clinching conditions use the scheduled full-points scoring rules. The separate simulator uses hand-set form weights and uncertainty assumptions, and has not been validated as a championship probability model.</p>{data.warnings.map(w=><p key={w}>{w}</p>)}<p>The 80% range runs from the 10th to the 90th percentile. Rarer finishes can fall outside it. A dash in simulated title shares means the driver won none of the simulated titles but remains eligible on points. Zero sampled outcomes do not establish impossibility. Distributions are marginal: different drivers’ best cases cannot all happen together. Team-coloured lines connect average positions; they can cross or overlap and are not a predicted finishing order.</p><p>Absolute points bounds for {code}: {points(driver.current_points)}–{points(driver.maximum_points)}, assuming no future penalties. Snapshot: {new Date(data.generated_at).toLocaleString('en-GB')} · {data.model_version}. <a href="https://www.fia.com/system/files/documents/fia_2026_f1_regulations_-_section_a_general_provisions_-_iss_03_-_2026-06-25.pdf" target="_blank" rel="noopener noreferrer">FIA championship scoring and countback rules ↗</a></p>
         <details className={styles.exact}><summary>Exact position probabilities for {code}</summary><div className={styles.dataScroll}><table><caption>{code} · {mode} probabilities by round</caption><thead><tr><th scope="col">Position</th>{(view==='championship'?stops:stops.filter(r=>data.remaining.find(e=>e.round===r)?.race_pending)).map(r=><th scope="col" key={r}>{r?`R${r}`:'Now'}</th>)}</tr></thead><tbody>{probabilities.map((_,i)=><tr key={i}><th scope="row">P{i+1}</th>{(view==='championship'?stops:stops.filter(r=>data.remaining.find(e=>e.round===r)?.race_pending)).map(r=><td key={r}>{percent(distribution(data,driver,r,view)[i]??0)}</td>)}</tr>)}</tbody></table></div></details>
       </details>
     </>}
