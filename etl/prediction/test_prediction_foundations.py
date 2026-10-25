@@ -19,6 +19,14 @@ def entries():
 
 
 class SimulatorFoundationTests(unittest.TestCase):
+    def test_coherent_postprocessing_reports_its_final_ranking_route(self):
+        rows=[dict(driver_code='AAA',ranking_source='robust')]
+        with patch.object(predict,'apply_calibration',return_value=rows), \
+             patch.object(predict,'finalize',return_value=rows),patch.object(predict,'validate_forecast'):
+            result=predict.finalize_predictions(rows,{})
+        self.assertEqual(result[0]['ranking_source'],'coherent_distribution')
+        self.assertEqual(result[0]['pre_reconciliation_ranking_source'],'robust')
+
     def test_common_fuel_cancels_and_fitted_curves_apply_symmetrically(self):
         e={x['driver_code']:x for x in entries()[:2]}
         base={'AAA':0.,'BBB':-400.};compound=dict.fromkeys(e,'SOFT');age=dict.fromkeys(e,5);rank=dict.fromkeys(e,1)

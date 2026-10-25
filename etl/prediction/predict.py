@@ -626,6 +626,9 @@ def apply_calibration(predictions: list[dict], calibrator: dict | None) -> list[
 def finalize_predictions(predictions: list[dict], simulations: dict,
                          calibrator: dict | None = None) -> list[dict]:
     finalized = finalize(apply_calibration(predictions, calibrator), simulations, POINTS_MAP)
+    for row in finalized:
+        row['pre_reconciliation_ranking_source'] = row.get('ranking_source','unspecified')
+        row['ranking_source'] = 'coherent_distribution'
     if finalized:
         validate_forecast(finalized, POINTS_MAP)
     return finalized
@@ -1735,7 +1738,8 @@ def write_predictions(predictions: list[dict]) -> None:
                 'raw_finish_p10', 'raw_finish_p90', 'raw_range_method',
                 'range_target_coverage', 'range_calibration_method', 'range_calibration_races',
                 'range_padding', 'ranking_source', 'simulation_version',
-                'simulation_expected_finish', 'robust_score') if key in p}),
+                'simulation_expected_finish', 'robust_score',
+                'pre_reconciliation_ranking_source') if key in p}),
         ))
     conn.commit()
     cur.close()
