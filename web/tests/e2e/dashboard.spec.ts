@@ -113,10 +113,13 @@ test('predictions show model ranges and disagreement on desktop and mobile', asy
     })),
   } }));
   await page.goto('/predictions');
-  await expect(page.getByText('P1–P3 · 80% nominal range').first()).toBeVisible();
+  await expect(page.getByText('Wide finishing uncertainty').first()).toBeVisible();
+  await page.getByText('Uncertainty details',{exact:true}).first().click();
+  await page.getByText('Uncertainty details',{exact:true}).nth(1).click();
+  await expect(page.getByText('P1–P3 · 80% target, unadjusted').first()).toBeVisible();
   await expect(page.getByText('P1–P3 · 80% target, history-adjusted').first()).toBeVisible();
   await expect(page.getByText('Based on 12 earlier races').first()).toBeVisible();
-  await expect(page.getByText('Model rank spread: 2 places').first()).toBeVisible();
+  await expect(page.getByText('Model disagreement: 2 places. This compares different models’ rankings; it is separate from the outcome range above.').first()).toBeVisible();
   for (const range of await page.getByText(/P1–P3 · 80%/).all()) {
     if (!await range.isVisible()) continue;
     const bounds = await range.boundingBox();
@@ -125,3 +128,31 @@ test('predictions show model ranges and disagreement on desktop and mobile', asy
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
   }
 });
+
+
+test('prediction screenshot distinguishes rank from win chance and preserves wide uncertainty',async({page})=>{
+  await page.route(url=>url.pathname==='/api/predictions/rounds',r=>r.fulfill({json:{rounds:[{round:18,gp_name:'United States Grand Prix'}]}}))
+  await page.route(url=>url.pathname==='/api/predictions',r=>r.fulfill({json:{
+    season:2026,round:18,gp_name:'United States Grand Prix',circuit:'Austin',model_version:'prod_v8_calibrated_robust_xgb_mc',confidence:.71,
+    simulation_runs:500,data_weight_2026:.9,training_seasons:'2025,2026',predicted_at:'2026-10-24T23:14:00Z',has_actuals:false,accuracy:null,championship:[],
+    drivers:Array.from({length:22},(_,i)=>({driver_code:['VER','ANT','LEC'][i]??`D${i}`,team:'Test Team',predicted_position:i+1,grid_position:i+1,
+      win_probability:i===0?.243:i===1?.415:.342/20,podium_probability:.65,points_expected:20-i/2,confidence:.71,elo_rating:1500,
+      gap_to_pole_ms:i*100,rolling_avg_finish:3,is_upset_pick:false,upset_score:0,actual_position:null,actual_points:null,position_error:null,
+      forecast_details:{finish_p10:1,finish_p90:i===1?20:6,model_rank_spread:i===1?1:3,range_basis:'simulation'},
+    })),
+  }}))
+  await page.goto('/predictions')
+  const summary=page.getByRole('region',{name:'Ranking and win probability explained'})
+  await expect(summary).toContainText('Finish-order leader: VER')
+  await expect(summary).toContainText('Highest win chance: ANT (41.5%)')
+  await expect(page.getByText('DATA EVIDENCE',{exact:true})).toBeVisible()
+  await expect(page.getByText('Heuristic · not forecast accuracy',{exact:true})).toBeVisible()
+  await expect(page.getByText('Wide finishing uncertainty').first()).toBeVisible()
+  await expect(page.getByText('1 places',{exact:false})).toHaveCount(0)
+  for(const card of await page.locator('.pred-podium-order > div > div').all()) await expect(card).toHaveCSS('opacity','1')
+  await page.getByText('FINISH-ORDER RANKING',{exact:true}).locator('..').locator('..').screenshot({animations:'disabled',style:'header { visibility: hidden !important; }',path:`/tmp/prediction-labels-${test.info().project.name}.png`})
+  await page.getByText('Uncertainty details',{exact:true}).first().click()
+  await expect(page.getByText('P1–P20 · 80% target, unadjusted').first()).toBeVisible()
+  await expect(page.getByText(/Model disagreement: 1 place\./).first()).toBeVisible()
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
+})

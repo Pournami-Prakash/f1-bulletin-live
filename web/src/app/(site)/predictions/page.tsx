@@ -99,12 +99,12 @@ const MOCK: RacePrediction = {
   ]
 }
 
-function PodiumCard({ driver, position, mounted, gridLabel }: { driver: DriverPrediction; position: 1 | 2 | 3; mounted: boolean; gridLabel: string }) {
+function PodiumCard({ driver, position, mounted, gridLabel, fieldSize, winFavorite }: { driver: DriverPrediction; position: 1 | 2 | 3; mounted: boolean; gridLabel: string; fieldSize: number; winFavorite: boolean }) {
   const color    = teamColor(driver.team)
   const delays   = { 1: 100, 2: 200, 3: 300 }
   const imgSrc   = DRIVER_IMAGES[driver.driver_code]
   const nameSize = { 1: 64, 2: 52, 3: 44 }
-  const labels   = { 1: 'PREDICTED FINISH · P1', 2: 'PREDICTED FINISH · P2', 3: 'PREDICTED FINISH · P3' }
+  const labels   = { 1: 'FINISH-ORDER RANK · 1', 2: 'FINISH-ORDER RANK · 2', 3: 'FINISH-ORDER RANK · 3' }
   const podiumH  = { 1: 120, 2: 68, 3: 48 }
 
   return (
@@ -112,6 +112,7 @@ function PodiumCard({ driver, position, mounted, gridLabel }: { driver: DriverPr
       <div style={{ width: '100%', background: position === 1 ? `linear-gradient(160deg, ${color}22 0%, rgba(0,0,0,.5) 100%)` : 'rgba(0,0,0,.35)', border: `1px solid ${color}30`, borderBottom: 'none', borderRadius: '10px 10px 0 0', position: 'relative', overflow: 'hidden', padding: '16px 16px 0' }}>
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: position === 1 ? 3 : 1, background: color, opacity: position === 1 ? 0.9 : 0.4 }} />
         <div style={{ fontSize: 8, color: 'rgba(255,255,255,.3)', fontFamily: mono, letterSpacing: '.18em', marginBottom: 8 }}>{labels[position]}</div>
+        {winFavorite && <div style={{fontSize:11,color,fontFamily:mono,marginBottom:8}}>HIGHEST WIN CHANCE</div>}
 
         {/* ── Driver image: contain + bottom so full body shows ── */}
         <div style={{ position: 'relative', height: position === 1 ? 280 : position === 2 ? 240 : 220, marginLeft: -16, marginRight: -16, overflow: 'hidden', background: `${color}06` }}>
@@ -141,7 +142,7 @@ function PodiumCard({ driver, position, mounted, gridLabel }: { driver: DriverPr
         <div style={{ padding: '12px 0 14px' }}>
           <div style={{ fontFamily: bebas, fontSize: nameSize[position], color, lineHeight: 0.88, letterSpacing: '.02em' }}>{driver.driver_code}</div>
           <div style={{ fontSize: 8, color: 'rgba(255,255,255,.35)', fontFamily: mono, letterSpacing: '.06em', marginTop: 3 }}>{driver.team}</div>
-          <ForecastUncertainty driver={driver} />
+          <ForecastUncertainty driver={driver} fieldSize={fieldSize} />
           <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
             <div>
               <div style={{ fontSize: 7, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.1em' }}>WIN</div>
@@ -165,7 +166,7 @@ function PodiumCard({ driver, position, mounted, gridLabel }: { driver: DriverPr
   )
 }
 
-function DriverRow({ driver, index, mounted }: { driver: DriverPrediction; index: number; mounted: boolean }) {
+function DriverRow({ driver, index, mounted, fieldSize }: { driver: DriverPrediction; index: number; mounted: boolean; fieldSize: number }) {
   const color  = teamColor(driver.team)
   const isTop3 = driver.predicted_position <= 3
   const isDone = driver.actual_position !== null
@@ -186,7 +187,7 @@ function DriverRow({ driver, index, mounted }: { driver: DriverPrediction; index
               {driver.is_upset_pick && <span style={{ fontSize: 9, color: '#F59E0B', marginLeft: 5, fontFamily: mono }}>⚡</span>}
             </div>
             <div style={{ fontSize: 7, color: 'rgba(255,255,255,.25)', fontFamily: mono, letterSpacing: '.04em' }}>{driver.team}</div>
-            <ForecastUncertainty driver={driver} />
+            <ForecastUncertainty driver={driver} fieldSize={fieldSize} />
           </div>
         </div>
         <div style={{ paddingRight: 12 }}>
@@ -227,7 +228,7 @@ function DriverRow({ driver, index, mounted }: { driver: DriverPrediction; index
             {isDone && <div style={{ fontSize: 9, color: resultColor, fontFamily: mono }}>P{driver.actual_position}</div>}
           </div>
         </div>
-        <ForecastUncertainty driver={driver} />
+        <ForecastUncertainty driver={driver} fieldSize={fieldSize} />
         <div style={{ height: 3, background: 'rgba(255,255,255,.06)', borderRadius: 2, overflow: 'hidden' }}>
           <div style={{ width: `${driver.win_probability * 100}%`, height: '100%', background: color, borderRadius: 2 }} />
         </div>
@@ -236,15 +237,21 @@ function DriverRow({ driver, index, mounted }: { driver: DriverPrediction; index
   )
 }
 
-function ForecastUncertainty({ driver }: { driver: DriverPrediction }) {
+function ForecastUncertainty({ driver, fieldSize }: { driver: DriverPrediction; fieldSize: number }) {
   const details = driver.forecast_details
   if (!details) return null
+  const wide = details.finish_p90 - details.finish_p10 + 1 >= fieldSize * .75
+  const rangeLabel = details.range_basis === 'simulation_calibrated' ? '80% target, history-adjusted' : '80% target, unadjusted'
   return (
-    <div style={{ fontSize: 10, color: 'rgba(255,255,255,.6)', fontFamily: mono, marginTop: 4 }}
-      title="Ranges target 80% coverage, not a guarantee. History-adjusted ranges expand simulation ranges using errors from complete earlier races of the same model version. Unadjusted ranges have not been corrected for historical undercoverage. Rank spread measures disagreement between models, not forecast accuracy.">
-      <div>P{details.finish_p10}–P{details.finish_p90} · {details.range_basis === 'simulation_calibrated' ? '80% target, history-adjusted' : '80% nominal range'}</div>
-      {details.range_basis === 'simulation_calibrated' && details.range_calibration_races != null && <div>Based on {details.range_calibration_races} earlier races</div>}
-      {details.model_rank_spread != null && <div>Model rank spread: {details.model_rank_spread} places</div>}
+    <div style={{ fontSize: 11, color: 'rgba(255,255,255,.65)', fontFamily: mono, marginTop: 6, lineHeight:1.7 }}>
+      <div>{wide ? 'Wide finishing uncertainty' : `Estimated range: P${details.finish_p10}–P${details.finish_p90}`}</div>
+      <details>
+        <summary style={{cursor:'pointer',minHeight:44,padding:'10px 0'}}>Uncertainty details</summary>
+        <div>P{details.finish_p10}–P{details.finish_p90} · {rangeLabel}</div>
+        {details.range_basis === 'simulation_calibrated' && details.range_calibration_races != null && <div>Based on {details.range_calibration_races} earlier races</div>}
+        <p style={{margin:'6px 0'}}>This is an outcome range, not a guaranteed finish. Unadjusted ranges have not been corrected for historical coverage.</p>
+        {details.model_rank_spread != null && <p style={{margin:'6px 0'}}>Model disagreement: {details.model_rank_spread} {details.model_rank_spread === 1 ? 'place' : 'places'}. This compares different models’ rankings; it is separate from the outcome range above.</p>}
+      </details>
     </div>
   )
 }
@@ -322,6 +329,7 @@ export default function PredictionsPage() {
   }, [])
 
   const rankedDrivers = [...(data?.drivers ?? [])].sort((a, b) => a.predicted_position - b.predicted_position)
+  const winFavorite = rankedDrivers.reduce<DriverPrediction | undefined>((best,d)=>!best || d.win_probability>best.win_probability ? d : best,undefined)
   const top3      = rankedDrivers.slice(0, 3)
   const upsets    = data?.drivers.filter(d => d.is_upset_pick) ?? []
   const gridInfo   = gridContext()
@@ -492,13 +500,17 @@ export default function PredictionsPage() {
               <div style={{ border: '1px solid rgba(255,255,255,.07)', borderRadius: 10, overflow: 'hidden' }}>
                 <div style={{ padding: '10px 16px', background: 'rgba(0,0,0,.35)', borderBottom: '1px solid rgba(255,255,255,.06)', display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ width: 2, height: 14, background: '#E10600', borderRadius: 1 }} />
-                  <span style={{ fontSize: 9, color: 'rgba(255,255,255,.5)', fontFamily: mono, letterSpacing: '.14em' }}>PREDICTED FINISH ORDER</span>
+                  <span style={{ fontSize: 9, color: 'rgba(255,255,255,.5)', fontFamily: mono, letterSpacing: '.14em' }}>FINISH-ORDER RANKING</span>
+                </div>
+                <div role="region" aria-label="Ranking and win probability explained" style={{padding:'14px 20px',fontFamily:mono,fontSize:13,lineHeight:1.8,color:'rgba(255,255,255,.75)',borderBottom:'1px solid rgba(255,255,255,.07)'}}>
+                  <div><strong>Finish-order leader: {top3[0]?.driver_code}</strong>{winFavorite && <> · <strong>Highest win chance: {winFavorite.driver_code} ({(winFavorite.win_probability*100).toFixed(1)}%)</strong></>}</div>
+                  <p style={{margin:'6px 0 0'}}>The cards rank the model’s overall finishing-order estimate. Win chance measures the probability of finishing first. These are different outputs; the top-ranked driver can have a lower win chance.</p>
                 </div>
                 <div style={{ padding: '20px 20px 0', background: 'rgba(0,0,0,.15)' }}>
                   <div className="pred-podium-order" style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                    {top3[1] && <div style={{ flex: 1, alignSelf: 'flex-end' }}><PodiumCard driver={top3[1]} position={2} mounted={mounted} gridLabel={gridInfo.short} /></div>}
-                    {top3[0] && <div style={{ flex: 1 }}><PodiumCard driver={top3[0]} position={1} mounted={mounted} gridLabel={gridInfo.short} /></div>}
-                    {top3[2] && <div style={{ flex: 1, alignSelf: 'flex-end', marginTop: '48px' }}><PodiumCard driver={top3[2]} position={3} mounted={mounted} gridLabel={gridInfo.short} /></div>}
+                    {top3[1] && <div style={{ flex: 1, alignSelf: 'flex-end' }}><PodiumCard driver={top3[1]} position={2} mounted={mounted} gridLabel={gridInfo.short} fieldSize={rankedDrivers.length} winFavorite={winFavorite?.driver_code === top3[1]?.driver_code} /></div>}
+                    {top3[0] && <div style={{ flex: 1 }}><PodiumCard driver={top3[0]} position={1} mounted={mounted} gridLabel={gridInfo.short} fieldSize={rankedDrivers.length} winFavorite={winFavorite?.driver_code === top3[0]?.driver_code} /></div>}
+                    {top3[2] && <div style={{ flex: 1, alignSelf: 'flex-end', marginTop: '48px' }}><PodiumCard driver={top3[2]} position={3} mounted={mounted} gridLabel={gridInfo.short} fieldSize={rankedDrivers.length} winFavorite={winFavorite?.driver_code === top3[2]?.driver_code} /></div>}
                   </div>
                 </div>
               </div>
@@ -518,7 +530,7 @@ export default function PredictionsPage() {
                   <span style={{ fontSize: 8, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.1em' }}># · {gridInfo.table} · DRIVER · WIN%</span>
                 </div>
                 {rankedDrivers.map((driver, i) => (
-                  <DriverRow key={driver.driver_code} driver={driver} index={i} mounted={mounted} />
+                  <DriverRow key={driver.driver_code} driver={driver} index={i} mounted={mounted} fieldSize={rankedDrivers.length} />
                 ))}
               </div>
 
@@ -529,7 +541,7 @@ export default function PredictionsPage() {
                     { label: 'METHOD',          value: /v[678]_.*robust_/.test(data.model_version) ? 'Robust model finish order; win and podium probabilities combine model estimates with race simulations.' : data.model_version.includes('v5_regaware_') ? 'ML ensemble finish order + Bayesian / Monte Carlo probabilities' : data.model_version.includes('v4_regaware_') ? 'Bayesian + Monte Carlo; legacy ML estimates excluded from final order' : `Model: ${data.model_version}` },
                     { label: 'SIMULATIONS',      value: `${data.simulation_runs.toLocaleString()} race simulations` },
                     { label: '2026 DATA WEIGHT', value: `${(data.data_weight_2026 * 100).toFixed(0)}% (grows each race)` },
-                    { label: 'VALIDATION', value: 'See scored forecasts below; data evidence is not calibrated accuracy' },
+                    { label: 'VALIDATION', value: 'Accuracy is measured only after race results are recorded. Historical replays are labelled separately.' },
                   ].map(n => (
                     <div key={n.label}>
                       <div style={{ fontSize: 8, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.1em', marginBottom: 3 }}>{n.label}</div>
