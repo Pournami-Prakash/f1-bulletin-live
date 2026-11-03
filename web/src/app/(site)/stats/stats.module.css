@@ -79,3 +79,6 @@
 
 :global([data-theme='light']) .dot > span { border-color: color-mix(in srgb, var(--cluster-color) 65%, #292b28); opacity: .6; }
 :global([data-theme='light']) .dot[data-related='true'] > span, :global([data-theme='light']) .dot:hover > span, :global([data-theme='light']) .dot[aria-pressed='true'] > span { opacity: 1; }
+
+.atlasDisclosure { border-top: 1px solid var(--b2); margin-top: 32px; }
+.atlasDisclosure > summary { padding: 24px 0; cursor: pointer; font-size: 13px; }

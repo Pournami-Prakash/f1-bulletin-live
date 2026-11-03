@@ -1,0 +1,27 @@
+.charts { --chart-line: color-mix(in srgb, var(--t1) 14%, transparent); }
+.chartGrid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); gap: 36px; }
+.progress, .rates, .ages { min-width: 0; border-top: 2px solid var(--b2); padding-top: 20px; }
+.kicker { color: var(--t2); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 8px; }
+.charts h2 { font: 400 clamp(28px, 3vw, 42px)/1.05 var(--font-bebas); letter-spacing: .02em; }
+.charts figcaption > p:last-child { font-size: 11px; color: var(--t2); margin-top: 10px; }
+.toolbar { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 18px; }
+.toggle { display: flex; gap: 3px; margin: 18px 0; }.toolbar .toggle { margin: 0; }
+.toggle button { min-height: 44px; padding: 10px 12px; background: transparent; color: var(--t2); border: 1px solid var(--b2); font: inherit; font-size: 11px; cursor: pointer; }
+.toggle button[aria-pressed='true'] { border-color: #b79043; color: var(--t1); background: color-mix(in srgb, #d5a43c 9%, transparent); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 10px; color: var(--t2); }.legend span { display: flex; align-items: center; gap: 7px; }.legend i { width: 16px; height: 3px; display: inline-block; }
+.plot { overflow-x: auto; margin-top: 18px; }.plot svg { width: 100%; min-width: 490px; display: block; overflow: visible; }.plot text { fill: var(--t2); font-family: var(--font-mono); font-size: 14px; }.plot .axisTitle { font-size: 12px; }.plot .smallText { font-size: 12px; }.plot .recordLabel { fill: var(--t1); font-size: 18px; }
+.gridline { stroke: var(--chart-line); stroke-width: 1; }.cutoff { stroke: var(--t2); stroke-dasharray: 3 5; opacity: .5; }.cursor { stroke: var(--t1); stroke-dasharray: 2 4; opacity: .6; }
+.scrubber { display: flex; align-items: center; gap: 12px; color: var(--t2); font-size: 10px; margin-top: 12px; }.scrubber input { flex: 1; min-width: 0; accent-color: #d5a43c; min-height: 44px; }.scrubber strong { color: var(--t1); font-weight: 400; }
+.readout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; border-top: 1px solid var(--b2); padding-top: 16px; }.readout p { display: flex; flex-direction: column; gap: 5px; font-size: 11px; }.readout strong { font-size: 10px; }.readout span { color: var(--t2); }.readout b { font-weight: 400; }
+.note { font-size: 10px; color: var(--t2); line-height: 1.8; margin-top: 18px; }
+.barChart { padding-top: 10px; }.barAxis { margin-left: 42px; margin-right: 55px; display: flex; justify-content: space-between; color: var(--t2); font-size: 10px; border-bottom: 1px solid var(--b2); padding-bottom: 8px; }
+.barGroup { margin-top: 22px; }.barGroup h3 { font-weight: 400; font-size: 12px; margin-bottom: 12px; }.barRow { display: grid; grid-template-columns: 34px minmax(0, 1fr) 50px; align-items: center; gap: 8px; margin: 10px 0; font-size: 10px; }.barRow > span { color: var(--t2); }.barRow b { font-size: 11px; font-weight: 400; text-align: right; }.barTrack { height: 19px; background: var(--b1); border-left: 1px solid var(--b2); }.barTrack > span { display: block; height: 100%; transition: width .2s ease; }
+.ages { margin-top: 40px; }.ages figcaption { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; }.ages svg { min-width: 690px; }
+.data { border-top: 1px solid var(--b2); margin: 24px 0; }.data summary { padding: 16px 0; font-size: 11px; cursor: pointer; }.tables { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; padding: 12px 0 24px; }.tables table { border-collapse: collapse; font-size: 11px; }.tables caption { text-align: left; padding: 8px 0; }.tables th, .tables td { padding: 10px 6px; border-bottom: 1px solid var(--b2); text-align: left; font-weight: 400; }.tables a { color: var(--t2); display: block; margin: 10px 0; text-underline-offset: 4px; font-size: 10px; }.tables p { font-size: 11px; margin-top: 18px; }
+.charts button:focus-visible, .charts input:focus-visible, .charts summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+@media(max-width:1000px) { .chartGrid { grid-template-columns: 1fr; }.rates { padding-top: 20px; }.barChart { max-width: 600px; }.ages figcaption { align-items: flex-start; flex-direction: column; }.tables { grid-template-columns: 1fr; } }
+@media(max-width:600px) { .plot::after { content: 'Scroll plot horizontally to see the full axis →'; display: block; font-size: 9px; color: var(--t2); margin-top: 10px; }.plot .recordLabel { font-size: 20px; }.ages svg { min-width: 760px; }.readout { gap: 12px; }.readout p { font-size: 10px; } }
+@media(prefers-reduced-motion:reduce) { .barTrack > span { transition: none; } }
+
+.mobileAges { display: none; }
+@media(max-width:600px) { .desktopAges { display: none; }.mobileAges { display: block; }.mobileAges > div { margin-top: 24px; }.mobileAges h3 { font-size: 13px; font-weight: 400; }.mobileAges p { font-size: 10px; color: var(--t2); margin-top: 4px; }.mobileAges svg { width: 100%; min-width: 0; height: auto; display: block; }.mobileAges text { font: 12px var(--font-mono); fill: var(--t2); } }
