@@ -62,6 +62,21 @@ class WeeklyTests(unittest.TestCase):
     def test_off_week_waits_without_loading_future_sessions(self):
         self.assertEqual(self.execute([event(year=2099)], [(0, 0, 0)]), [])
 
+    def test_missed_forecast_after_race_start_reports_failure_without_publishing(self):
+        now = pd.Timestamp.now(tz='UTC')
+        started = dict(event(), Session4DateUtc=now-pd.Timedelta(days=1),
+                       Session5DateUtc=now-pd.Timedelta(hours=1))
+        with patch.object(weekly, 'forecast') as forecast:
+            with self.assertRaisesRegex(RuntimeError, 'pre-race forecast was missed'):
+                self.execute([started], [(0, 0, 0)])
+        forecast.assert_not_called()
+
+    def test_existing_forecast_after_race_start_waits_for_results(self):
+        now = pd.Timestamp.now(tz='UTC')
+        started = dict(event(), Session4DateUtc=now-pd.Timedelta(days=1),
+                       Session5DateUtc=now-pd.Timedelta(hours=1))
+        self.assertEqual(self.execute([started], [(0, 22, 22)]), [])
+
     def test_missing_actuals_stops_before_next_round(self):
         with self.assertRaisesRegex(RuntimeError, "refusing to skip ahead"):
             self.execute([event(), event(2)], [(0, 22, 22), (0, 22, 22)])

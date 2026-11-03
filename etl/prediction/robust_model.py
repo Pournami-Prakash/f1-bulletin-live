@@ -1,12 +1,9 @@
-"""Robust finishing-order and podium/top-10/win probability model.
+"""Chronological finishing-order and separate event-probability models.
 
-Walk-forward over 107 races (2022-2026), versus qualifying order:
-  - finishing-position Huber regression: MAE 3.21 vs 3.37 (p=0.002), better in every season
-  - direct logistic podium / top-10 probabilities: log-loss -13% / -6% (p<0.01)
-Gradient-boosted trees were worse than the grid order on the same data and are not used.
-
-Every feature is computed from races strictly before the target race plus that weekend's
-qualifying and sprint, honouring the F1_ASOF_ROUND boundary.
+Huber ranking is the default policy; optional learned stacking is experimental.
+Historical performance depends on the evaluated cohort and is documented in
+the audit reports, not guaranteed by the model family. Every feature uses
+strictly earlier outcomes plus pre-race weekend inputs.
 """
 import os
 from pathlib import Path
@@ -73,7 +70,7 @@ def _pipeline(model):
     return make_pipeline(SimpleImputer(strategy="median"), StandardScaler(), model)
 
 
-def forecast(season, round_, entries, circuit):
+def forecast(season, round_, entries, circuit, *, collect_components=False):
     """entries: dicts with driver_code, team, grid_position, gap_to_pole_sec (as used by predict.py).
     Returns {driver_code: {'score', 'win', 'podium', 'top10'}} or None if history is insufficient."""
     with psycopg2.connect(os.environ["NEON_DATABASE_URL"]) as connection:
@@ -113,4 +110,11 @@ def forecast(season, round_, entries, circuit):
     for name, values in probabilities.items():
         for code, value in zip(test["driver_code"], values):
             out[code][name] = float(value)
+    if collect_components:
+        from ranking_ensemble import pattern_features, member_predictions, MEMBERS
+        augmented = pattern_features(data)
+        mask = (augmented.season == season) & (augmented['round'] == round_)
+        components = member_predictions(augmented[~mask & augmented.finish.notna()], augmented[mask], FEATURES)
+        for row in components.itertuples():
+            out[row.driver_code]['ensemble_scores'] = {name: float(getattr(row, name)) for name in MEMBERS}
     return out

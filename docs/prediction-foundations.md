@@ -63,3 +63,18 @@ Feature additions are frozen under `etl/prediction/prospective_policy.json`, whi
 The predeclared assessment uses the first **10 eligible new races**, across seasons if necessary. The tyre challenger must reduce mean finishing-position error by at least **0.10 positions** against each of qualifying order, the frozen production snapshots, and its refitted no-tyre baseline. Each paired 95% interval must also exclude zero improvement, using contiguous three-race circular bootstrap blocks (10,000 draws, seed 42). These are practical review thresholds, not guarantees of future performance. There is one assessment on that cohort; the gate does not keep checking larger samples until significance appears.
 
 Passing makes the challenger eligible for review only. It never changes production routing, approves promotion, or establishes probability calibration. Until there is sufficient evidence, the existing robust ranking remains in production. Optional shadow-data failures remain visible in workflow logs; an incomplete evidence stream cannot pass the gate.
+
+## v9 correctness changes and experimental stacking
+
+The [November 3 correction review](prediction-corrections-2026-11-03.md) documents
+team-mean state updates, literal safety-car event probabilities, race-fraction
+survival, removal of the post-hoc recovery cap, and explicit ranking-component
+metadata. New forecasts use a separate v9 namespace and 5,000 simulation draws.
+Unused ML fits are skipped by default; explicit blend and simulation routes
+remain available. Learned rank stacking is implemented as a guarded dry-run
+experiment, not an automatically promoted production policy.
+
+The v1 prospective registration remains archived. A separate v2 registration
+starts a fresh cohort after these correctness changes; old and new protocol
+observations are not pooled. See the correction review for matched-field
+validation, uncertainty intervals, and remaining modeling limitations.
