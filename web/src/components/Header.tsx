@@ -28,6 +28,7 @@ export default function Header({ onReset }: { onReset?: () => void }) {
     { href: '/analytics',    label: 'ANALYTICS'    },
     { href: '/predictions',  label: 'PREDICTION'   },
     { href: '/championship', label: 'CHAMPIONSHIP' },
+    { href: '/stats',        label: 'STATS'        },
     { href: '/standings',    label: 'STANDINGS'    },
     { href: '/circuit',      label: 'CIRCUIT'      },
     { href: '/guide',        label: 'GUIDE'        },
@@ -39,7 +40,7 @@ export default function Header({ onReset }: { onReset?: () => void }) {
         .f1-nav { display: flex; gap: 0; margin-left: 8px; }
         .f1-hamburger { display: none; }
         .f1-dropdown { display: none; }
-        @media (max-width: 1100px) {
+        @media (max-width: 1360px) {
           .f1-nav { display: none !important; }
           .f1-hamburger { display: flex !important; }
           .f1-dropdown { display: block !important; }
@@ -51,7 +52,7 @@ export default function Header({ onReset }: { onReset?: () => void }) {
         height: 'var(--header-h)',
         display: 'flex', alignItems: 'center',
         padding: '0 var(--gutter)', gap: 16,
-        background: 'rgba(10,10,10,.92)',
+        background: 'color-mix(in srgb, var(--bg) 92%, transparent)',
         backdropFilter: 'blur(16px)',
         borderBottom: '1px solid var(--b1)',
         transition: 'background var(--tr)',
@@ -83,7 +84,7 @@ export default function Header({ onReset }: { onReset?: () => void }) {
           {navItems.map(item => {
             const active = pathname === item.href
             return (
-              <Link key={item.href} href={item.href} style={{
+              <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} style={{
                 padding: '0 16px',
                 height: 'var(--header-h)',
                 display: 'flex', alignItems: 'center',
@@ -153,7 +154,7 @@ export default function Header({ onReset }: { onReset?: () => void }) {
                 top: 'calc(100% + 8px)',
                 right: 0,
                 width: 200,
-                background: 'rgba(10,10,10,.98)',
+                background: 'color-mix(in srgb, var(--bg) 98%, transparent)',
                 border: '1px solid var(--b1)',
                 borderRadius: 10,
                 overflow: 'hidden',
@@ -163,7 +164,7 @@ export default function Header({ onReset }: { onReset?: () => void }) {
               {navItems.map((item, i) => {
                 const active = pathname === item.href
                 return (
-                  <Link key={item.href} href={item.href} style={{
+                  <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} style={{
                     display: 'flex', alignItems: 'center', gap: 10,
                     padding: '13px 16px',
                     borderBottom: i < navItems.length - 1
@@ -180,7 +181,7 @@ export default function Header({ onReset }: { onReset?: () => void }) {
                     }} />
                     {item.label}
                     {active && (
-                      <span style={{ marginLeft: 'auto', color: 'var(--red)', fontSize: 8 }}>●</span>
+                      <span aria-hidden="true" style={{ marginLeft: 'auto', color: 'var(--red)', fontSize: 8 }}>●</span>
                     )}
                   </Link>
                 )
