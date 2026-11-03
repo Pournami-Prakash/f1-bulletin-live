@@ -1,0 +1,51 @@
+.page { --ink: #eeeae1; --muted: #b7b6b1; --accent: #e5c57b; max-width: 1440px; margin: 0 auto; padding: calc(var(--header-h) + 32px) clamp(20px, 5vw, 80px) 64px; color: var(--t1); }
+.masthead { display: flex; justify-content: space-between; gap: 16px; font-size: 10px; letter-spacing: .15em; color: var(--t2); border-bottom: 1px solid var(--b2); padding-bottom: 16px; }
+.hero { display: grid; grid-template-columns: 1.2fr 1fr; gap: clamp(32px, 6vw, 90px); padding: 52px 0 60px; align-items: center; }
+.eyebrow { font-size: 10px; letter-spacing: .13em; text-transform: uppercase; color: var(--t2); margin-bottom: 16px; }
+.hero h1 { font-family: var(--font-bebas); font-weight: 400; font-size: clamp(64px, 7.8vw, 114px); line-height: .94; letter-spacing: .015em; }
+.hero h1 > span { color: var(--gold); }
+.intro { font-family: Georgia, serif; font-size: clamp(18px, 2vw, 23px); line-height: 1.5; max-width: 400px; margin: 24px 0; color: var(--t2); }
+.jump { display: inline-flex; gap: 28px; align-items: center; color: var(--t1); font-size: 12px; text-decoration: none; padding: 12px 0; border-bottom: 1px solid var(--gold); }
+.jump span { font-size: 24px; }
+.cover { position: relative; isolation: isolate; overflow: hidden; background: #202e29; color: var(--ink); min-height: 490px; padding: 24px 28px; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid #516254; transform: rotate(2deg); }
+.cover::after { content: ''; position: absolute; inset: auto 0 0; height: 12px; background: repeating-linear-gradient(90deg, #e5c57b 0 24px, #202e29 24px 48px); }
+.coverTop { display: flex; justify-content: space-between; gap: 12px; font-size: 9px; letter-spacing: .08em; z-index: 1; }
+.twelve { position: absolute; top: 10px; right: 4px; font-family: var(--font-bebas); font-size: 330px; line-height: 1; color: #3c5044; z-index: -1; transform: rotate(-8deg); }
+.champion { margin-top: 130px; }
+.champion > span { color: var(--accent); font-size: 11px; letter-spacing: .15em; }
+.champion strong { display: block; font: 400 clamp(55px, 6vw, 84px)/.98 var(--font-bebas); margin: 14px 0; }
+.champion p { color: #d0d4cb; font-family: Georgia, serif; font-size: 18px; }
+.cover > a { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid #67746b; padding: 16px 0 8px; margin-top: 28px; color: var(--ink); font-size: 10px; text-decoration: none; }
+.edition { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 0; border-top: 1px solid var(--b2); border-bottom: 1px solid var(--b2); font-size: 9px; letter-spacing: .08em; }
+.edition > span { flex-shrink: 0; }
+.edition p { color: var(--t2); font-size: 11px; letter-spacing: 0; }
+.book { scroll-margin-top: calc(var(--header-h) + 24px); padding-top: 64px; }
+.bookHeading { display: flex; justify-content: space-between; gap: 24px; align-items: flex-end; }
+.book h2, .extra h2 { font-family: var(--font-bebas); font-size: clamp(40px, 5vw, 60px); font-weight: 400; line-height: 1; letter-spacing: .02em; }
+.filters { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--b2); }
+.filters button { background: transparent; color: var(--t2); border: 0; border-bottom: 2px solid transparent; font: inherit; font-size: 11px; padding: 13px 12px; cursor: pointer; min-height: 44px; }
+.filters button[aria-pressed='true'] { color: var(--t1); border-bottom-color: var(--gold); }
+.filters button:hover { color: var(--t1); background: var(--b1); }
+.count { color: var(--t2); margin: 24px 0 14px; font-size: 10px; }
+.records { list-style: none; border-top: 1px solid var(--b2); }
+.record { display: grid; grid-template-columns: 34px 1fr 100px; gap: 24px; border-bottom: 1px solid var(--b2); padding: 28px 0; align-items: start; }
+.recordNumber { color: var(--t2); font-size: 11px; padding-top: 3px; }
+.recordMeta { display: flex; gap: 14px; align-items: center; color: var(--t2); font-size: 10px; }
+.recordMeta > span { border: 1px solid var(--b2); padding: 2px 7px; font-size: 9px; }
+.record h3 { font-family: var(--font-bebas); font-size: clamp(25px, 3vw, 35px); font-weight: 400; letter-spacing: .02em; margin: 10px 0 8px; line-height: 1.12; }
+.recordMain > p { color: var(--t2); max-width: 680px; line-height: 1.8; font-size: 12px; }
+.recordFoot { display: flex; gap: 12px 28px; flex-wrap: wrap; align-items: center; margin-top: 16px; font-size: 10px; color: var(--t2); }
+.recordFoot a { color: var(--t1); text-underline-offset: 4px; text-decoration-color: var(--b2); padding: 6px 0; }
+.recordMark { font-family: var(--font-bebas); font-size: 40px; color: var(--gold); text-align: right; align-self: center; }
+.extra { display: grid; grid-template-columns: 1fr 1.2fr; gap: 40px; margin: 64px 0 40px; padding: 32px; background: var(--bg2); border: 1px solid var(--b2); align-items: center; }
+.extra h2 { font-size: clamp(32px, 4vw, 44px); }
+.trivia summary { display: flex; justify-content: space-between; gap: 20px; cursor: pointer; list-style: none; line-height: 1.7; padding: 12px 0; font-size: 13px; }
+.trivia summary::-webkit-details-marker { display: none; }
+.trivia summary > span { font-size: 22px; color: var(--gold); }
+.trivia[open] summary > span { transform: rotate(45deg); }
+.trivia p { color: var(--t2); line-height: 1.8; font-size: 12px; margin: 8px 0 16px; }
+.trivia a { color: var(--t1); font-size: 11px; text-underline-offset: 4px; }
+.editorial { color: var(--t2); max-width: 850px; font-size: 10px; line-height: 1.9; }
+.page a:focus-visible, .page button:focus-visible, .page summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 5px; }
+@media (max-width: 1100px) { .edition { flex-wrap: wrap; } .edition p { order: 3; flex-basis: 100%; } .bookHeading { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 700px) { .masthead { font-size: 8px; letter-spacing: .06em; } .hero { grid-template-columns: 1fr; padding: 36px 0 40px; gap: 36px; } .hero h1 { font-size: clamp(62px, 13vw, 90px); } .cover { transform: none; min-height: 390px; } .champion { margin-top: 105px; } .twelve { font-size: 280px; } .champion strong { font-size: 64px; } .book { padding-top: 40px; } .record { grid-template-columns: 22px 1fr; gap: 12px; padding: 24px 0; } .recordMark { display: none; } .recordMeta { gap: 9px; font-size: 9px; } .extra { grid-template-columns: 1fr; padding: 24px; gap: 20px; margin-top: 40px; } .filters button { padding-inline: 10px; } }

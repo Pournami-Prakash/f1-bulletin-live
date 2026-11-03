@@ -11,6 +11,7 @@ const routes = [
   '/intelligence',
   '/predictions',
   '/standings',
+  '/stats',
   '/stories',
 ]
 
