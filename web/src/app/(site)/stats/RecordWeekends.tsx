@@ -13,7 +13,8 @@ const active = weekends.filter(weekend => records.has(weekend.id))
 const busiest = weekendTally.slice(0, 6)
 const tied = weekendTally.reduce((sum, entry) => sum + entry.records.length, 0)
 const scopeLabel = Object.fromEntries(recordScopes.map(scope => [scope.id, scope.label]))
-const groupCount = Object.fromEntries(recordGroups.map(group => [group.id, weekendTally.reduce((sum, entry) => sum + entry.records.filter(r => r.group === group.id).length, 0)]))
+// The card names the weekend once, so drop a line's trailing “(Place 2026)” or “(2026)”.
+const withoutWeekend = (detail: string) => detail.replace(/\s*\((?:[^(),\d–]+ )?202[56]\)$/, '')
 const age = (date: string) => { const value = ageAt('2006-08-25', date); return `${value.years}y ${value.days}d` }
 
 export default function RecordWeekends() {
@@ -45,7 +46,7 @@ export default function RecordWeekends() {
     <h3 className={styles.blockTitle}>Where the records fell</h3>
     <p className={styles.blockDek}>Every column is one race weekend of his career, in order. Every dot is one record from the list that names that weekend.</p>
     <ul className={styles.legend} aria-label="Record groups">
-      {recordGroups.map(group => <li key={group.id} data-group={group.id}><i aria-hidden="true" />{group.label} <b>{groupCount[group.id]}</b></li>)}
+      {recordGroups.map(group => <li key={group.id} data-group={group.id}><i aria-hidden="true" />{group.label}</li>)}
     </ul>
     <div ref={ref} className={styles.plot} tabIndex={0} role="group" aria-label="Records per race weekend. Use the left and right arrow keys to move between weekends." onKeyDown={move}>
       <svg width={width} height={height} role="img" aria-label={`Records per race weekend. Busiest: ${busiest.map(entry => `${entry.weekend.race} GP ${entry.weekend.year}, ${entry.records.length}`).join('; ')}.`}>
@@ -76,8 +77,8 @@ export default function RecordWeekends() {
       </header>
       <ul>
         {list.map(record => {
-          const [title, ...rest] = record.text.split(': ')
-          return <li key={record.id} data-group={record.group}><i aria-hidden="true" /><span><b>{title}</b>{rest.length > 0 && <> · {rest.join(': ')}</>}<small>{scopeLabel[record.scope]}</small></span></li>
+          const [title, ...rest] = record.text.split(': ').map(withoutWeekend)
+          return <li key={record.id} data-group={record.group}><i aria-hidden="true" /><span><b>{title}</b>{rest.some(Boolean) && <> · {rest.join(': ')}</>}<small>{scopeLabel[record.scope]}</small></span></li>
         })}
       </ul>
     </article>

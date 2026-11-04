@@ -15,19 +15,19 @@
 
 /* Hero */
 .hero { padding: 12px 0 40px; border-bottom: 1px solid var(--b2); }
-.heroTop { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 40px; align-items: end; }
-.eyebrow { display: flex; align-items: center; gap: 10px; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--t2); }
+.heroTop { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; justify-items: center; text-align: center; }
+.eyebrow { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--t2); }
 .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--c-ant); box-shadow: 0 0 0 0 var(--c-ant); animation: pulse 2s infinite; }
 @keyframes pulse { 70% { box-shadow: 0 0 0 10px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
-.heroTitle { font: 400 clamp(56px, 9vw, 128px)/.86 var(--font-bebas); letter-spacing: .01em; margin-top: 18px; }
+.heroTitle { text-wrap: balance; font: 400 clamp(56px, 9vw, 128px)/.86 var(--font-bebas); letter-spacing: .01em; margin-top: 18px; }
 .heroTitle span { color: var(--c-ant); }
-.heroLede { margin-top: 20px; font-family: Georgia, serif; font-size: clamp(16px, 1.6vw, 20px); line-height: 1.5; color: var(--t2); max-width: 520px; }
-.ageBadge { position: relative; overflow: hidden; padding: 26px 26px 22px; border-radius: 18px; background: linear-gradient(140deg, var(--c-ant), var(--c-ant-deep)); color: var(--ink-on-gold); }
+.heroLede { margin-top: 20px; font-family: Georgia, serif; font-size: clamp(16px, 1.6vw, 20px); line-height: 1.5; color: var(--t2); max-width: 760px; margin-inline: auto; text-wrap: balance; }
+.ageBadge { width: min(100%, 520px); text-align: left; position: relative; overflow: hidden; padding: 26px 26px 22px; border-radius: 18px; background: linear-gradient(140deg, var(--c-ant), var(--c-ant-deep)); color: var(--ink-on-gold); }
 .ageBadge::after { content: '12'; position: absolute; right: -10px; bottom: -48px; font: 400 220px/1 var(--font-bebas); opacity: .12; pointer-events: none; }
 .ageBadge p { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; }
 .ageBadge strong { display: block; font: 400 clamp(72px, 8vw, 112px)/.9 var(--font-bebas); margin: 10px 0 8px; font-variant-numeric: tabular-nums; }
 .ageBadge strong small { font-size: .45em; margin-left: 2px; opacity: .75; }
-.ageBadge .ageGap { text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 500; }
+.ageBadge .ageGap { text-wrap: balance; text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 500; }
 .ageGap b { font-weight: 800; }
 .ageBadge .ageWhere { margin-top: 12px; opacity: .75; font-size: 10px; }
 .tiles { list-style: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 36px; }
@@ -36,25 +36,25 @@
 .tile strong { font: 400 clamp(44px, 5vw, 64px)/1 var(--font-bebas); color: var(--c-ant); font-variant-numeric: tabular-nums; }
 .tile span { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
 .tile small { font-size: 11px; color: var(--t2); }
-.jumps { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+.jumps { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 24px; }
 .jumps a { padding: 10px 14px; border-radius: 999px; border: 1px solid var(--b2); color: var(--t1); text-decoration: none; font-size: 12px; transition: background var(--tr), border-color var(--tr); }
 .jumps a:first-child { background: var(--c-ant); border-color: var(--c-ant); color: var(--ink-on-gold); font-weight: 700; }
 .jumps a:hover { border-color: var(--c-ant); }
 
 /* Section shell */
 .section { padding: 56px 0 16px; scroll-margin-top: calc(var(--header-h) + 12px); }
-.sectionHead { max-width: 760px; margin-bottom: 24px; }
-.kicker { display: flex; align-items: center; gap: 10px; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--t2); }
+.sectionHead { max-width: 760px; margin: 0 auto 28px; text-align: center; }
+.kicker { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--t2); }
 .kicker span { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--c-ant); color: var(--ink-on-gold); font-weight: 700; letter-spacing: 0; }
-.sectionHead h2 { font: 400 clamp(40px, 5.4vw, 72px)/.95 var(--font-bebas); letter-spacing: .01em; margin-top: 12px; }
-.sectionHead > p:last-child { margin-top: 12px; font-size: 14px; line-height: 1.6; color: var(--t2); max-width: 600px; }
+.sectionHead h2 { text-wrap: balance; font: 400 clamp(40px, 5.4vw, 72px)/.95 var(--font-bebas); letter-spacing: .01em; margin-top: 12px; }
+.sectionHead > p:last-child { margin: 12px auto 0; text-wrap: balance; font-size: 14px; line-height: 1.6; color: var(--t2); max-width: 720px; }
 .plotBox { width: 100%; min-width: 0; }
 .plotBox svg { display: block; overflow: visible; touch-action: pan-y; }
 .grid line { stroke: var(--b1); }
 .grid text, .axisLabel { fill: var(--t2); font: 11px var(--font-mono); }
 .seriesLabel { font: 700 12px var(--font-mono); }
 .kimiLine { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c-ant) 55%, transparent)); }
-.footnote { font-size: 11px; color: var(--t2); line-height: 1.6; margin-top: 14px; }
+.footnote { text-align: center; text-wrap: pretty; font-size: 11px; color: var(--t2); line-height: 1.6; margin-top: 14px; }
 .rookieText { color: var(--c-rookie); }
 .champText { color: var(--c-ant); }
 .rusText { color: var(--c-rus); }
@@ -195,9 +195,6 @@
 .ladderCallout b { color: var(--c-ant); }
 
 /* Record book + footer note */
-.bookDisclosure { margin-top: 44px; border-radius: 18px; border: 1px solid var(--b2); padding: 0 22px; }
-.bookDisclosure > summary { padding: 20px 0; cursor: pointer; font: 400 26px var(--font-bebas); letter-spacing: .03em; color: var(--c-ant); }
-.bookDisclosure[open] { padding-bottom: 22px; }
 .editorial { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--b1); font-size: 11px; line-height: 1.7; color: var(--t2); }
 .editorial a { color: var(--t1); }
 
@@ -211,7 +208,6 @@
   .tile:nth-child(n + 4) { grid-column: span 3; }
 }
 @media (max-width: 760px) {
-  .heroTop { grid-template-columns: 1fr; gap: 24px; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .tiles .tile { grid-column: auto; }
   .tiles .tile:last-child { grid-column: span 2; }

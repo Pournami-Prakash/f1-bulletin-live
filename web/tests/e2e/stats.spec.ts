@@ -1,38 +1,16 @@
 import { test, expect } from '@playwright/test'
 
-test('atlas links moments, claim dots, filters and keyboard inspection', async ({ page }) => {
+test('record list shows every line once, grouped, with primary sources', async ({ page }) => {
   await page.goto('/stats')
   await expect(page.getByRole('heading', { level: 1 })).toContainText('champion ever')
-  await page.getByText('Browse all 229 lines', { exact: true }).click()
-  const status = page.getByRole('status')
-  const detail = page.getByRole('complementary', { name: 'Record detail' })
-  const dots = page.locator('#record-book button[title]')
-  await expect(status).toContainText('229 list entries')
-  await expect(dots).toHaveCount(229)
-  await expect(detail).toContainText('The complete set.')
-  await page.getByRole('button', { name: /2026.*MONZA/ }).click()
-  await expect(detail).toContainText('From P19 to the home win.')
-  await expect(detail.getByLabel('Grid position 19 to finishing position 1')).toBeVisible()
-  const claim = page.getByRole('button', { name: /^Youngest world champion:/ })
-  await claim.click()
-  await expect(detail).toContainText('PRIMARY SOURCE LINKED')
-  await expect(detail.getByRole('link')).toHaveAttribute('href', /guinnessworldrecords/)
-  // Arrow navigation uses the same group order as the visible dot map.
-  await claim.focus()
-  await page.keyboard.press('End')
-  await expect(detail).toContainText('This claim has not been independently verified here.')
-  await page.getByRole('group', { name: 'Claim period' }).getByRole('button', { name: '2026', exact: true }).click()
-  await expect(status).not.toContainText('229 list entries')
-  await page.getByRole('button', { name: /Year unstated/ }).click()
-  await expect(page.getByRole('button', { name: 'Only teenage pole sitter', exact: true })).toBeAttached()
-  await page.getByRole('button', { name: 'Whole F1 career', exact: true }).click()
-  await page.getByRole('button', { name: /Italian records\s*\d+/ }).click()
-  await expect(dots).not.toHaveCount(229)
-  await page.getByRole('button', { name: /All lenses/ }).click()
-  await expect(dots).toHaveCount(229)
+  await page.getByText('Read all 229 lines', { exact: true }).click()
+  const list = page.locator('details').filter({ hasText: 'Read all 229 lines' })
+  await expect(list.locator('li')).toHaveCount(229)
+  await expect(list.getByRole('region')).toHaveCount(4)
+  await expect(list.getByRole('region', { name: 'All-time F1 records: 72' })).toContainText('Youngest world champion')
+  await expect(list.getByRole('link', { name: /Guinness World Records/ }).first()).toHaveAttribute('href', /guinnessworldrecords/)
+  await expect(list.getByRole('link')).toHaveCount(11)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
-  await page.evaluate(() => window.scrollTo(0, 0))
-  await page.screenshot({ path: `/tmp/stats-atlas-${test.info().project.name}.png`, fullPage: true })
 })
 
 test('stats navigation and light theme remain usable', async ({ page }) => {
@@ -44,7 +22,6 @@ test('stats navigation and light theme remain usable', async ({ page }) => {
   if (await menu.isVisible()) await menu.click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
-  await page.screenshot({ path: `/tmp/stats-atlas-light-${test.info().project.name}.png`, fullPage: true })
 })
 
 test('stats charts replay the title race and inspect races, seasons and champions', async ({ page }) => {
@@ -71,9 +48,9 @@ test('stats charts replay the title race and inspect races, seasons and champion
   await expect(page.getByRole('img', { name: /Qualifying 2026: Antonelli ahead 11 times, Russell ahead 8 times/ })).toBeAttached()
   await page.getByRole('button', { name: /Sebastian Vettel/ }).click()
   await expect(page.locator('#youngest')).toContainText('3 years, 66 days')
+  await expect(page.getByText('20 years, 68 days')).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
   await page.evaluate(() => window.scrollTo(0, 0))
-  await page.screenshot({ path: `/tmp/stats-charts-${test.info().project.name}.png`, fullPage: true })
 })
 
 test('record charts link weekends, milestone ladders and comparison groups', async ({ page }) => {

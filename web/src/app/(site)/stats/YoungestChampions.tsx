@@ -36,7 +36,7 @@ export default function YoungestChampions() {
         </li>)}
       </ol>
       <p className={styles.ladderCallout} aria-live="polite">{selected.short === 'ANT'
-        ? <>Kimi clinched the 2026 title at <b>{kimi.age.years} years, {kimi.age.days} days</b>, the first champion who was not yet 21.</>
+        ? <>Pick a champion to see how much younger Kimi was when he clinched.</>
         : <>Kimi was <b>{Math.floor(gap / 365.25)} years, {Math.round(gap % 365.25)} days</b> younger than {selected.name} was in {selected.season}.</>}</p>
       <p className={styles.footnote}>Ages are calculated from birth date to the race where the title was mathematically won.</p>
     </div>
