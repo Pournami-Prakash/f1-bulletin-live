@@ -10,7 +10,9 @@ from __future__ import annotations
 import argparse, json, os, warnings
 warnings.filterwarnings('ignore')
 import numpy as np
-from survival import retirement_probability
+import pandas as pd
+from survival import race_retirement_probability
+from simulation_events import first_safety_car_lap
 import requests
 from pathlib import Path
 from dotenv import load_dotenv
@@ -23,8 +25,10 @@ from predict import (
     bayesian_prior, load_artifacts, get_target_race,
     apply_calibration, load_calibrator, count_completed_races,
     POINTS_MAP, MC_RUNS, RACE_LAPS_BY_CIRCUIT,
-    PIT_CREW_SPEED, COMPOUND_DEG, PIT_LANE_DELTA, MAX_POSITION_GAIN,
+    PIT_CREW_SPEED, COMPOUND_DEG, PIT_LANE_DELTA,
     traffic_tyre_factor,
+    get_race_distance,
+    query,
 )
 
 OPENF1_BASE = "https://api.openf1.org/v1"
@@ -35,7 +39,7 @@ DRIVER_NUMBER_MAP = {
     12: "ANT", 14: "ALO", 16: "LEC", 18: "STR", 20: "MAG", 22: "TSU",
     23: "ALB", 24: "ZHO", 27: "HUL", 30: "LAW", 31: "OCO", 38: "BEA",
     40: "COL", 41: "LIN", 43: "COL", 44: "HAM", 55: "SAI", 63: "RUS",
-    77: "BOT", 81: "PIA", 87: "BEA", 5: "BOR",
+    77: "BOT", 81: "PIA", 87: "BEA", 5: "BOR", 50: "HIR",
 }
 
 COMPOUND_MAP = {"SOFT": "SOFT", "MEDIUM": "MEDIUM", "HARD": "HARD",
@@ -58,13 +62,14 @@ def openf1_get(endpoint: str, params: dict) -> list:
 
 def get_session_key(season: int, round_: int) -> int | None:
     sessions = openf1_get("sessions", {"year": season, "session_name": "Race"})
-    # Filter by round number if available, else take the most recent
-    for s in sessions:
-        if s.get("round_number") == round_:
-            return s["session_key"]
-    if sessions:
-        return sessions[-1]["session_key"]
-    return None
+    calendar = query('SELECT city, race_start_utc FROM race_calendar WHERE season=%s AND round=%s', (season, round_))
+    if len(calendar) != 1 or pd.isna(calendar.iloc[0].race_start_utc):
+        return None
+    event = calendar.iloc[0]
+    matches = [s for s in sessions if not s.get('is_cancelled') and s.get('session_name') == 'Race'
+               and str(s.get('location', '')).casefold() == str(event.city).casefold()
+               and s.get('date_start') and abs(pd.Timestamp(s['date_start'])-pd.Timestamp(event.race_start_utc)) < pd.Timedelta(hours=24)]
+    return matches[0]['session_key'] if len(matches) == 1 else None
 
 
 def fetch_live_state(season: int, round_: int) -> dict | None:
@@ -74,6 +79,10 @@ def fetch_live_state(season: int, round_: int) -> dict | None:
         step("  Could not resolve session_key — is the race live?")
         return None
     step(f"  Session key: {session_key}")
+    drivers = openf1_get('drivers', {'session_key': session_key})
+    driver_codes = {r['driver_number']: r['name_acronym'] for r in drivers
+                    if isinstance(r.get('name_acronym'), str) and len(r['name_acronym']) == 3
+                    and r['name_acronym'].isalpha()}
 
     # Current positions
     positions_raw = openf1_get("position", {"session_key": session_key})
@@ -111,7 +120,7 @@ def fetch_live_state(season: int, round_: int) -> dict | None:
 
     positions = []
     for dn, pos_row in sorted(latest_pos.items(), key=lambda x: x[1].get("position", 99)):
-        driver_code = DRIVER_NUMBER_MAP.get(dn)
+        driver_code = driver_codes.get(dn, DRIVER_NUMBER_MAP.get(dn))
         if not driver_code:
             continue
         stint = latest_stint.get(dn, {})
@@ -130,12 +139,14 @@ def fetch_live_state(season: int, round_: int) -> dict | None:
 
     step(f"  Live state: lap {current_lap}, {len(positions)} active drivers, SC={'YES' if sc_active else 'NO'}")
 
+    _, _, gp_name, circuit = get_target_race(season, round_)
     return {
         "season":            season,
         "round":             round_,
         "current_lap":       current_lap,
-        "total_laps":        RACE_LAPS_BY_CIRCUIT.get("Miami Gardens", 57),
+        "total_laps":        get_race_distance(season, round_, circuit, gp_name),
         "safety_car_active": sc_active,
+        "safety_car_seen":   bool(sc_messages),
         "positions":         positions,
     }
 
@@ -154,6 +165,7 @@ def simulate_from_live(entries: list[dict], live: dict, artifacts: dict) -> dict
     total_laps     = live["total_laps"]
     remaining_laps = total_laps - current_lap
     sc_at_start    = live.get("safety_car_active", False)
+    sc_seen        = live.get('safety_car_seen', sc_at_start)
 
     # Build lookup from live state
     live_by_code = {p["driver_code"]: p for p in live["positions"]}
@@ -174,7 +186,7 @@ def simulate_from_live(entries: list[dict], live: dict, artifacts: dict) -> dict
         patched["live_tyre_age"] = lp.get("tyre_age", 0)
         live_entries.append(patched)
 
-    live_entries.sort(key=lambda x: x["live_position"])
+    live_entries.sort(key=lambda x: (x["live_position"], x['driver_code']))
     n = len(live_entries)
     if n == 0:
         return {}
@@ -201,12 +213,18 @@ def simulate_from_live(entries: list[dict], live: dict, artifacts: dict) -> dict
     first_stop_median = float(live_entries[0].get("first_stop_median_lap", 20.0))
 
     for run in range(MC_RUNS):
+        first_sc_lap = None if sc_seen else first_safety_car_lap(
+            total_laps, sc_race_prob,
+            [live_entries[0].get('early_sc_probability', .18),
+             live_entries[0].get('middle_sc_probability', .18),
+             live_entries[0].get('late_sc_probability', .14)], after_lap=current_lap)
         positions  = {e["driver_code"]: float(e["live_position"]) for e in live_entries}
         start_pos  = {e["driver_code"]: e["live_position"] for e in live_entries}
         tyre_age   = {e["driver_code"]: e["live_tyre_age"] for e in live_entries}
         tyre_type  = {e["driver_code"]: e["live_tyre"] for e in live_entries}
         pit_count  = {e["driver_code"]: 1 for e in live_entries}  # already pitted once (SC stop)
         retired    = set()
+        retirement_lap = {}
 
         # Build per-run pace — same logic as predict.py but from live positions
         pace_ms = {}
@@ -224,7 +242,7 @@ def simulate_from_live(entries: list[dict], live: dict, artifacts: dict) -> dict
 
         sc_active    = sc_at_start
         sc_laps_left = np.random.randint(2, 5) if sc_active else 0
-        sc_count     = 1 if sc_active else 0
+        sc_count     = 1 if sc_seen else 0
 
         for lap in range(1, remaining_laps + 1):
             abs_lap = current_lap + lap
@@ -232,8 +250,8 @@ def simulate_from_live(entries: list[dict], live: dict, artifacts: dict) -> dict
             if not sc_active and sc_count < 3:
                 phase = ("early" if abs_lap <= total_laps * 0.33 else
                          "middle" if abs_lap <= total_laps * 0.67 else "late")
-                phase_w = 3.0
-                if np.random.random() < sc_race_prob * phase_w / total_laps:
+                followup = sc_count > 0 and np.random.random() < sc_race_prob / total_laps
+                if abs_lap == first_sc_lap or followup:
                     sc_active    = True
                     sc_laps_left = np.random.randint(3, 8)
                     sc_count    += 1
@@ -244,7 +262,7 @@ def simulate_from_live(entries: list[dict], live: dict, artifacts: dict) -> dict
 
             pos_sorted = sorted(
                 [d for d in positions if d not in retired],
-                key=lambda d: positions[d],
+                key=lambda d: (positions[d], d),
             )
 
             for i, d in enumerate(pos_sorted):
@@ -254,10 +272,9 @@ def simulate_from_live(entries: list[dict], live: dict, artifacts: dict) -> dict
 
                 # DNF roll
                 CD = COMPOUND_DEG
-                shape = e.get("dnf_shape", 0.8)
-                scale = e.get("dnf_scale", 60.0)
-                if np.random.random() < retirement_probability(max(abs_lap-1,0), abs_lap, shape, scale):
+                if np.random.random() < race_retirement_probability(e, max(abs_lap-1,0), abs_lap, total_laps):
                     retired.add(d)
+                    retirement_lap[d] = abs_lap-1
                     continue
 
                 comp_data     = CD.get(tyre_type[d], CD["MEDIUM"])
@@ -316,8 +333,8 @@ def simulate_from_live(entries: list[dict], live: dict, artifacts: dict) -> dict
                             positions[other] += 1
 
         active = [d for d in positions if d not in retired]
-        active.sort(key=lambda d: positions[d])
-        retired_list = list(retired)
+        active.sort(key=lambda d: (positions[d], d))
+        retired_list = sorted(retired, key=lambda d: (-retirement_lap[d], positions[d], d))
         ordered = active + retired_list
         for pos, driver in enumerate(ordered, 1):
             results[driver].append(pos)

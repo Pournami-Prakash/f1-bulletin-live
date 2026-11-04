@@ -24,7 +24,8 @@ from dotenv import load_dotenv
 import psycopg2
 from asof import bounded_sql
 import robust_model
-from survival import retirement_probability
+from survival import fraction_survival_parameters, race_retirement_probability
+from simulation_events import first_safety_car_lap
 from forecast_quality import fit_calibration, calibrate, finalize, validate_forecast
 from range_calibration import fit_range_calibration, apply_range_calibration
 from tyre_model import FUEL_MS_PER_LAP
@@ -46,7 +47,7 @@ if not DATABASE_URL:
 
 FEATURES_DIR  = Path(os.environ.get("F1_FEATURES_DIR", "features_output"))
 MODEL_VERSION = "v5_regulation_aware_mc"
-MC_RUNS       = 500
+MC_RUNS       = 5000
 ROBUST_PODIUM_WEIGHT = 0.7
 ROBUST_WIN_WEIGHT    = 0.5
 def races_per_season(season: int) -> int:
@@ -148,7 +149,6 @@ PIT_LANE_DELTA = {
     'Melbourne': 23.0, 'Shanghai': 23.5, 'Zandvoort': 19.0,
     'Budapest': 20.0,  'default': 21.0,
 }
-MAX_POSITION_GAIN = 12
 DEFAULT_MC_SEED = 4260
 
 RACE_LAPS_BY_CIRCUIT = {
@@ -810,6 +810,18 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
         """)
         latest_results = latest_results.merge(teams, on='driver_code', how='left')
         latest_results['team'] = latest_results['team'].fillna('Unknown')
+        if (latest_results['team'] == 'Unknown').any():
+            # A debutant has no historical result to supply a constructor.
+            # Resolve entry metadata from qualifying, without exposing race outcomes.
+            from openf1_weekend import official_qualifying_teams
+            calendar = query('SELECT race_name FROM race_calendar WHERE season=%s AND round=%s',
+                             (season, round_))
+            if calendar.empty:
+                raise RuntimeError('Calendar unavailable for qualifying team roster')
+            current_teams = official_qualifying_teams(
+                season, calendar.iloc[0]['race_name'], latest_results['driver_code'])
+            latest_results['team'] = latest_results['driver_code'].map(current_teams)
+            step('  Resolved current teams from official qualifying roster')
         step(f"  Built driver list from qualifying data ({len(latest_results)} drivers)")
     else:
         latest_results = query("""
@@ -1053,6 +1065,11 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
         blended_elo_val = 0.70 * driver_elo + 0.30 * celo_val
 
         dnf_surv = artifacts.get('dnf_survival', {}).get(driver, {'dnf_rate':0.10,'shape':0.8,'scale':60.0})
+        if dnf_surv.get('time_unit') != 'race_fraction':
+            if 'dnf_rate' in dnf_surv:
+                dnf_surv = fraction_survival_parameters(dnf_surv['dnf_rate'], dnf_surv.get('shape', .8))
+            else:
+                dnf_surv = dict(dnf_surv, scale=dnf_surv['scale']/58., time_unit='race_fraction')
 
         driver_hist = features_df[
             (features_df['driver_code'] == driver) &
@@ -1105,6 +1122,7 @@ def get_entry_list(season: int, round_: int, artifacts: dict) -> list[dict]:
             'circuit_elo':        celo_val,
             'dnf_shape':          float(dnf_surv.get('shape', 0.8)),
             'dnf_scale':          float(dnf_surv.get('scale', 60.0)),
+            'dnf_time_unit':      dnf_surv['time_unit'],
             'team_strength':      constructor.get(team, 10.5),
             'pu_manufacturer':    PU_MANUFACTURERS.get(team, 'Unknown'),
             'pu_strength':        PU_PRIOR.get(PU_MANUFACTURERS.get(team, 'Unknown'), 0.50),
@@ -1247,7 +1265,7 @@ def bayesian_prior(entries: list[dict], n_2026_races: int = 0) -> dict[str, floa
 # ─────────────────────────────────────────────────────────────
 # MONTE CARLO RACE SIMULATION
 # ─────────────────────────────────────────────────────────────
-SIMULATION_VERSION = 'symmetric_lap_state_v1'
+SIMULATION_VERSION = 'race_fraction_events_v2'
 
 
 def lap_paces(entries, base_pace, compounds, ages, ranks, lap, distance, artifacts=None,
@@ -1289,7 +1307,6 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
     x_mode_drag          = float(entries[0].get('x_mode_drag_reduction', 0.0))
     sc_race_prob = float(entries[0].get('sc_race_probability', entries[0].get('sc_probability', 0.35)))
     chaos_factor = float(entries[0].get('race_control_chaos', sc_race_prob))
-    sc_race_prob = min(1.0, sc_race_prob * (0.85 + min(chaos_factor, 2.0) * 0.15))
     early_sc_prob = float(entries[0].get('early_sc_probability', 0.18))
     middle_sc_prob = float(entries[0].get('middle_sc_probability', 0.18))
     late_sc_prob = float(entries[0].get('late_sc_probability', 0.14))
@@ -1307,8 +1324,9 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
     quali_gap_weight = 0.42 if reg_era >= 1 else 0.62
 
     for run in range(MC_RUNS):
+        first_sc_lap = first_safety_car_lap(race_distance, sc_race_prob,
+                                          [early_sc_prob, middle_sc_prob, late_sc_prob])
         positions = {e['driver_code']: float(e.get('effective_grid_position', e['grid_position'])) for e in entries}
-        start_pos = {e['driver_code']: e.get('effective_grid_position', e['grid_position']) for e in entries}
         retired      = set()
         retirement_lap = {}
         pace_ms      = {}
@@ -1352,7 +1370,11 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
             if not sc_active and sc_count < 3:
                 phase = 'early' if lap <= race_distance * 0.33 else 'middle' if lap <= race_distance * 0.67 else 'late'
                 phase_weight = sc_phase_weights.get(phase, 1 / 3) * 3
-                if np.random.random() < sc_race_prob * phase_weight / race_distance:
+                # The first event is sampled with the literal race probability.
+                # Follow-up events are conditional on that first event and
+                # cannot inflate P(any SC); chaos only affects repeat events.
+                followup = sc_count > 0 and np.random.random() < min(1., max(0., chaos_factor)) * phase_weight / race_distance
+                if lap == first_sc_lap or followup:
                     sc_active    = True
                     sc_laps_left = np.random.randint(3, 8)
                     sc_count    += 1
@@ -1369,9 +1391,7 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
             for d in pos_sorted:
                 e = entry_by_driver[d]
                 tyre_age[d] += 1
-                shape   = e.get('dnf_shape', 0.8)
-                scale   = e.get('dnf_scale', 60.0)
-                if np.random.random() < retirement_probability(max(lap-1,0), lap, shape, scale):
+                if np.random.random() < race_retirement_probability(e, max(lap-1,0), lap, race_distance):
                     retired.add(d)
                     retirement_lap[d] = lap-1
             pos_sorted = [d for d in pos_sorted if d not in retired]
@@ -1467,24 +1487,8 @@ def simulate_race(entries: list[dict], race_distance: int = 58, artifacts: dict 
 
         active = [d for d in positions if d not in retired]
         active.sort(key=lambda d: positions[d])
-        final_order = []
-        for d in active:
-            gained = start_pos[d] - (active.index(d) + 1)
-            e = entry_by_driver[d]
-            recovery_bonus = 0
-            if start_pos[d] > 10:
-                if e.get('elo_rating', 1400) >= 1600:
-                    recovery_bonus += 3
-                if e.get('team_strength', 10.5) <= 7.0:
-                    recovery_bonus += 2
-                if e.get('driver_overperformance', 0.0) > 1.5:
-                    recovery_bonus += 1
-            max_gain = min(n - 1, MAX_POSITION_GAIN + recovery_bonus)
-            capped = start_pos[d] - max_gain if gained > max_gain else active.index(d) + 1
-            final_order.append((d, capped))
-        final_order.sort(key=lambda x: x[1])
         retired_list = sorted(retired,key=lambda d:(-retirement_lap[d],positions[d],d))
-        ordered      = [d for d, _ in final_order] + retired_list
+        ordered      = active + retired_list
         for pos, driver in enumerate(ordered, 1):
             results[driver].append(pos)
 
@@ -1505,13 +1509,21 @@ def compute_predictions(
     n_2026_races: int = 0,
     robust:       dict[str, dict] | None = None,
     ranking_source: str = 'auto',
+    ensemble_weights: dict[str, float] | None = None,
 ) -> list[dict]:
-    if ranking_source not in {'auto','robust','simulation','blend'}:
+    if ranking_source not in {'auto','robust','simulation','blend','learned'}:
         raise ValueError('Unknown ranking source')
     if robust and set(robust) != {e['driver_code'] for e in entries}:
         raise ValueError('Robust scores must cover the complete entrant field')
     if ranking_source == 'robust' and (not robust or any(e['driver_code'] not in robust for e in entries)):
         raise ValueError('Explicit robust ranking requires scores for every entrant')
+    learned = None
+    if ranking_source == 'learned':
+        from ranking_ensemble import combine
+        if not robust or not ensemble_weights or any('ensemble_scores' not in robust[e['driver_code']] for e in entries):
+            raise ValueError('Learned ranking requires complete experimental members and chronological weights')
+        learned = combine(pd.DataFrame([dict(driver_code=e['driver_code'], **robust[e['driver_code']]['ensemble_scores'])
+                                        for e in entries]), ensemble_weights)
     n_2026       = n_2026_races
     reg_era      = entries[0].get('regulation_era', 0) if entries else 0
     live_w       = entries[0].get('live_weekend_weight', 0.35) if entries else 0.35
@@ -1557,12 +1569,13 @@ def compute_predictions(
         blended_win = mc_weight * win_prob + prior_weight * priors.get(d, 1/n)
         blended_pod = mc_weight * podium_prob + prior_weight * min(priors.get(d, 1/n) * 3, 1.0)
 
-        # Walk-forward over 107 races: the robust model orders the field better than qualifying
-        # (p=0.002) and its podium probability has 13% lower log-loss (p=0.004). Its win
-        # probability is not significantly better than the simulation, so the two are averaged.
+        # Ranking policy is explicit. Event probabilities remain a separate
+        # combination; retrospective gains do not automatically promote a route.
         source = ('robust' if robust and d in robust else 'blend') if ranking_source == 'auto' else ranking_source
         if source == 'simulation':
             blended_finish = mean_pos
+        elif source == 'learned':
+            blended_finish = learned[d]
         if robust and d in robust:
             if source == 'robust':
                 blended_finish = robust[d]['score']
@@ -1597,6 +1610,16 @@ def compute_predictions(
             'simulation_version': SIMULATION_VERSION,
             'simulation_expected_finish': mean_pos,
             'robust_score':       robust[d]['score'] if robust and d in robust else None,
+            'ranking_component_scores': (dict(robust[d]['ensemble_scores']) if source == 'learned' else {
+                'simulation': mean_pos,
+                **({'ml': float(ridge_preds[d])} if ridge_preds and d in ridge_preds else {}),
+                **({'random_forest': float(rf_preds[d])} if rf_preds and d in rf_preds else {}),
+                **({'robust': float(robust[d]['score'])} if robust and d in robust else {}),
+            }),
+            'ranking_weights': (dict(ensemble_weights) if source == 'learned' else {'robust': 1.} if source == 'robust' else {'simulation': 1.}
+                                if source == 'simulation' else {
+                                    'simulation': mc_weight_pos, 'ml': ridge_weight_pos,
+                                    'random_forest': rf_weight_pos}),
             'data_weight_2026':   round(data_weight, 3),
             'training_seasons':   ','.join(str(s) for s in sorted(SEASON_WEIGHTS.keys()) if s < season or s == season),
             'elo_rating':         round(e['elo_rating'], 1),
@@ -1738,7 +1761,7 @@ def write_predictions(predictions: list[dict]) -> None:
                 'raw_finish_p10', 'raw_finish_p90', 'raw_range_method',
                 'range_target_coverage', 'range_calibration_method', 'range_calibration_races',
                 'range_padding', 'ranking_source', 'simulation_version',
-                'simulation_expected_finish', 'robust_score',
+                'simulation_expected_finish', 'robust_score', 'ranking_component_scores', 'ranking_weights',
                 'pre_reconciliation_ranking_source') if key in p}),
         ))
     conn.commit()
@@ -1881,9 +1904,21 @@ def main():
     parser.add_argument("--model-version", help="Exact version for calibration history")
     parser.add_argument("--coherent", action="store_true",
                         help="Experimental: reconcile ranking and points with calibrated position marginals")
-    parser.add_argument('--ranking-source', choices=['auto','robust','simulation','blend'],default='auto',
+    parser.add_argument('--ranking-source', choices=['auto','robust','simulation','blend','learned'],default='auto',
                         help='Explicit finishing-order route; probabilities keep their documented ensemble')
+    parser.add_argument('--simulations', type=int, default=5000,
+                        help='Monte Carlo draws (default 5000; sampling precision only)')
+    parser.add_argument('--collect-components', action='store_true',
+                        help='Also fit ML components unused by robust/simulation ranking for explicit diagnostics')
+    parser.add_argument('--ensemble-history', type=Path,
+                        help='Experimental chronological component-history CSV; requires --ranking-source learned --dry-run')
     args = parser.parse_args()
+    if args.ranking_source == 'learned' and (not args.dry_run or not args.ensemble_history):
+        parser.error('Experimental learned ranking requires --dry-run and --ensemble-history; production promotion is separate')
+    if args.simulations < 1:
+        parser.error('--simulations must be positive')
+    global MC_RUNS
+    MC_RUNS = args.simulations
 
     if args.fit_calibrator:
         step("Fitting calibration curves...")
@@ -1913,7 +1948,29 @@ def main():
     n_2026_races = min(_raw_2026, round_ - 1) if season == 2026 else _raw_2026
     step(f"2026 races in DB: {n_2026_races} / {XGB_TRIGGER_RACES} needed for XGBoost")
 
-    if XGBOOST_AVAILABLE and n_2026_races >= XGB_TRIGGER_RACES:
+    step("Building entry list...")
+    entries = get_entry_list(season, round_, artifacts)
+    if not entries:
+        raise RuntimeError('No entrants available; load complete qualifying first')
+    step(f"  {len(entries)} drivers in entry list")
+    step("Fitting robust order/probability model...")
+    robust = robust_model.forecast(season, round_, entries, circuit,
+                                   collect_components=args.ranking_source == 'learned')
+    ensemble_weights = None
+    if args.ranking_source == 'learned':
+        from ranking_ensemble import fit_weights, protocol
+        manifest = json.loads((args.ensemble_history.parent/'protocol.json').read_text())
+        if manifest.get('member_protocol') != protocol():
+            raise RuntimeError('Ensemble history was produced by a different feature/member protocol')
+        fit = fit_weights(pd.read_csv(args.ensemble_history), (season, round_))
+        ensemble_weights = fit['weights']
+        step(f"  Experimental rank weights ({fit['meta_races']} earlier races): {ensemble_weights}")
+    use_ml = (args.collect_components or args.ranking_source == 'blend'
+              or (args.ranking_source == 'auto' and not robust))
+    if not use_ml:
+        ml_model, ml_type = None, 'none'
+        step('  Ranking uses robust scores or simulation; unused ML fits skipped')
+    elif XGBOOST_AVAILABLE and n_2026_races >= XGB_TRIGGER_RACES:
         step(f"Training XGBoost...")
         ml_model = train_xgboost(artifacts['features'], n_2026_races, season, round_)
         ml_type  = 'xgboost'
@@ -1926,15 +1983,8 @@ def main():
     model_prefix = "prod_" if args.production else ""
     if os.environ.get("F1_BACKFILL") == "1":
         model_prefix += "backfill_"
-    MODEL_VERSION = f"{model_prefix}v5_regaware_{'xgb' if ml_type == 'xgboost' else 'ridge'}_mc"
-
-    step("Building entry list...")
-    entries = get_entry_list(season, round_, artifacts)
-    step(f"  {len(entries)} drivers in entry list")
-    if len(entries) == 0:
-        print("  No drivers found. Load qualifying data first:")
-        print("    python load_fastf1_v4.py --seasons 2026 --quali-only")
-        return
+    suffix = 'mc' if ml_type == 'none' else f"{'xgb' if ml_type == 'xgboost' else 'ridge'}_mc"
+    MODEL_VERSION = f"{model_prefix}v5_regaware_{suffix}"
 
     if ml_type == 'xgboost':
         ridge_preds = predict_xgboost(ml_model, entries)
@@ -1943,8 +1993,9 @@ def main():
     if ridge_preds:
         step(f"  {ml_type.capitalize()} predictions computed for {len(ridge_preds)} drivers")
 
-    step("Training Random Forest ensemble...")
-    rf_pipe  = train_random_forest(artifacts['features'], season, round_)
+    if use_ml:
+        step("Training Random Forest ensemble...")
+    rf_pipe  = train_random_forest(artifacts['features'], season, round_) if use_ml else None
     rf_preds = predict_ridge(rf_pipe, entries) if rf_pipe else None
     if rf_preds:
         step(f"  Random Forest predictions computed")
@@ -1969,15 +2020,13 @@ def main():
     sim_results = simulate_race(entries, race_distance=race_distance, artifacts=artifacts)
     step("  Simulations complete")
 
-    step("Fitting robust order/probability model...")
-    robust = robust_model.forecast(season, round_, entries, circuit)
     if robust:
         MODEL_VERSION = MODEL_VERSION.replace('v5_regaware', 'v6_robust')
         step(f"  Robust model scored {len(robust)} drivers")
     else:
         step("  Insufficient history — using the simulation/ML blend")
 
-    family = 'v8_coherent' if args.coherent else 'v8_calibrated'
+    family = 'v9_coherent' if args.coherent else 'v9_calibrated'
     if args.ranking_source != 'auto':
         family += '_rank_'+args.ranking_source
     MODEL_VERSION = MODEL_VERSION.replace('v6_robust', family + '_robust').replace('v5_regaware', family)
@@ -1987,6 +2036,7 @@ def main():
         entries, sim_results, priors, season, round_, gp_name,
         ridge_preds=ridge_preds, rf_preds=rf_preds, n_2026_races=n_2026_races, robust=robust,
         ranking_source=args.ranking_source,
+        ensemble_weights=ensemble_weights,
     )
     if args.coherent:
         predictions = finalize_predictions(predictions, sim_results, calibrator)
