@@ -11,7 +11,6 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
 import requests
-from official_results import SLUGS, fetch, result_urls
 
 BASE = 'https://api.openf1.org/v1'
 _last_request = 0.
@@ -45,10 +44,8 @@ def qualifying_rows(results, drivers, season):
         raise RuntimeError('OpenF1 qualifying driver roster is incomplete')
     if len(results) != expected or {r['driver_number'] for r in results} != set(roster):
         raise RuntimeError('OpenF1 qualifying results differ from driver roster')
-    positions = [r.get('position') for r in results]
-    if (any(type(position) is not int for position in positions)
-            or sorted(positions) != list(range(1, expected + 1))):
-        raise RuntimeError('OpenF1 qualifying positions are incomplete; retry or use official qualifying')
+    if sorted(r['position'] for r in results) != list(range(1, expected + 1)):
+        raise RuntimeError('OpenF1 qualifying positions are incomplete')
     rows = []
     for result in results:
         durations = result.get('duration')
@@ -63,80 +60,6 @@ def qualifying_rows(results, drivers, season):
         raise RuntimeError('OpenF1 qualifying times are incomplete')
     return [(code, q1, q2, q3, best, best - pole if best else None, position, None)
             for code, q1, q2, q3, best, position in rows]
-
-
-def official_qualifying_url(season, event_name):
-    slug = SLUGS.get(event_name.removesuffix(' Grand Prix'))
-    urls = result_urls(season)
-    if not slug or slug not in urls:
-        raise RuntimeError('Official qualifying URL unavailable; retry when published')
-    return urls[slug].removesuffix('/race-result') + '/qualifying'
-
-
-def official_qualifying_teams(season, event_name, expected):
-    teams = {}
-    url = official_qualifying_url(season, event_name)
-    # No-time entrants can be absent from the qualifying results table. Their
-    # team identity is still published in the pre-race starting-grid table.
-    # Only metadata is read here; no positions or race outcomes are substituted.
-    for page_url in (url, url.removesuffix('/qualifying')+'/starting-grid'):
-        seen = set()
-        for cells in fetch(page_url).rows:
-            if len(cells) < 4 or not cells[1].isdigit():
-                continue
-            code = re.search(r'([A-Z]{3})$', cells[2])
-            if not code or code[1] in seen or not cells[3]:
-                raise RuntimeError('Official qualifying team roster is invalid')
-            seen.add(code[1])
-            if code[1] in teams and teams[code[1]] != cells[3]:
-                raise RuntimeError('Conflicting official weekend team identities')
-            teams[code[1]] = cells[3]
-        if set(teams) == set(expected):
-            return teams
-        if set(teams)-set(expected):
-            break
-    if set(teams) != set(expected):
-        raise RuntimeError('Official qualifying team roster differs from entrants')
-    return teams
-
-
-def official_qualifying_rows(season, calendar, drivers):
-    """Use the published qualifying order, including explicitly excluded entrants.
-
-    DQ/DSQ/NC entries retain their order at the end of the official table, as
-    with official race classifications. Never infer an absent position from
-    OpenF1 times, list order, or the race's starting grid.
-    """
-    url = official_qualifying_url(season, calendar[0])
-    results = []
-    excluded = False
-    roster = {d['driver_number']: d['name_acronym'] for d in drivers}
-    for cells in fetch(url).rows:
-        if len(cells) != 8 or not (cells[0].isdigit() or cells[0] in {'DQ', 'DSQ', 'NC'}):
-            continue
-        code = re.search(r'([A-Z]{3})$', cells[2])
-        if not cells[1].isdigit() or not code or roster.get(int(cells[1])) != code[1]:
-            raise RuntimeError('Official qualifying entrants differ from OpenF1 roster')
-        if cells[0].isdigit():
-            if excluded:
-                raise RuntimeError('Official qualifying excluded entries are not at the end')
-            position = int(cells[0])
-        else:
-            excluded = True
-            position = len(results) + 1
-        durations = []
-        for value in cells[4:7]:
-            if not value:
-                durations.append(None)
-            elif re.fullmatch(r'\d+:\d{2}\.\d{3}', value):
-                minutes, seconds = value.split(':')
-                durations.append(int(minutes) * 60 + float(seconds))
-            else:
-                raise RuntimeError(f'Invalid official qualifying time: {value}')
-        results.append(dict(driver_number=int(cells[1]), position=position, duration=durations))
-    rows = qualifying_rows(results, drivers, season)
-    print(f'Using official qualifying classification: {url}', flush=True)
-    return rows
 
 
 @lru_cache(maxsize=4)
@@ -163,11 +86,7 @@ def qualifying_bundle(season, number):
     session = qualifying[0]
     drivers = get('drivers', session_key=session['session_key'])
     results = get('session_result', session_key=session['session_key'])
-    try:
-        rows = qualifying_rows(results, drivers, season)
-    except RuntimeError as error:
-        print(f'OpenF1 qualifying unavailable ({error}); checking official qualifying', flush=True)
-        rows = official_qualifying_rows(season, calendar, drivers)
+    rows = qualifying_rows(results, drivers, season)
     return calendar, session, rows, weekend
 
 

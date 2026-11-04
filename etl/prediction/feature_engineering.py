@@ -24,7 +24,6 @@ from dotenv import load_dotenv
 import psycopg2
 from asof import bounded_sql
 from tyre_model import fit_tyre_curve
-from survival import empirical_fraction_survival
 
 load_dotenv(Path(__file__).resolve().parents[2] / "web" / ".env.local")
 DATABASE_URL = os.environ.get("NEON_DATABASE_URL")
@@ -747,8 +746,17 @@ step(f"Saved circuit_profiles.json")
 dnf_survival = {}
 for driver in results['driver_code'].unique():
     d_res    = results[results['driver_code'] == driver]
-    # Exclusions and absent status are not on-track reliability observations.
-    dnf_survival[driver] = empirical_fraction_survival(d_res.status)
+    n_races  = len(d_res)
+    n_dnf    = int(d_res['is_dnf'].sum())
+    dnf_rate = n_dnf / max(n_races, 1)
+    shape    = 0.8
+    scale    = 58 / ((-np.log(max(1 - dnf_rate, 0.01))) ** (1/shape))
+    dnf_survival[driver] = {
+        'dnf_rate': round(dnf_rate, 4),
+        'shape':    round(shape, 3),
+        'scale':    round(float(scale), 2),
+        'n_races':  n_races, 'n_dnf': n_dnf,
+    }
 
 with open(OUT / 'dnf_survival.json', 'w') as f:
     json.dump(dnf_survival, f, indent=2)

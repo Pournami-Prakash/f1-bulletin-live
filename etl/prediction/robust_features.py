@@ -58,20 +58,14 @@ def build(df, pace=None):
             delta = r.quali_pos - r.finish_position
             ewm_update(d_delta, drv, delta); ewm_update(d_fin, drv, r.finish_position); ewm_update(d_q, drv, r.quali_pos)
             ewm_update(d_dnf, drv, r.dnf)
+            ewm_update(t_dnf, team, r.dnf, 0.15)
+            for store, v in ((t_delta, delta), (t_fin, r.finish_position), (t_q, r.quali_pos)):
+                ewm_update(store, (season, team), v, 0.3)
+                store[team] = store[(season, team)]  # carry to next season as prior
             if pd.notna(r.pace):
                 ewm_update(d_pace, drv, r.pace, 0.35); ewm_update(d_pace_s, drv, r.pace, 0.12)
+                ewm_update(t_pace, (season, team), r.pace, 0.35); t_pace[team] = t_pace[(season, team)]
             circ.setdefault(r.circuit, []).append(abs(delta))
-        # One observation per team/race. Qualifying order must not decide which
-        # teammate receives the greater weight in the next race's team state.
-        for team, group in race.groupby('team', sort=True):
-            ewm_update(t_dnf, team, group.dnf.mean(), 0.15)
-            for store, value in ((t_delta, (group.quali_pos-group.finish_position).mean()),
-                                 (t_fin, group.finish_position.mean()), (t_q, group.quali_pos.mean())):
-                ewm_update(store, (season, team), value, 0.3)
-                store[team] = store[(season, team)]
-            if group.pace.notna().any():
-                ewm_update(t_pace, (season, team), group.pace.mean(), 0.35)
-                t_pace[team] = t_pace[(season, team)]
     out = pd.DataFrame(rows)
     key = ["season", "round"]
     out["pace_comb"] = out[["d_pace", "t_pace"]].mean(axis=1)

@@ -14,15 +14,6 @@ function load(source, imports = {}) {
 }
 const neon = load('../src/lib/neon.ts')
 const { shapeRacePrediction } = load('../src/lib/predictions.ts', { '@/lib/neon': neon })
-const { predictionMethod } = load('../src/lib/prediction-method.ts')
-
-test('method descriptions follow the actual route before the model family', () => {
-  assert.match(predictionMethod('prod_v9_calibrated_robust_mc'), /^Robust model finish order/)
-  assert.match(predictionMethod('prod_v10_calibrated_rank_simulation_robust_mc'), /^Finish order comes from race simulations/)
-  assert.match(predictionMethod('prod_v9_calibrated_rank_blend_robust_xgb_mc'), /^Finish order blends machine-learning/)
-  assert.match(predictionMethod('prod_v9_coherent_rank_blend_robust_xgb_mc'), /^Finish order is reconciled/)
-  assert.match(predictionMethod('v9_calibrated_rank_learned_robust_mc'), /^Experimental ensemble/)
-})
 for (const value of [0, '0', null]) {
   test(`prediction response preserves ${JSON.stringify(value)} metrics`, () => {
     const response = shapeRacePrediction({ season: 2026, round: 1,

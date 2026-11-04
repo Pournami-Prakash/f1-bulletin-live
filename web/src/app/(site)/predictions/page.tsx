@@ -5,7 +5,6 @@ import Image from 'next/image'
 import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import { predictionMethod } from '@/lib/prediction-method'
 
 type DriverPrediction = {
   driver_code: string; team: string; predicted_position: number
@@ -524,7 +523,7 @@ export default function PredictionsPage() {
                 <div style={{ fontSize: 9, color: 'rgba(255,255,255,.2)', fontFamily: mono, letterSpacing: '.14em', marginBottom: 12 }}>MODEL NOTES</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
                   {[
-                    { label: 'METHOD',          value: predictionMethod(data.model_version) },
+                    { label: 'METHOD',          value: /v[678]_.*robust_/.test(data.model_version) ? 'Robust model finish order; win and podium probabilities combine model estimates with race simulations.' : data.model_version.includes('v5_regaware_') ? 'ML ensemble finish order + Bayesian / Monte Carlo probabilities' : data.model_version.includes('v4_regaware_') ? 'Bayesian + Monte Carlo; legacy ML estimates excluded from final order' : `Model: ${data.model_version}` },
                     { label: 'SIMULATIONS',      value: `${data.simulation_runs.toLocaleString()} race simulations` },
                     { label: '2026 DATA WEIGHT', value: `${(data.data_weight_2026 * 100).toFixed(0)}% (grows each race)` },
                     { label: 'VALIDATION', value: 'Accuracy is measured only after race results are recorded. Historical replays are labelled separately.' },
