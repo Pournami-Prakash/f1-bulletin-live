@@ -8,7 +8,7 @@ const code=ts.transpileModule(readFileSync(new URL('../src/lib/championship.ts',
 }).outputText
 const loaded={exports:{}}
 new Function('module','exports',code)(loaded,loaded.exports)
-const {simulateChampionship,RACE_POINTS,SPRINT_POINTS}=loaded.exports
+const {simulateChampionship,RACE_POINTS,SPRINT_POINTS,securedChampion,reachablePositions}=loaded.exports
 
 function fixture() {
   const calendar=Array.from({length:4},(_,i)=>({round:i+1,race_name:`Race ${i+1}`,circuit_name:`Track ${i+1}`,
@@ -232,4 +232,31 @@ test('automatic paths agree with exhaustive valid classifications, including ina
       }
     }
   }
+})
+
+
+test('secured championship uses scoring and countback, never a sampled clean sweep',()=>{
+  const open=simulateChampionship(fixture())
+  for(const driver of open.drivers) driver.title_probability=driver.current_position===1?1:0
+  assert.equal(securedChampion(open),undefined)
+  const data=fixture()
+  for(const row of data.results) if(row.driver_code==='A') row.points=300
+  const locked=simulateChampionship(data)
+  assert.equal(securedChampion(locked).driver_code,'A')
+  for(const driver of locked.drivers.filter(d=>d.driver_code!=='A')) {
+    const bounds=reachablePositions(driver,locked.drivers)
+    assert.ok(bounds.best>=2)
+    assert.ok(bounds.worst>=bounds.best)
+  }
+})
+
+test('position bounds retain tied points and mathematically reachable unsampled places',()=>{
+  const data=simulateChampionship(fixture())
+  const leader=data.drivers.find(d=>d.current_position===1)
+  const challenger=data.drivers.find(d=>d.current_position===2)
+  challenger.maximum_points=leader.current_points
+  challenger.position_probabilities[0]=0
+  assert.equal(reachablePositions(challenger,data.drivers).best,1)
+  challenger.maximum_points=leader.current_points-1
+  assert.ok(reachablePositions(challenger,data.drivers).best>=2)
 })

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { pageMetadata } from '@/lib/site-metadata'
 
-export const metadata = pageMetadata('F1 Championship Forecast',
-  'Explore every driver’s championship chances, best-to-worst scenario ranges and projections for each remaining Grand Prix.', '/championship')
+export const metadata = pageMetadata('F1 Championship Outlook',
+  'Follow the championship winner, battles for the remaining positions, points gaps and season projections for every driver.', '/championship')
 
 export default function Layout({ children }: { children: ReactNode }) { return children }
