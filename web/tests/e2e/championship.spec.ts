@@ -111,7 +111,7 @@ test('championship end-of-season state shows final standings with no future even
     calendar: fixture.remaining.length ? [{ round: 1, race_name: 'Australian Grand Prix', circuit_name: 'Albert Park', race_start_utc: '2026-03-08T04:00:00Z', is_sprint_weekend: false, sprint_date: null }] : [] })
   await page.route('**/api/championship', route => route.fulfill({ json: { ok: true, ...final } }))
   await page.goto('/championship')
-  await page.getByText('Explore contender projections',{exact:true}).click()
+  await page.getByText('Explore remaining positions',{exact:true}).click()
   await expect(page.getByText('0 RACES LEFT')).toBeVisible()
   await expect(page.getByText(/No races remain on the recorded calendar/)).toBeVisible()
   await page.getByText('Explore race outcomes',{exact:true}).click()
@@ -200,37 +200,45 @@ test('full-season roster has consistent scales and collision-free labels for eve
 })
 
 
-test('eliminated drivers stay out of the title fight and remain available in optional outlooks',async({page})=>{
-  const out=simulateChampionship({season:2026,results:results.map(r=>({...r,points:r.driver_code==='AAA'?300:r.points})),simulations:100,
+test('secured champion stays prominent while remaining position battles replace clinching',async({page})=>{
+  const out=simulateChampionship({season:2026,results:results.map(r=>({...r,driver_code:r.driver_code==='AAA'?'ANT':r.driver_code,points:r.driver_code==='AAA'?300:r.points})),simulations:100,
     now:'2026-03-10T00:00:00Z',calendar:[
       {round:1,race_name:'Australian Grand Prix',circuit_name:'Albert Park',race_start_utc:'2026-03-08T04:00:00Z',is_sprint_weekend:false,sprint_date:null},
       ...fixture.remaining.map(e=>({...e,is_sprint_weekend:false,sprint_date:null})),
     ]})
+  // Keep mathematically possible drivers visible even without a sampled P2.
+  out.drivers.find(d=>d.driver_code==='DDD')!.position_probabilities=[0,0,0,1]
   await page.route('**/api/championship',r=>r.fulfill({json:{ok:true,...out}}))
+  await page.route('**/api/standings?*',r=>r.fulfill({json:{standings:[{Driver:{code:'ANT',givenName:'Kimi',familyName:'Antonelli'}}]}}))
   await page.goto('/championship')
-  const fight=page.getByRole('region',{name:'The title fight',exact:true})
-  await expect(fight.getByRole('button')).toHaveCount(1)
-  await expect(fight).toContainText('AAA')
-  await expect(fight).not.toContainText('BBB')
-  await expect(page.getByRole('region',{name:'Interactive championship possibility map'})).toBeHidden()
-  await page.getByText('Build a custom scenario (optional)',{exact:true}).click()
-  await expect(page.getByLabel('Championship driver').locator('option')).toHaveCount(1)
-  await page.getByText('Other drivers’ season outlooks',{exact:false}).click()
-  await page.getByRole('group',{name:'Other drivers',exact:true}).getByRole('button',{name:/BBB/}).click()
+  const summary=page.getByRole('region',{name:'Championship at a glance'})
+  await expect(summary).toContainText('2026 World Champion')
+  await expect(summary).toContainText('Kimi Antonelli')
+  await expect(summary).toContainText('Title secured')
+  await expect(page.getByRole('heading',{name:'The title fight',exact:true})).toHaveCount(0)
+  await expect(page.getByText('Build a custom scenario (optional)',{exact:true})).toHaveCount(0)
+  await expect(page.getByText('Other drivers’ season outlooks',{exact:false})).toHaveCount(0)
+  const battles=page.getByRole('region',{name:'The battle for the remaining places'})
+  await expect(battles.getByRole('button')).toHaveCount(3)
+  await expect(battles.getByRole('button',{name:'Explore ANT championship outlook'})).toHaveCount(0)
+  await expect(battles.getByRole('button',{name:'Explore DDD championship outlook'})).toBeVisible()
+  await expect(page.getByLabel('Focus on position')).toHaveValue('2')
+  await page.getByLabel('Focus on position').selectOption('4')
+  await expect(battles).toContainText('can still reach P4')
+  await battles.getByRole('button',{name:'Explore BBB championship outlook'}).click()
   const map=page.getByRole('region',{name:'Interactive championship possibility map'})
   await expect(map.getByRole('img')).toHaveAccessibleName(/BBB championship possibilities/)
+  await expect(page.getByRole('button',{name:'Follow Kimi Antonelli',exact:true})).toBeVisible()
+  await expect(page.locator('aside')).not.toContainText('Simulated title share')
+  await page.getByText('Show all drivers’ position chances',{exact:true}).click()
+  const field=page.getByRole('region',{name:'Whole-grid position probabilities'})
+  await expect(field.getByRole('columnheader',{name:'Season outlook',exact:true})).toBeVisible()
+  await expect(field.getByRole('row').filter({has:page.getByRole('button',{name:'Kimi Antonelli ANT',exact:true})})).toContainText('Champion')
+  await expect(field).not.toContainText('Out on points')
   await page.getByText('Explore race outcomes',{exact:true}).click()
   await page.getByRole('button',{name:'Race finishes',exact:true}).click()
   await expect(map.getByRole('img')).toHaveAccessibleName(/BBB race finishing possibilities/)
-  await page.getByText('Explore race outcomes',{exact:true}).click()
-  await expect(map.getByRole('img')).toHaveAccessibleName(/BBB championship possibilities/)
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)
-  await page.getByText('Explore contender projections',{exact:true}).click()
-  await page.evaluate(()=>window.scrollTo(0,0))
-  await page.getByText('Build a custom scenario (optional)',{exact:true}).click()
-  await page.getByText('Other drivers’ season outlooks',{exact:false}).click()
-  await page.evaluate(()=>window.scrollTo(0,0))
-  await page.screenshot({path:`/tmp/championship-redesign-${test.info().project.name}.png`,fullPage:true})
 })
 
 test('automatic title paths and the full field are visible without choosing a driver or finish',async({page})=>{

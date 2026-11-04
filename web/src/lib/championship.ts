@@ -145,6 +145,31 @@ export type ChampionshipForecast = {
   drivers: ChampionshipDriver[]; races: RaceScenario[]; warnings: string[]; unresolved_tie_probability: number
 }
 
+/** A sampled clean sweep alone never establishes a clinched championship. */
+export function securedChampion(data: ChampionshipForecast): ChampionshipDriver | undefined {
+  const leader = data.drivers.find(d => d.current_position === 1)
+  if (!leader) return undefined
+  if (data.drivers.every(d => d === leader || d.maximum_points < leader.current_points)) return leader
+  const context = data.next_race_clinch
+  const candidate = context?.drivers.find(d => d.driver_code === leader.driver_code)
+  if (context && candidate && context.drivers.every(rival => rival === candidate ||
+    clinchAgainst(candidate, rival, 0, 0, {
+      future_points: context.future_points + 25 + (context.sprint_pending ? 8 : 0),
+      future_races: context.future_races + 1,
+    }) === 'safe')) return leader
+  // With no future events, these frequencies are exact recorded countback outcomes.
+  if (!data.remaining.length && leader.position_probabilities[0] === 1) return leader
+  return undefined
+}
+
+/** Conservative points bounds: tied totals remain possible until countback is resolved. */
+export function reachablePositions(driver: ChampionshipDriver, drivers: ChampionshipDriver[]) {
+  return {
+    best: 1 + drivers.filter(d => d.driver_code !== driver.driver_code && d.current_points > driver.maximum_points).length,
+    worst: drivers.length - drivers.filter(d => d.driver_code !== driver.driver_code && d.maximum_points < driver.current_points).length,
+  }
+}
+
 export class ChampionshipDataError extends Error {}
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
 function randomGenerator(seed: number) {

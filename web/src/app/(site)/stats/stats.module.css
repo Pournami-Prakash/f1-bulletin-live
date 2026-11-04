@@ -1,0 +1,84 @@
+.page { max-width: 1500px; margin: 0 auto; padding: calc(var(--header-h) + 30px) clamp(20px, 4vw, 64px) 48px; color: var(--t1); --atlas-gold: #27f4d2; }
+.masthead { display: flex; justify-content: space-between; gap: 16px; font-size: 10px; letter-spacing: .13em; color: var(--t2); border-bottom: 1px solid var(--b2); padding-bottom: 16px; }
+.introduction { display: flex; justify-content: space-between; align-items: flex-end; gap: 32px; padding: 36px 0 38px; }
+.eyebrow { font-size: 10px; letter-spacing: .13em; text-transform: uppercase; color: var(--t2); margin-bottom: 10px; }
+.introduction h1 { font: 400 clamp(38px, 5vw, 72px)/.98 var(--font-bebas); letter-spacing: .015em; }
+.introduction h1 span { color: var(--gold); }
+.introduction > p { color: var(--t2); font-family: Georgia, serif; font-size: 18px; line-height: 1.6; padding-bottom: 4px; }
+.explorer { scroll-margin-top: calc(var(--header-h) + 24px); }
+.sectionHeading, .atlasHeading { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; }
+.sectionHeading h2, .atlasHeading h2 { font: 400 clamp(28px, 3.4vw, 42px)/1 var(--font-bebas); letter-spacing: .025em; }
+.sectionHeading > p { color: var(--t2); font-size: 11px; max-width: 310px; line-height: 1.7; }
+.momentTrack { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 0; margin-top: 24px; padding: 12px 0; border: 1px solid var(--b2); background: var(--bg2); }
+.momentTrack button { position: relative; background: transparent; color: var(--t2); border: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; font: inherit; padding: 10px 4px; cursor: pointer; }
+.momentTrack button::before { content: ''; position: absolute; top: 59px; height: 1px; background: var(--b2); width: 100%; z-index: 0; }
+.momentTrack button:first-child::before { width: 50%; right: 0; }
+.momentTrack button:last-child::before { width: 50%; left: 0; }
+.momentYear { font-size: 8px; letter-spacing: .03em; }
+.momentDot { position: relative; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--b2); background: var(--bg2); font: 400 22px/1 var(--font-bebas); color: var(--t1); transition: background .18s, transform .18s; }
+.momentTrack button[aria-pressed='true'] .momentDot { background: var(--atlas-gold); color: #031a17; border-color: var(--atlas-gold); transform: translateY(-3px); }
+.momentTrack button:hover .momentDot { border-color: var(--gold); }
+.momentLabel { font-size: 9px; letter-spacing: .06em; }
+.momentTrack button[aria-pressed='true'] .momentLabel { color: var(--t1); }
+.trackNote { font-size: 9px; color: var(--t2); margin: 10px 0 32px; }
+.atlasHeading { padding-top: 24px; border-top: 1px solid var(--b2); }
+.filters { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--b2); }
+.filters button, .atlasSummary button { background: transparent; color: var(--t2); border: 0; border-bottom: 2px solid transparent; font: inherit; font-size: 10px; padding: 12px 9px; cursor: pointer; min-height: 44px; }
+.filters button[aria-pressed='true'] { color: var(--t1); border-bottom-color: var(--gold); }
+.filters button:hover { background: var(--b1); }
+.atlasSummary { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin: 16px 0 12px; }
+.atlasSummary p { font-size: 11px; color: var(--t2); }
+.atlasSummary strong { font-size: 18px; color: var(--t1); font-weight: 500; }
+.atlasSummary button { padding: 6px 12px; }
+.atlasSummary button:disabled { opacity: .6; cursor: default; }
+.atlasLayout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 32px; align-items: start; }
+.clusters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 24px; align-items: start; }
+.cluster { border-top: 2px solid var(--cluster-color); padding-bottom: 14px; }
+.clusterHeading { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; padding: 10px 0; min-height: 44px; color: var(--t1); border: 0; background: transparent; text-align: left; font: inherit; font-size: 10px; cursor: pointer; }
+.clusterHeading strong { color: var(--cluster-color); font-size: 18px; font-weight: 400; }
+.clusterHeading[aria-pressed='true'] { text-decoration: underline; text-underline-offset: 5px; }
+.dots { display: grid; grid-template-columns: repeat(auto-fill, 24px); gap: 1px; align-content: start; }
+.dot { position: relative; width: 24px; height: 24px; border: 0; background: transparent; display: grid; place-items: center; cursor: pointer; padding: 0; }
+.dot > span { display: block; width: 13px; height: 13px; border: 1.5px solid var(--cluster-color); border-radius: 50%; opacity: .36; transition: opacity .18s, transform .18s; }
+.dot[data-related='true'] > span { opacity: 1; }
+.dot[data-linked='true'] > span { background: var(--cluster-color); }
+.dot:hover > span, .dot:focus-visible > span, .dot[aria-pressed='true'] > span { opacity: 1; transform: scale(1.35); }
+.dot[aria-pressed='true'] { outline: 1px solid var(--t1); outline-offset: -2px; border-radius: 50%; }
+.empty { font-size: 10px; color: var(--t2); padding: 6px 0; }
+.inspector { scroll-margin-top: calc(var(--header-h) + 20px); position: sticky; top: calc(var(--header-h) + 20px); padding: 24px; background: #0b1d1b; color: #eeeae1; min-height: 400px; border: 1px solid #1f4743; }
+.inspectorLabel { font-size: 10px; letter-spacing: .1em; color: #b4c2c6; text-transform: uppercase; }
+.inspectorGlyph { font: 400 82px/1.15 var(--font-bebas); color: #27f4d2; margin: 20px 0 14px; }
+.sourceBadge { font-size: 8px; letter-spacing: .11em; color: #9fe9dc; }
+.inspector h3 { font: 400 30px/1.08 var(--font-bebas); margin: 10px 0 12px; overflow-wrap: anywhere; }
+.inspector > p:not(.sourceBadge):not(.inspectorLabel) { font-size: 11px; line-height: 1.8; color: #d3dadd; }
+.inspector a { display: inline-block; color: #eeeae1; font-size: 10px; margin-top: 18px; text-underline-offset: 5px; }
+.slam { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0 0; padding-top: 16px; border-top: 1px solid #1f4743; }
+.slam span { display: flex; align-items: center; gap: 8px; font-size: 8px; }
+.slam b { color: #27f4d2; font-size: 14px; }
+.relatedCount { display: flex; gap: 14px; align-items: center; padding-top: 20px; margin-top: 22px; border-top: 1px solid #1f4743; }
+.relatedCount strong { font: 400 44px/1 var(--font-bebas); color: #27f4d2; }
+.relatedCount span { color: #b4c2c6; font-size: 9px; line-height: 1.7; }
+.inspector .inspectorHint { margin-top: 14px; font-size: 9px !important; }
+.recovery { display: flex; align-items: center; gap: 12px; margin-top: 24px; font: 400 32px/1 var(--font-bebas); }
+.recovery i { height: 1px; background: #27f4d2; flex: 1; position: relative; }
+.recovery i::after { content: '›'; position: absolute; right: -1px; top: -17px; font-style: normal; color: #27f4d2; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px 18px; margin: 18px 0 10px; border-top: 1px solid var(--b2); padding-top: 16px; }
+.legend > span { display: flex; align-items: center; gap: 7px; color: var(--t2); font-size: 9px; }
+.legend i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--gold); }
+.solidDot { background: var(--gold); }.dimDot { opacity: .36; }
+.mapNote, .editorial { color: var(--t2); font-size: 10px; line-height: 1.8; }
+.original { font-size: 10px; margin-top: 18px; color: #b4c2c6; line-height: 1.8; }
+.original summary { cursor: pointer; padding: 10px 0; }.original p { margin-top: 8px; }
+.backToMoment { min-height: 44px; background: transparent; border: 0; color: #27f4d2; font: inherit; font-size: 10px; margin-top: 18px; cursor: pointer; text-align: left; }
+.method { border-top: 1px solid var(--b2); padding: 24px 0; margin-top: 32px; display: grid; grid-template-columns: 1fr 2fr; gap: 36px; }
+.method strong { font: 400 24px/1.2 var(--font-bebas); }.method p { font-size: 10px; line-height: 1.8; color: var(--t2); }
+.page a:focus-visible, .page button:focus-visible, .page summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+@media (max-width: 1150px) { .atlasHeading { align-items: flex-start; flex-direction: column; } .atlasLayout { grid-template-columns: minmax(0, 1fr) 285px; gap: 20px; } .clusters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .introduction > p { font-size: 16px; } }
+@media (max-width: 700px) { .masthead { font-size: 8px; letter-spacing: .06em; } .introduction { align-items: flex-start; flex-direction: column; gap: 16px; padding: 28px 0; } .introduction h1 { font-size: clamp(34px, 8.5vw, 54px); } .introduction > p { font-size: 16px; } .sectionHeading { align-items: flex-start; flex-direction: column; gap: 10px; } .momentTrack { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 0; } .momentTrack button:nth-child(4)::before, .momentTrack button:last-child::before { width: 50%; left: 0; } .momentTrack button:nth-child(5)::before { width: 50%; right: 0; } .momentDot { width: 44px; height: 44px; } .momentTrack button::before { top: 57px; } .momentYear { font-size: 7px; } .momentLabel { font-size: 8px; } .atlasLayout { display: flex; flex-direction: column-reverse; gap: 24px; } .atlasLayout > div { width: 100%; } .inspector { scroll-margin-top: calc(var(--header-h) + 20px); position: static; width: 100%; min-height: 0; padding: 20px; } .inspectorGlyph { float: right; font-size: 56px; margin: 4px 0 10px 16px; } .inspector h3 { font-size: 26px; } .inspectorLabel { margin-bottom: 16px; } .slam { margin-top: 16px; } .relatedCount { margin-top: 16px; padding-top: 12px; } .relatedCount strong { font-size: 30px; } .clusters { gap: 12px 16px; } .clusterHeading { font-size: 9px; } .atlasSummary p > span { display: block; font-size: 9px; } .method { grid-template-columns: 1fr; gap: 12px; } .filters button { font-size: 9px; padding: 10px 8px; } }
+@media (prefers-reduced-motion: reduce) { .dot > span, .momentDot { transition: none; } }
+
+:global([data-theme='light']) .dot > span { border-color: color-mix(in srgb, var(--cluster-color) 65%, #292b28); opacity: .6; }
+:global([data-theme='light']) .dot[data-related='true'] > span, :global([data-theme='light']) .dot:hover > span, :global([data-theme='light']) .dot[aria-pressed='true'] > span { opacity: 1; }
+
+.atlasDisclosure { border-top: 1px solid var(--b2); margin-top: 32px; }
+.atlasDisclosure > summary { padding: 24px 0; cursor: pointer; font-size: 13px; }
