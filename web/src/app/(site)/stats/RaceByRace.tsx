@@ -16,7 +16,9 @@ const code = (race: Race) => codes[race.circuit] ?? race.circuit.slice(0, 3).toU
 const outcome = (race: Race) => race.dnf ? 'dnf' : race.finish === 1 ? 'win' : race.finish <= 3 ? 'podium' : race.finish <= 10 ? 'points' : 'none'
 const outcomeLabel = { win: 'Win', podium: 'Podium', points: 'Points', none: 'No points', dnf: 'Did not finish' }
 const defaults: Record<Season, number> = { 2025: 21, 2026: 13 }
-const date = (value: string) => new Date(`${value}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+// Format by hand: Node and browsers disagree on en-GB short months ("Sept" vs "Sep"), which breaks hydration.
+const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const date = (value: string) => { const [year, month, day] = value.split('-').map(Number); return `${day} ${months[month - 1]} ${year}` }
 
 export default function RaceByRace() {
   const [year, setYear] = useState<Season>(2026)
