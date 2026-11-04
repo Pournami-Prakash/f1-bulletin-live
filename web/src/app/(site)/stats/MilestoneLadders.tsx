@@ -6,6 +6,7 @@ import { ageAt } from '@/lib/kimi-stats'
 import { useChartWidth } from './hooks'
 import AgeStrip from './AgeStrip'
 import styles from './records.module.css'
+import kimi from './kimi.module.css'
 
 type LadderId = (typeof ladders)[number]['id']
 const unit: Record<LadderId, [string, string]> = { wins: ['win', 'wins'], poles: ['pole', 'poles'], podiums: ['podium', 'podiums'], fastest: ['fastest lap', 'fastest laps'], points: ['points', 'points'] }
@@ -38,9 +39,12 @@ export default function MilestoneLadders() {
     setRungIndex(Math.max(0, Math.min(ladder.rungs.length - 1, (rungIndex ?? ladder.rungs.length - 1) + step)))
   }
 
-  return <div className={styles.records}>
-    <h3 className={styles.blockTitle}>Climbing the ladders first</h3>
-    <p className={styles.blockDek}>Many lines in the list are one ladder: youngest to 2 wins, then 3, then 4. Here each ladder is a single climb. Filled rungs are the counts he reached younger than any driver in F1 history.</p>
+  return <section id="milestones" className={`${kimi.section} ${styles.records}`} aria-labelledby="milestones-title">
+    <header className={kimi.sectionHead}>
+      <p className={kimi.kicker}><span>07</span> Milestone ladders</p>
+      <h2 id="milestones-title">Climbing the ladders first.</h2>
+      <p>Youngest to 2 wins, then 3, then 4: each ladder in the list as one climb. Filled rungs are counts he reached younger than anyone in F1 history.</p>
+    </header>
     <div className={styles.tabs} role="group" aria-label="Milestone">
       {ladders.map(item => <button type="button" key={item.id} aria-pressed={item.id === id} onClick={() => { setId(item.id); setRungIndex(null) }}>
         {item.label}<small>{item.rungs.filter(r => r.youngest).length} records</small>
@@ -67,5 +71,5 @@ export default function MilestoneLadders() {
       <span>{rung.youngest ? `Youngest driver ever to reach ${rung.count} ${rung.count === 1 ? one : many}.` : 'Not the youngest ever for this count.'}</span>
     </p>
     {id === 'points' && <p className={styles.note}>Points include sprints. The list also has him as the fastest to 150 through 500 points, measured in races started.</p>}
-  </div>
+  </section>
 }

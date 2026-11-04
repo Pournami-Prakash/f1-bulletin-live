@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { seasons, type Race } from '@/lib/kimi-season-data'
 import { circuitCode, seasonSummary, type Season } from '@/lib/kimi-stats'
-import { useChartWidth } from './hooks'
+import { useChartWidth, useViewportHeight } from './hooks'
 import styles from './kimi.module.css'
 
 const code = (race: Race) => circuitCode(race.circuit)
@@ -18,11 +18,12 @@ export default function RaceByRace() {
   const [year, setYear] = useState<Season>(2026)
   const [round, setRound] = useState(defaults[2026])
   const [ref, width] = useChartWidth<HTMLDivElement>()
+  const viewport = useViewportHeight()
   const races = seasons[year]
   const summary = seasonSummary(year)
   const race = races[round - 1]
   const best = races.filter(item => !item.dnf).reduce((top, item) => item.grid - item.finish > top.grid - top.finish ? item : top)
-  const height = width < 560 ? 260 : 320
+  const height = width < 560 ? 240 : Math.max(190, Math.min(270, viewport - 580))
   const pad = { left: 34, right: 8, top: 14, bottom: 28 }
   const step = (width - pad.left - pad.right) / races.length
   const x = (r: number) => pad.left + (r - 0.5) * step
@@ -86,7 +87,6 @@ export default function RaceByRace() {
           <div><dt>vs Russell</dt><dd>{race.teammateFinish === null ? '—' : race.finish < race.teammateFinish ? 'Ahead' : 'Behind'}</dd></div>
         </dl>
         {race.quali && race.grid > race.quali + 2 && <p className={styles.cardNote}>Qualified P{race.quali} but lined up P{race.grid} on the grid.</p>}
-        {race.fastestLapRank === 1 && <p className={styles.cardNote}>Fastest lap of the race.</p>}
       </article>
     </div>
   </section>

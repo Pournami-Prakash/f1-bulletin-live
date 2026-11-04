@@ -2,7 +2,9 @@
 
 import { useState } from 'react'
 import { recordGroups, recordInsights, recordScopes, type RecordGroup } from '@/lib/kimi-record-insights'
+import RecordList from './RecordList'
 import styles from './records.module.css'
+import kimi from './kimi.module.css'
 
 const order = recordGroups.map(group => group.id)
 const scopeOrder = recordScopes.map(scope => scope.id)
@@ -18,9 +20,12 @@ export default function RecordMix() {
   const [hovered, setHovered] = useState<RecordGroup | null>(null)
   const focus = hovered ?? pinned
   const everyone = groups[0].count
-  return <div className={styles.records}>
-    <h3 className={styles.blockTitle}>Who was he compared with?</h3>
-    <p className={styles.blockDek}>Not every line is an all-time record. <b>{everyone} of {recordInsights.length}</b> put him against every driver in F1 history; the rest narrow the field to one race, an age group, a team or a nation.</p>
+  return <section id="record-types" className={`${kimi.section} ${styles.records}`} aria-labelledby="record-types-title">
+    <header className={kimi.sectionHead}>
+      <p className={kimi.kicker}><span>08</span> Who he beat</p>
+      <h2 id="record-types-title">Who was he compared with?</h2>
+      <p><b>{everyone} of {recordInsights.length}</b> put him against every driver in F1 history. The rest narrow the field to one race, an age group, a team or a nation.</p>
+    </header>
     <div className={styles.mixLayout}>
       <div className={styles.waffle} data-focus={focus ?? undefined} role="img" aria-label={groups.map(group => `${group.label}: ${group.count}`).join(', ')}>
         {cells.map(cell => <span key={cell.id} data-group={cell.group} title={cell.text} />)}
@@ -35,5 +40,6 @@ export default function RecordMix() {
         </li>)}
       </ul>
     </div>
-  </div>
+    <RecordList />
+  </section>
 }

@@ -36,7 +36,7 @@ export default function Hero() {
       <div>
         <p className={styles.eyebrow}><span className={styles.pulse} aria-hidden="true" />Stats · The Kimi Antonelli file</p>
         <h1 id="stats-title" className={styles.heroTitle}>The youngest <span>champion ever.</span></h1>
-        <p className={styles.heroLede}>Rookie in 2025. World champion in 2026. Here are the numbers, plotted and playable.</p>
+        <p className={styles.heroLede}>Rookie in 2025. World champion in 2026.</p>
       </div>
       <div className={styles.ageBadge} aria-label={`Age at title: ${kimi.age.years} years ${kimi.age.days} days`}>
         <p>Age when he clinched it</p>

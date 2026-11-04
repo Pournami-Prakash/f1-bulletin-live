@@ -6,6 +6,7 @@ import { ageAt, circuitCode } from '@/lib/kimi-stats'
 import { useChartWidth } from './hooks'
 import AgeStrip from './AgeStrip'
 import styles from './records.module.css'
+import kimi from './kimi.module.css'
 
 const order = recordGroups.map(group => group.id)
 const records = new Map(weekendTally.map(entry => [entry.weekend.id, [...entry.records].sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group))]))
@@ -42,46 +43,53 @@ export default function RecordWeekends() {
     setSelected(active[Math.max(0, Math.min(active.length - 1, at + step))].id)
   }
 
-  return <div className={styles.records}>
-    <h3 className={styles.blockTitle}>Where the records fell</h3>
-    <p className={styles.blockDek}>Every column is one race weekend of his career, in order. Every dot is one record from the list that names that weekend.</p>
-    <ul className={styles.legend} aria-label="Record groups">
-      {recordGroups.map(group => <li key={group.id} data-group={group.id}><i aria-hidden="true" />{group.label}</li>)}
-    </ul>
-    <div ref={ref} className={styles.plot} tabIndex={0} role="group" aria-label="Records per race weekend. Use the left and right arrow keys to move between weekends." onKeyDown={move}>
-      <svg width={width} height={height} role="img" aria-label={`Records per race weekend. Busiest: ${busiest.map(entry => `${entry.weekend.race} GP ${entry.weekend.year}, ${entry.records.length}`).join('; ')}.`}>
-        {weekends.map((item, index) => {
-          const dots = records.get(item.id) ?? []
-          const isSelected = item.id === selected
-          return <g key={item.id} className={styles.column} data-selected={isSelected} onClick={() => dots.length && setSelected(item.id)} style={{ cursor: dots.length ? 'pointer' : 'default' }}>
-            <rect className={styles.columnHit} x={x(index) - column / 2} y={4} width={column} height={base + 8} rx={4} />
-            <line className={styles.tick} x1={x(index)} x2={x(index)} y1={base + 3} y2={base + 7} />
-            {dots.map((record, stack) => <circle key={record.id} data-group={record.group} cx={x(index)} cy={base - pitch / 2 - stack * pitch} r={radius} />)}
-            {dots.length > 0 && (labelled.has(item.id) || isSelected) && <text className={styles.count} x={x(index)} y={base - dots.length * pitch - 6} textAnchor="middle">{dots.length}</text>}
-            {isSelected && <text className={styles.code} x={x(index)} y={16} textAnchor="middle">{circuitCode(item.circuit)} ’{String(item.year).slice(2)}</text>}
-          </g>
-        })}
-        <AgeStrip x={x} column={column} y={base + 12} />
-      </svg>
+  return <section id="record-book" className={`${kimi.section} ${styles.records}`} aria-labelledby="record-book-title">
+    <header className={kimi.sectionHead}>
+      <p className={kimi.kicker}><span>06</span> The record book</p>
+      <h2 id="record-book-title">Where the records fell.</h2>
+      <p>229 records in two seasons. Each column is a race weekend; each dot is a record set there.</p>
+    </header>
+    <div className={styles.weekendLayout}>
+      <div className={styles.weekendMain}>
+        <ul className={styles.legend} aria-label="Record groups">
+          {recordGroups.map(group => <li key={group.id} data-group={group.id}><i aria-hidden="true" />{group.label}</li>)}
+        </ul>
+        <div ref={ref} className={styles.plot} tabIndex={0} role="group" aria-label="Records per race weekend. Use the left and right arrow keys to move between weekends." onKeyDown={move}>
+          <svg width={width} height={height} role="img" aria-label={`Records per race weekend. Busiest: ${busiest.map(entry => `${entry.weekend.race} GP ${entry.weekend.year}, ${entry.records.length}`).join('; ')}.`}>
+            {weekends.map((item, index) => {
+              const dots = records.get(item.id) ?? []
+              const isSelected = item.id === selected
+              return <g key={item.id} className={styles.column} data-selected={isSelected} onClick={() => dots.length && setSelected(item.id)} style={{ cursor: dots.length ? 'pointer' : 'default' }}>
+                <rect className={styles.columnHit} x={x(index) - column / 2} y={4} width={column} height={base + 8} rx={4} />
+                <line className={styles.tick} x1={x(index)} x2={x(index)} y1={base + 3} y2={base + 7} />
+                {dots.map((record, stack) => <circle key={record.id} data-group={record.group} cx={x(index)} cy={base - pitch / 2 - stack * pitch} r={radius} />)}
+                {dots.length > 0 && (labelled.has(item.id) || isSelected) && <text className={styles.count} x={x(index)} y={base - dots.length * pitch - 6} textAnchor="middle">{dots.length}</text>}
+                {isSelected && <text className={styles.code} x={x(index)} y={16} textAnchor="middle">{circuitCode(item.circuit)} ’{String(item.year).slice(2)}</text>}
+              </g>
+            })}
+            <AgeStrip x={x} column={column} y={base + 12} />
+          </svg>
+        </div>
+        <div className={styles.busiest} role="group" aria-label="Busiest weekends">
+          {busiest.map(entry => <button type="button" key={entry.weekend.id} aria-pressed={entry.weekend.id === selected} onClick={() => setSelected(entry.weekend.id)}>
+            <b>{entry.records.length}</b>{entry.weekend.race} ’{String(entry.weekend.year).slice(2)}
+          </button>)}
+        </div>
+      </div>
+      <article className={styles.weekendCard} aria-live="polite">
+        <header>
+          <p>{weekend.circuit} · {weekend.year} · age {age(weekend.date)}</p>
+          <h4>{weekend.race} Grand Prix weekend</h4>
+          <strong>{list.length}<small>{list.length === 1 ? 'record' : 'records'}</small></strong>
+        </header>
+        <ul>
+          {list.map(record => {
+            const [title, ...rest] = record.text.split(': ').map(withoutWeekend)
+            return <li key={record.id} data-group={record.group}><i aria-hidden="true" /><span><b>{title}</b>{rest.some(Boolean) && <> · {rest.join(': ')}</>}<small>{scopeLabel[record.scope]}</small></span></li>
+          })}
+        </ul>
+      </article>
     </div>
-    <div className={styles.busiest} role="group" aria-label="Busiest weekends">
-      {busiest.map(entry => <button type="button" key={entry.weekend.id} aria-pressed={entry.weekend.id === selected} onClick={() => setSelected(entry.weekend.id)}>
-        <b>{entry.records.length}</b>{entry.weekend.race} ’{String(entry.weekend.year).slice(2)}
-      </button>)}
-    </div>
-    <article className={styles.weekendCard} aria-live="polite">
-      <header>
-        <p>{weekend.circuit} · {weekend.year} · age {age(weekend.date)}</p>
-        <h4>{weekend.race} Grand Prix weekend</h4>
-        <strong>{list.length}<small>{list.length === 1 ? 'record' : 'records'}</small></strong>
-      </header>
-      <ul>
-        {list.map(record => {
-          const [title, ...rest] = record.text.split(': ').map(withoutWeekend)
-          return <li key={record.id} data-group={record.group}><i aria-hidden="true" /><span><b>{title}</b>{rest.some(Boolean) && <> · {rest.join(': ')}</>}<small>{scopeLabel[record.scope]}</small></span></li>
-        })}
-      </ul>
-    </article>
     <p className={styles.note}>{tied} of the 229 lines name a single weekend. The other {229 - tied} span several races or whole seasons (or, in two cases, a 2024 practice session), so they are not plotted here.</p>
-  </div>
+  </section>
 }

@@ -15,6 +15,30 @@ export function useChartWidth<T extends HTMLElement>(fallback = 720) {
   return [ref, width] as const
 }
 
+// Window height, so tall charts can shrink to keep their section within one screen.
+export function useViewportHeight(fallback = 900) {
+  const [height, setHeight] = useState(fallback)
+  useEffect(() => {
+    const update = () => setHeight(window.innerHeight)
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
+  return height
+}
+
+export function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false)
+  useEffect(() => {
+    const list = window.matchMedia(query)
+    const update = () => setMatches(list.matches)
+    update()
+    list.addEventListener('change', update)
+    return () => list.removeEventListener('change', update)
+  }, [query])
+  return matches
+}
+
 // Fires once when the element first scrolls into view, so animations play when they can be seen.
 export function useInView<T extends HTMLElement>(threshold = 0.25) {
   const ref = useRef<T>(null)

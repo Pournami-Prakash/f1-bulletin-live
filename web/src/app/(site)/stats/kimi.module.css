@@ -14,40 +14,41 @@
 .page a:focus-visible, .page button:focus-visible, .page input:focus-visible, .page summary:focus-visible { outline: 2px solid var(--c-ant); outline-offset: 3px; }
 
 /* Hero */
-.hero { padding: 12px 0 40px; border-bottom: 1px solid var(--b2); }
-.heroTop { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; justify-items: center; text-align: center; }
+.hero { padding: 4px 0 28px; border-bottom: 1px solid var(--b2); }
+.heroTop { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; justify-items: center; text-align: center; }
 .eyebrow { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--t2); }
 .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--c-ant); box-shadow: 0 0 0 0 var(--c-ant); animation: pulse 2s infinite; }
 @keyframes pulse { 70% { box-shadow: 0 0 0 10px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
-.heroTitle { text-wrap: balance; font: 400 clamp(56px, 9vw, 128px)/.86 var(--font-bebas); letter-spacing: .01em; margin-top: 18px; }
+/* One line at every width: the title is ~9.85em wide, so size it from the content width with a little slack. */
+.heroTitle { white-space: nowrap; font: 400 min(120px, calc((min(100vw, 1320px) - 2 * clamp(16px, 4vw, 56px)) / 10.2))/.9 var(--font-bebas); letter-spacing: .01em; margin-top: 16px; }
 .heroTitle span { color: var(--c-ant); }
-.heroLede { margin-top: 20px; font-family: Georgia, serif; font-size: clamp(16px, 1.6vw, 20px); line-height: 1.5; color: var(--t2); max-width: 760px; margin-inline: auto; text-wrap: balance; }
-.ageBadge { width: min(100%, 520px); text-align: left; position: relative; overflow: hidden; padding: 26px 26px 22px; border-radius: 18px; background: linear-gradient(140deg, var(--c-ant), var(--c-ant-deep)); color: var(--ink-on-gold); }
+.heroLede { margin-top: 14px; font-family: Georgia, serif; font-size: clamp(16px, 1.6vw, 20px); line-height: 1.5; color: var(--t2); max-width: 760px; margin-inline: auto; text-wrap: balance; }
+.ageBadge { width: min(100%, 480px); text-align: left; position: relative; overflow: hidden; padding: 20px 24px 18px; border-radius: 18px; background: linear-gradient(140deg, var(--c-ant), var(--c-ant-deep)); color: var(--ink-on-gold); }
 .ageBadge::after { content: '12'; position: absolute; right: -10px; bottom: -48px; font: 400 220px/1 var(--font-bebas); opacity: .12; pointer-events: none; }
 .ageBadge p { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; }
-.ageBadge strong { display: block; font: 400 clamp(72px, 8vw, 112px)/.9 var(--font-bebas); margin: 10px 0 8px; font-variant-numeric: tabular-nums; }
+.ageBadge strong { display: block; font: 400 clamp(60px, 6vw, 88px)/.9 var(--font-bebas); margin: 8px 0 6px; font-variant-numeric: tabular-nums; }
 .ageBadge strong small { font-size: .45em; margin-left: 2px; opacity: .75; }
 .ageBadge .ageGap { text-wrap: balance; text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 500; }
 .ageGap b { font-weight: 800; }
-.ageBadge .ageWhere { margin-top: 12px; opacity: .75; font-size: 10px; }
-.tiles { list-style: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 36px; }
-.tile { padding: 18px 18px 16px; border-radius: 14px; background: var(--panel); border: 1px solid var(--b1); display: flex; flex-direction: column; gap: 4px; transition: transform var(--tr), border-color var(--tr); }
+.ageBadge .ageWhere { margin-top: 8px; opacity: .75; font-size: 10px; }
+.tiles { list-style: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
+.tile { padding: 14px 16px 12px; border-radius: 14px; background: var(--panel); border: 1px solid var(--b1); display: flex; flex-direction: column; gap: 4px; transition: transform var(--tr), border-color var(--tr); }
 .tile:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--c-ant) 60%, transparent); }
-.tile strong { font: 400 clamp(44px, 5vw, 64px)/1 var(--font-bebas); color: var(--c-ant); font-variant-numeric: tabular-nums; }
+.tile strong { font: 400 clamp(40px, 4vw, 56px)/1 var(--font-bebas); color: var(--c-ant); font-variant-numeric: tabular-nums; }
 .tile span { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
 .tile small { font-size: 11px; color: var(--t2); }
-.jumps { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 24px; }
+.jumps { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 18px; }
 .jumps a { padding: 10px 14px; border-radius: 999px; border: 1px solid var(--b2); color: var(--t1); text-decoration: none; font-size: 12px; transition: background var(--tr), border-color var(--tr); }
 .jumps a:first-child { background: var(--c-ant); border-color: var(--c-ant); color: var(--ink-on-gold); font-weight: 700; }
 .jumps a:hover { border-color: var(--c-ant); }
 
 /* Section shell */
-.section { padding: 56px 0 16px; scroll-margin-top: calc(var(--header-h) + 12px); }
-.sectionHead { max-width: 760px; margin: 0 auto 28px; text-align: center; }
+.section { padding: 32px 0 8px; scroll-margin-top: calc(var(--header-h) + 12px); }
+.sectionHead { max-width: 1100px; margin: 0 auto 18px; text-align: center; }
 .kicker { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--t2); }
 .kicker span { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--c-ant); color: var(--ink-on-gold); font-weight: 700; letter-spacing: 0; }
-.sectionHead h2 { text-wrap: balance; font: 400 clamp(40px, 5.4vw, 72px)/.95 var(--font-bebas); letter-spacing: .01em; margin-top: 12px; }
-.sectionHead > p:last-child { margin: 12px auto 0; text-wrap: balance; font-size: 14px; line-height: 1.6; color: var(--t2); max-width: 720px; }
+.sectionHead h2 { text-wrap: balance; font: 400 clamp(32px, 4vw, 54px)/.95 var(--font-bebas); letter-spacing: .01em; margin-top: 8px; }
+.sectionHead > p:last-child { margin: 10px auto 0; text-wrap: balance; font-size: 14px; line-height: 1.6; color: var(--t2); max-width: 720px; }
 .plotBox { width: 100%; min-width: 0; }
 .plotBox svg { display: block; overflow: visible; touch-action: pan-y; }
 .grid line { stroke: var(--b1); }
@@ -126,19 +127,19 @@
 .key { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; font-size: 11px; color: var(--t2); }
 .key li { display: flex; align-items: center; gap: 6px; }
 .key i { width: 10px; height: 10px; border-radius: 3px; background: var(--k-kind); }
-.raceCard { position: sticky; top: calc(var(--header-h) + 16px); padding: 22px; border-radius: 18px; background: var(--panel); border: 1px solid var(--b1); border-top: 6px solid var(--k-kind); }
+.raceCard { position: sticky; top: calc(var(--header-h) + 16px); padding: 18px 20px; border-radius: 18px; background: var(--panel); border: 1px solid var(--b1); border-top: 6px solid var(--k-kind); }
 .cardEyebrow { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--t2); }
-.raceCard h3 { font: 400 40px/1 var(--font-bebas); margin-top: 8px; }
+.raceCard h3 { font: 400 34px/1 var(--font-bebas); margin-top: 6px; }
 .cardCircuit { font-size: 12px; color: var(--t2); margin-top: 2px; }
-.cardJump { display: flex; align-items: center; gap: 12px; margin: 20px 0 6px; font: 400 52px/1 var(--font-bebas); }
+.cardJump { display: flex; align-items: center; gap: 12px; margin: 12px 0 4px; font: 400 44px/1 var(--font-bebas); }
 .cardJump span:last-child { color: var(--k-kind); }
 .cardJump i { flex: 1; height: 3px; border-radius: 2px; background: linear-gradient(90deg, var(--b2), var(--k-kind)); position: relative; }
 .cardJump i::after { content: ''; position: absolute; right: -2px; top: -5px; border: 6.5px solid transparent; border-left-color: var(--k-kind); border-right: 0; }
 .cardVerdict { font-size: 14px; font-weight: 600; }
-.cardStats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--b1); }
+.cardStats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--b1); }
 .cardStats dt { font-size: 10px; color: var(--t2); text-transform: uppercase; letter-spacing: .08em; }
 .cardStats dd { font: 400 24px/1.1 var(--font-bebas); }
-.cardNote { margin-top: 12px; font-size: 12px; color: var(--t2); line-height: 1.5; }
+.cardNote { margin-top: 10px; font-size: 12px; color: var(--t2); line-height: 1.5; }
 
 /* The leap */
 .leapLayout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
@@ -199,18 +200,23 @@
 .editorial a { color: var(--t1); }
 
 @media (max-width: 1050px) {
-  .raceLayout, .flagLayout, .leapLayout { grid-template-columns: minmax(0, 1fr); }
-  .raceLayout > *, .flagLayout > *, .leapLayout > * { min-width: 0; }
-  .board { margin-top: 8px; }
+  .raceLayout { grid-template-columns: minmax(0, 1fr); }
+  .raceLayout > * { min-width: 0; }
+  /* The chart's end labels carry the standings here, so the table would repeat them. */
+  .board { display: none; }
+  .flagLayout { grid-template-columns: minmax(0, 1fr) 250px; gap: 16px; }
+  .flagLayout > *, .leapLayout > * { min-width: 0; }
+  .raceCard { padding: 16px; }
+}
+@media (max-width: 700px) {
+  .flagLayout, .leapLayout { grid-template-columns: minmax(0, 1fr); }
   .raceCard { position: static; }
   .tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .tile { grid-column: span 2; }
   .tile:nth-child(n + 4) { grid-column: span 3; }
 }
 @media (max-width: 760px) {
-  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .tiles .tile { grid-column: auto; }
-  .tiles .tile:last-child { grid-column: span 2; }
+  .tiles { gap: 8px; }
   .raceLayout, .butterfly, .pace, .duel, .ladder { padding: 16px; border-radius: 14px; }
   .controls { flex-wrap: wrap; }
   .butterflyRow { grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 40px; row-gap: 6px; }

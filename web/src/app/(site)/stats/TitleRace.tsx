@@ -3,7 +3,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { seasons, titleRace2026, titleRaceDrivers } from '@/lib/kimi-season-data'
 import { leaderboardAt } from '@/lib/kimi-stats'
-import { prefersReducedMotion, useChartWidth } from './hooks'
+import { prefersReducedMotion, useChartWidth, useMediaQuery, useViewportHeight } from './hooks'
 import styles from './kimi.module.css'
 
 type Code = (typeof titleRaceDrivers)[number]
@@ -36,6 +36,9 @@ export default function TitleRace() {
   const [playing, setPlaying] = useState(false)
   const [focus, setFocus] = useState<Code | null>(null)
   const [ref, width] = useChartWidth<HTMLDivElement>()
+  const viewport = useViewportHeight()
+  // Matches the CSS breakpoint that hides the standings table; the end labels then carry the points.
+  const labelled = useMediaQuery('(max-width: 1050px)')
 
   useEffect(() => {
     if (!playing) return
@@ -48,8 +51,9 @@ export default function TitleRace() {
 
   const play = () => { if (round >= rounds) setRound(1); setPlaying(true) }
   const compact = width < 560
-  const height = compact ? 280 : 380
-  const pad = { left: compact ? 30 : 40, right: compact ? 40 : 56, top: 16, bottom: 30 }
+  // The rest of the section takes about 470px; the chart gets what's left of the screen.
+  const height = compact ? 280 : Math.max(260, Math.min(380, viewport - 470))
+  const pad = { left: compact ? 30 : 40, right: labelled ? 66 : compact ? 40 : 56, top: 16, bottom: 30 }
   const max = 400
   const x = (r: number) => pad.left + (r - 1) / (rounds - 1) * (width - pad.left - pad.right)
   const y = (points: number) => pad.top + (1 - points / max) * (height - pad.top - pad.bottom)
@@ -90,7 +94,7 @@ export default function TitleRace() {
               return <g key={code} style={{ opacity: dim ? 0.18 : 1 }} className={styles.series}>
                 <path d={line(code)} fill="none" stroke={color(code)} strokeWidth={code === 'ANT' ? 4 : 2.25} strokeDasharray={drivers[code].dashed ? '6 5' : undefined} strokeLinejoin="round" strokeLinecap="round" className={code === 'ANT' ? styles.kimiLine : undefined} />
                 <circle cx={x(round)} cy={y(points)} r={code === 'ANT' ? 6.5 : 4.5} fill={color(code)} stroke="var(--bg)" strokeWidth="2" />
-                {(code === 'ANT' || !compact) && <text x={x(round) + 10} y={labelY.get(code)} className={styles.seriesLabel} fill={color(code)}>{code}</text>}
+                {(code === 'ANT' || !compact || labelled) && <text x={x(round) + 10} y={labelY.get(code)} className={styles.seriesLabel} fill={color(code)}>{code}{labelled && ` ${points}`}</text>}
               </g>
             })}
           </svg>

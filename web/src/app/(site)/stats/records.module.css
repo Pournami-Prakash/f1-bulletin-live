@@ -1,7 +1,7 @@
 /* Record-group colours: validated as a categorical set (lightness, chroma, colour-blind separation) per theme. */
 .records {
   --g-everyone: #16a68f; --g-event: #3987e5; --g-age: #c98500; --g-team: #d55181;
-  min-width: 0; margin-top: 44px;
+  min-width: 0;
 }
 :global([data-theme='light']) .records { --g-everyone: #0f9c86; --g-event: #2a78d6; --g-age: #c27c00; --g-team: #e05c8f; }
 .records [data-group='everyone'] { --g: var(--g-everyone); }
@@ -9,9 +9,6 @@
 .records [data-group='age'] { --g: var(--g-age); }
 .records [data-group='team'] { --g: var(--g-team); }
 
-.blockTitle { text-align: center; text-wrap: balance; font: 400 clamp(28px, 3.4vw, 40px)/1 var(--font-bebas); letter-spacing: .01em; }
-.blockDek { margin: 8px auto 0; max-width: 640px; text-align: center; text-wrap: pretty; font-size: 14px; line-height: 1.6; color: var(--t2); }
-.blockDek b { color: var(--t1); }
 .note { margin: 12px auto 0; text-align: center; text-wrap: pretty; font-size: 11px; line-height: 1.6; color: var(--t2); max-width: 720px; }
 
 .legend { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 18px 0 8px; font-size: 12px; color: var(--t2); }
@@ -33,6 +30,9 @@
 .ageStrip g[data-teen='false'] rect { fill: color-mix(in srgb, var(--c-ant) 55%, transparent); }
 .ageStrip text { fill: var(--t2); font: 10px var(--font-mono); letter-spacing: .04em; text-transform: uppercase; }
 
+/* Chart and weekend card side by side, so the section fits one screen; the card's list scrolls if long. */
+.weekendLayout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); gap: 24px; align-items: start; }
+.weekendMain { min-width: 0; }
 .busiest { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 14px; }
 .busiest button, .tabs button { display: inline-flex; align-items: baseline; gap: 8px; padding: 9px 13px; border-radius: 999px; border: 1px solid var(--b2); background: transparent; color: var(--t1); font: inherit; font-size: 12px; cursor: pointer; transition: border-color var(--tr), background var(--tr); }
 .busiest button b { font-family: var(--font-mono); color: var(--c-ant); }
@@ -40,13 +40,13 @@
 .busiest button[aria-pressed='true'], .tabs button[aria-pressed='true'] { background: var(--c-ant); border-color: var(--c-ant); color: var(--ink-on-gold); }
 .busiest button[aria-pressed='true'] b { color: inherit; }
 
-.weekendCard { margin-top: 16px; padding: 20px 22px; border-radius: 16px; background: var(--panel); border: 1px solid var(--b1); }
+.weekendCard { padding: 18px 20px; border-radius: 16px; background: var(--panel); border: 1px solid var(--b1); }
 .weekendCard header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 16px; align-items: end; padding-bottom: 14px; border-bottom: 1px solid var(--b1); }
 .weekendCard header p { grid-column: 1; font: 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--t2); }
 .weekendCard h4 { grid-column: 1; font: 400 clamp(26px, 3vw, 34px)/1 var(--font-bebas); }
 .weekendCard header strong { grid-column: 2; grid-row: 1 / span 2; font: 400 52px/.9 var(--font-bebas); color: var(--c-ant); text-align: right; }
 .weekendCard header strong small { display: block; font: 600 10px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--t2); }
-.weekendCard ul { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 10px 24px; margin-top: 14px; }
+.weekendCard ul { list-style: none; display: grid; gap: 10px; margin-top: 12px; max-height: min(360px, 34svh); overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; }
 .weekendCard li { display: flex; gap: 10px; font-size: 13px; line-height: 1.45; color: var(--t2); }
 .weekendCard li i { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--g); }
 .weekendCard li b { color: var(--t1); font-weight: 600; }
@@ -81,7 +81,7 @@
 .mixLegend small { font-size: 11px; color: var(--t2); }
 .mixLegend strong { font: 400 34px/1 var(--font-bebas); font-variant-numeric: tabular-nums; }
 
-.recordList { margin-top: 44px; border-radius: 18px; border: 1px solid var(--b2); padding: 0 22px; }
+.recordList { margin-top: 28px; border-radius: 18px; border: 1px solid var(--b2); padding: 0 22px; }
 .recordList > summary { padding: 20px 0; cursor: pointer; text-align: center; font: 400 26px var(--font-bebas); letter-spacing: .03em; color: var(--c-ant); }
 .recordList[open] { padding-bottom: 22px; }
 .recordList section { margin-top: 18px; }
@@ -93,7 +93,13 @@
 .recordList li small { display: block; margin-top: 2px; font: 10px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--t2); }
 .recordList li a { color: var(--c-ant); }
 
-@media (max-width: 760px) {
+@media (max-width: 1050px) {
+  .weekendLayout { grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; }
+}
+@media (max-width: 700px) {
+  .weekendLayout { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
   .mixLayout { grid-template-columns: minmax(0, 1fr); }
   .weekendCard { padding: 16px; }
 }
