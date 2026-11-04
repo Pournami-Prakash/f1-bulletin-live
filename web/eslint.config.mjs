@@ -6,8 +6,8 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   {
-    // Next's CommonJS plugin synchronously requires this compatibility adapter.
-    files: ["tools/eslint-glob/index.cjs"],
+    // ESLint's CommonJS plugins synchronously require these compatibility adapters.
+    files: ["tools/eslint-glob/index.cjs", "tools/minimatch-compat/index.cjs"],
     rules: { "@typescript-eslint/no-require-imports": "off" },
   },
   {
