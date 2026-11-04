@@ -2,17 +2,11 @@
 
 import { useState } from 'react'
 import { seasons, type Race } from '@/lib/kimi-season-data'
-import { seasonSummary, type Season } from '@/lib/kimi-stats'
+import { circuitCode, seasonSummary, type Season } from '@/lib/kimi-stats'
 import { useChartWidth } from './hooks'
 import styles from './kimi.module.css'
 
-const codes: Record<string, string> = {
-  Melbourne: 'AUS', Shanghai: 'CHN', Suzuka: 'JPN', Sakhir: 'BHR', Jeddah: 'KSA', Miami: 'MIA', Imola: 'IMO', 'Monte Carlo': 'MON',
-  Barcelona: 'BAR', Montreal: 'CAN', Spielberg: 'AUT', Silverstone: 'GBR', Spa: 'BEL', Budapest: 'HUN', Zandvoort: 'NED', Monza: 'ITA',
-  Baku: 'AZE', 'Marina Bay': 'SIN', Austin: 'USA', 'Mexico City': 'MEX', 'São Paulo': 'BRA', 'Las Vegas': 'LVG', Lusail: 'QAT',
-  'Abu Dhabi': 'ABU', Madrid: 'MAD', 'Kuala Lumpur': 'KUL',
-}
-const code = (race: Race) => codes[race.circuit] ?? race.circuit.slice(0, 3).toUpperCase()
+const code = (race: Race) => circuitCode(race.circuit)
 const outcome = (race: Race) => race.dnf ? 'dnf' : race.finish === 1 ? 'win' : race.finish <= 3 ? 'podium' : race.finish <= 10 ? 'points' : 'none'
 const outcomeLabel = { win: 'Win', podium: 'Podium', points: 'Points', none: 'No points', dnf: 'Did not finish' }
 const defaults: Record<Season, number> = { 2025: 21, 2026: 13 }

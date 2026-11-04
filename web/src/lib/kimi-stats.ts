@@ -62,3 +62,11 @@ export const youngestChampions = [
   { name: 'Fernando Alonso', short: 'ALO', season: 2005, birth: '1981-07-29', clinched: '2005-09-25' },
   { name: 'Emerson Fittipaldi', short: 'FIT', season: 1972, birth: '1946-12-12', clinched: '1972-09-10' },
 ].map(champion => ({ ...champion, age: ageAt(champion.birth, champion.clinched) })).sort((a, b) => a.age.decimal - b.age.decimal)
+
+const circuitCodes: Record<string, string> = {
+  Melbourne: 'AUS', Shanghai: 'CHN', Suzuka: 'JPN', Sakhir: 'BHR', Jeddah: 'KSA', Miami: 'MIA', Imola: 'IMO', 'Monte Carlo': 'MON',
+  Barcelona: 'BAR', Montreal: 'CAN', Spielberg: 'AUT', Silverstone: 'GBR', Spa: 'BEL', Budapest: 'HUN', Zandvoort: 'NED', Monza: 'ITA',
+  Baku: 'AZE', 'Marina Bay': 'SIN', Austin: 'USA', 'Mexico City': 'MEX', 'São Paulo': 'BRA', 'Las Vegas': 'LVG', Lusail: 'QAT',
+  'Abu Dhabi': 'ABU', Madrid: 'MAD', 'Kuala Lumpur': 'KUL',
+}
+export const circuitCode = (circuit: string) => circuitCodes[circuit] ?? circuit.slice(0, 3).toUpperCase()

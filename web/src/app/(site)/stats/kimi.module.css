@@ -195,7 +195,7 @@
 .ladderCallout b { color: var(--c-ant); }
 
 /* Record book + footer note */
-.bookDisclosure { border-radius: 18px; border: 1px solid var(--b2); padding: 0 22px; }
+.bookDisclosure { margin-top: 44px; border-radius: 18px; border: 1px solid var(--b2); padding: 0 22px; }
 .bookDisclosure > summary { padding: 20px 0; cursor: pointer; font: 400 26px var(--font-bebas); letter-spacing: .03em; color: var(--c-ant); }
 .bookDisclosure[open] { padding-bottom: 22px; }
 .editorial { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--b1); font-size: 11px; line-height: 1.7; color: var(--t2); }

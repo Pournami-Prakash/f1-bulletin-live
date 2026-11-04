@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 test('atlas links moments, claim dots, filters and keyboard inspection', async ({ page }) => {
   await page.goto('/stats')
   await expect(page.getByRole('heading', { level: 1 })).toContainText('champion ever')
-  await page.getByText('Open the record atlas', { exact: true }).click()
+  await page.getByText('Browse all 229 lines', { exact: true }).click()
   const status = page.getByRole('status')
   const detail = page.getByRole('complementary', { name: 'Record detail' })
   const dots = page.locator('#record-book button[title]')
@@ -74,4 +74,24 @@ test('stats charts replay the title race and inspect races, seasons and champion
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
   await page.evaluate(() => window.scrollTo(0, 0))
   await page.screenshot({ path: `/tmp/stats-charts-${test.info().project.name}.png`, fullPage: true })
+})
+
+test('record charts link weekends, milestone ladders and comparison groups', async ({ page }) => {
+  await page.goto('/stats')
+  const weekend = page.locator('article').filter({ hasText: 'Grand Prix weekend' })
+  await expect(weekend).toContainText('Chinese Grand Prix weekend', { ignoreCase: true })
+  await expect(weekend.locator('li')).toHaveCount(15)
+  await page.getByRole('group', { name: 'Busiest weekends' }).getByRole('button', { name: /Monaco ’26/ }).click()
+  await expect(weekend).toContainText('Youngest grand slam')
+  await page.getByRole('group', { name: /Records per race weekend/ }).press('ArrowRight')
+  await expect(weekend).not.toContainText('Monaco Grand Prix', { ignoreCase: true })
+
+  await page.getByRole('group', { name: 'Milestone' }).getByRole('button', { name: /^Podiums/ }).click()
+  await expect(page.getByRole('img', { name: /Career podiums: 19\. Youngest ever to 9 through 19 podiums/ })).toBeAttached()
+  await expect(page.getByText('Youngest driver ever to reach 19 podiums.')).toBeVisible()
+
+  await expect(page.getByText(/72 of 229/)).toBeVisible()
+  await page.getByRole('button', { name: /Team and nation/ }).click()
+  await expect(page.locator('[data-focus="team"]')).toBeAttached()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
 })
