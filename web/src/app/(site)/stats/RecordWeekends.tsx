@@ -22,10 +22,10 @@ export default function RecordWeekends() {
   const [selected, setSelected] = useState(weekendTally[0].weekend.id)
   const [ref, width] = useChartWidth<HTMLDivElement>()
   const compact = width < 640
-  const pitch = compact ? 7 : 11
+  const pitch = compact ? 6 : 11
   const radius = compact ? 2.6 : 4.2
   // The top band holds the selected weekend's code above the tallest column's count.
-  const pad = { left: 2, right: 2, top: 40, bottom: 40 }
+  const pad = { left: 2, right: 2, top: compact ? 30 : 40, bottom: compact ? 34 : 40 }
   const column = (width - pad.left - pad.right) / weekends.length
   const tallest = weekendTally[0].records.length
   const base = pad.top + tallest * pitch
@@ -33,7 +33,8 @@ export default function RecordWeekends() {
   const x = (index: number) => pad.left + (index + 0.5) * column
   const weekend = weekends.find(item => item.id === selected)!
   const list = records.get(selected) ?? []
-  const labelled = new Set(weekendTally.slice(0, compact ? 4 : 8).map(entry => entry.weekend.id))
+  // Narrow columns can't fit a count beside a neighbour, so phones label only the selected one.
+  const labelled = new Set(weekendTally.slice(0, compact ? 0 : 8).map(entry => entry.weekend.id))
 
   const move = (event: KeyboardEvent) => {
     const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
@@ -47,7 +48,7 @@ export default function RecordWeekends() {
     <header className={kimi.sectionHead}>
       <p className={kimi.kicker}><span>06</span> The record book</p>
       <h2 id="record-book-title">Where the records fell.</h2>
-      <p>229 records in two seasons. Each column is a race weekend; each dot is a record set there.</p>
+      <p>One column per race weekend, one dot per record.</p>
     </header>
     <div className={styles.weekendLayout}>
       <div className={styles.weekendMain}>
@@ -64,7 +65,7 @@ export default function RecordWeekends() {
                 <line className={styles.tick} x1={x(index)} x2={x(index)} y1={base + 3} y2={base + 7} />
                 {dots.map((record, stack) => <circle key={record.id} data-group={record.group} cx={x(index)} cy={base - pitch / 2 - stack * pitch} r={radius} />)}
                 {dots.length > 0 && (labelled.has(item.id) || isSelected) && <text className={styles.count} x={x(index)} y={base - dots.length * pitch - 6} textAnchor="middle">{dots.length}</text>}
-                {isSelected && <text className={styles.code} x={x(index)} y={16} textAnchor="middle">{circuitCode(item.circuit)} ’{String(item.year).slice(2)}</text>}
+                {isSelected && <text className={styles.code} x={x(index)} y={compact ? 10 : 16} textAnchor="middle">{circuitCode(item.circuit)} ’{String(item.year).slice(2)}</text>}
               </g>
             })}
             <AgeStrip x={x} column={column} y={base + 12} />
@@ -90,6 +91,6 @@ export default function RecordWeekends() {
         </ul>
       </article>
     </div>
-    <p className={styles.note}>{tied} of the 229 lines name a single weekend. The other {229 - tied} span several races or whole seasons (or, in two cases, a 2024 practice session), so they are not plotted here.</p>
+    <p className={styles.note}>The other {229 - tied} records span several races, a season or a 2024 practice session, so they aren’t plotted.</p>
   </section>
 }

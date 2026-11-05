@@ -103,6 +103,35 @@
   .mixLayout { grid-template-columns: minmax(0, 1fr); }
   .weekendCard { padding: 16px; }
 }
+/* Phones: chip rows scroll sideways and the weekend card's list gets a shorter window. */
+@media (max-width: 560px) {
+  .note { margin-top: 8px; font-size: 10px; line-height: 1.5; }
+  .legend { gap: 4px 12px; margin: 8px 0 4px; font-size: 10px; }
+  .legend i { width: 8px; height: 8px; }
+  .busiest, .tabs { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .busiest { margin-top: 8px; }
+  .tabs { margin-top: 10px; margin-bottom: 6px; }
+  .busiest button, .tabs button { flex: none; white-space: nowrap; padding: 8px 12px; min-height: 40px; align-items: center; }
+  .weekendLayout { gap: 10px; }
+  .weekendCard { padding: 12px 14px; border-radius: 14px; }
+  .weekendCard header { padding-bottom: 8px; }
+  .weekendCard header p { font-size: 9px; }
+  .weekendCard h4 { font-size: 22px; }
+  .weekendCard header strong { font-size: 36px; }
+  .weekendCard ul { gap: 6px; margin-top: 8px; max-height: 96px; }
+  .weekendCard li { font-size: 12px; line-height: 1.4; }
+  .rungCaption { margin-top: 6px; padding: 8px 12px; font-size: 12px; }
+  .mixLayout { gap: 12px; margin-top: 10px; }
+  .mixLegend { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .mixLegend button { grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; padding: 8px 10px; align-items: start; }
+  .mixLegend i { margin-top: 3px; }
+  .mixLegend span { grid-column: 1 / -1; font-size: 12px; }
+  .mixLegend span small:first-of-type { display: none; }
+  .mixLegend small { font-size: 10px; }
+  .mixLegend strong { grid-column: 2; grid-row: 1; font-size: 22px; }
+  .recordList { margin-top: 14px; padding: 0 14px; }
+  .recordList > summary { padding: 12px 0; font-size: 22px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .records * { transition: none !important; }
 }

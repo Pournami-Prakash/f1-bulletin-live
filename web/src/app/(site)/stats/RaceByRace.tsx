@@ -8,7 +8,7 @@ import styles from './kimi.module.css'
 
 const code = (race: Race) => circuitCode(race.circuit)
 const outcome = (race: Race) => race.dnf ? 'dnf' : race.finish === 1 ? 'win' : race.finish <= 3 ? 'podium' : race.finish <= 10 ? 'points' : 'none'
-const outcomeLabel = { win: 'Win', podium: 'Podium', points: 'Points', none: 'No points', dnf: 'Did not finish' }
+const outcomeLabel = { win: 'Win', podium: 'Podium', points: 'Points', none: 'No points', dnf: 'DNF' }
 const defaults: Record<Season, number> = { 2025: 21, 2026: 13 }
 // Format by hand: Node and browsers disagree on en-GB short months ("Sept" vs "Sep"), which breaks hydration.
 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -23,7 +23,7 @@ export default function RaceByRace() {
   const summary = seasonSummary(year)
   const race = races[round - 1]
   const best = races.filter(item => !item.dnf).reduce((top, item) => item.grid - item.finish > top.grid - top.finish ? item : top)
-  const height = width < 560 ? 240 : Math.max(190, Math.min(270, viewport - 580))
+  const height = width < 560 ? 170 : Math.max(190, Math.min(270, viewport - 580))
   const pad = { left: 34, right: 8, top: 14, bottom: 28 }
   const step = (width - pad.left - pad.right) / races.length
   const x = (r: number) => pad.left + (r - 0.5) * step
@@ -34,7 +34,7 @@ export default function RaceByRace() {
     <header className={styles.sectionHead}>
       <p className={styles.kicker}><span>02</span> Grid → flag</p>
       <h2 id="race-by-race-title">Where he started. Where he finished.</h2>
-      <p>Every Grand Prix as one line: hollow dot on the grid, solid dot at the flag. Long lines up mean big comebacks.</p>
+      <p>Hollow dot: where he started. Solid dot: where he finished. Long lines up are comebacks.</p>
     </header>
     <div className={styles.toolbar}>
       <div className={styles.segmented} role="group" aria-label="Season">
@@ -83,7 +83,7 @@ export default function RaceByRace() {
         <dl className={styles.cardStats}>
           <div><dt>Qualified</dt><dd>{race.quali ? `P${race.quali}` : '—'}</dd></div>
           <div><dt>Points</dt><dd>{race.points}</dd></div>
-          <div><dt>Fastest lap rank</dt><dd>{race.fastestLapRank ? `#${race.fastestLapRank}` : '—'}</dd></div>
+          <div><dt>Fastest lap</dt><dd>{race.fastestLapRank ? `#${race.fastestLapRank}` : '—'}</dd></div>
           <div><dt>vs Russell</dt><dd>{race.teammateFinish === null ? '—' : race.finish < race.teammateFinish ? 'Ahead' : 'Behind'}</dd></div>
         </dl>
         {race.quali && race.grid > race.quali + 2 && <p className={styles.cardNote}>Qualified P{race.quali} but lined up P{race.grid} on the grid.</p>}

@@ -18,7 +18,7 @@ export default function MilestoneLadders() {
   const [rungIndex, setRungIndex] = useState<number | null>(null)
   const [ref, width] = useChartWidth<HTMLDivElement>()
   const compact = width < 640
-  const height = compact ? 220 : 280
+  const height = compact ? 180 : 280
   const pad = { left: 34, right: 12, top: 18, bottom: 40 }
   const column = (width - pad.left - pad.right) / weekends.length
   const x = (index: number) => pad.left + (index + 0.5) * column

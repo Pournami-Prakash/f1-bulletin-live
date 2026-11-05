@@ -8,7 +8,7 @@ const sources = new Map(recordClaims.map(claim => [claim.id, claim.source]))
 // Every line once, grouped the same way as the comparison chart above it.
 export default function RecordList() {
   return <details className={styles.recordList}>
-    <summary>Read all {recordInsights.length} lines</summary>
+    <summary>See all {recordInsights.length} records</summary>
     {recordGroups.map(group => {
       const lines = recordInsights.filter(record => record.group === group.id)
       return <section key={group.id} data-group={group.id} aria-label={`${group.label}: ${lines.length}`}>

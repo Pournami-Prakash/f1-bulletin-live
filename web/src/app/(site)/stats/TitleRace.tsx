@@ -51,8 +51,8 @@ export default function TitleRace() {
 
   const play = () => { if (round >= rounds) setRound(1); setPlaying(true) }
   const compact = width < 560
-  // The rest of the section takes about 470px; the chart gets what's left of the screen.
-  const height = compact ? 280 : Math.max(260, Math.min(380, viewport - 470))
+  // The rest of the section takes about 470px (400 on phones); the chart gets what's left of the screen.
+  const height = compact ? Math.max(200, Math.min(260, viewport - 400)) : Math.max(260, Math.min(380, viewport - 470))
   const pad = { left: compact ? 30 : 40, right: labelled ? 66 : compact ? 40 : 56, top: 16, bottom: 30 }
   const max = 400
   const x = (r: number) => pad.left + (r - 1) / (rounds - 1) * (width - pad.left - pad.right)

@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test'
 
-test('record list shows every line once, grouped, with primary sources', async ({ page }) => {
+test('record list shows every record once, grouped, with primary sources', async ({ page }) => {
   await page.goto('/stats')
   await expect(page.getByRole('heading', { level: 1 })).toContainText('champion ever')
-  await page.getByText('Read all 229 lines', { exact: true }).click()
-  const list = page.locator('details').filter({ hasText: 'Read all 229 lines' })
+  await page.getByText('See all 229 records', { exact: true }).click()
+  const list = page.locator('details').filter({ hasText: 'See all 229 records' })
   await expect(list.locator('li')).toHaveCount(229)
   await expect(list.getByRole('region')).toHaveCount(4)
   await expect(list.getByRole('region', { name: 'All-time F1 records: 72' })).toContainText('Youngest world champion')

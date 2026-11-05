@@ -22,7 +22,7 @@ const strength = (row: Row, value: number) => row.lowerIsBetter ? (20 - value) /
 
 function PointsPace() {
   const [ref, width] = useChartWidth<HTMLDivElement>(520)
-  const height = 220
+  const height = width < 480 ? 130 : 220
   const pad = { left: 34, right: 54, top: 12, bottom: 26 }
   const x = (r: number) => pad.left + (r - 1) / 23 * (width - pad.left - pad.right)
   const y = (p: number) => pad.top + (1 - p / 400) * (height - pad.top - pad.bottom)

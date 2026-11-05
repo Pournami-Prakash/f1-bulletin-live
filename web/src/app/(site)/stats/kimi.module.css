@@ -229,6 +229,87 @@
   .ladderTrack { margin-right: 64px; }
   .ladderName { flex-direction: row; gap: 8px; align-items: baseline; }
 }
+/* Phones: every section has to fit about 600px of screen, so headers, cards and rows tighten up. */
+@media (max-width: 560px) {
+  .hero { padding: 0 0 18px; }
+  .heroTop { gap: 14px; }
+  .heroTitle { margin-top: 10px; }
+  .heroLede { margin-top: 8px; font-size: 15px; }
+  .ageBadge { padding: 14px 18px 12px; border-radius: 14px; }
+  .ageBadge::after { font-size: 150px; bottom: -32px; }
+  .ageBadge strong { font-size: 52px; margin: 4px 0 2px; }
+  .ageBadge .ageWhere { margin-top: 4px; }
+  .tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 14px; }
+  .tile, .tile:nth-child(n + 4) { grid-column: auto; padding: 8px 4px; border-radius: 10px; align-items: center; text-align: center; gap: 2px; }
+  .tile strong { font-size: 28px; }
+  .tile span { font-size: 9px; letter-spacing: .02em; line-height: 1.25; }
+  .tile small { display: none; }
+  .jumps, .form { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .jumps { justify-content: flex-start; margin-top: 14px; }
+  .jumps a { flex: none; white-space: nowrap; padding: 9px 12px; }
+
+  .section { padding: 12px 0 0; }
+  .sectionHead { margin-bottom: 12px; }
+  .kicker { font-size: 10px; }
+  .kicker span { width: 22px; height: 22px; }
+  .sectionHead h2 { font-size: 28px; margin-top: 6px; }
+  .sectionHead > p:last-child { margin-top: 6px; font-size: 13px; line-height: 1.45; }
+
+  .raceLayout { padding: 12px; }
+  .controls { flex-wrap: nowrap; gap: 10px; margin-bottom: 6px; }
+  .playButton { min-height: 44px; padding: 0 14px 0 12px; }
+  .moment { margin-top: 8px; padding: 10px 12px; font-size: 13px; min-height: 0; }
+
+  .toolbar { justify-content: center; gap: 8px; margin-bottom: 10px; }
+  .chips { gap: 6px; justify-content: center; }
+  /* Season totals give way to the race card here; section 03 compares the seasons. */
+  .chips { display: none; }
+  .form { display: grid; grid-auto-flow: column; grid-auto-columns: 44px; grid-template-columns: none; margin-top: 8px; }
+  .form button { min-height: 44px; }
+  .key { flex-wrap: nowrap; justify-content: center; gap: 10px; margin-top: 8px; font-size: 10px; }
+  .key li { gap: 4px; white-space: nowrap; }
+  .flagLayout { gap: 10px; }
+  .raceCard { padding: 12px 14px; border-radius: 14px; border-top-width: 4px; }
+  /* Name on the left, grid-to-flag jump on the right, stats in one row underneath. */
+  .raceCard { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; }
+  .raceCard > * { grid-column: 1 / -1; }
+  .raceCard .cardEyebrow, .raceCard h3, .cardCircuit { grid-column: 1; }
+  .raceCard h3 { font-size: 24px; margin-top: 2px; }
+  .cardJump { grid-column: 2; grid-row: 1 / span 2; align-self: end; margin: 0; gap: 8px; font-size: 30px; }
+  .cardJump i { flex: none; width: 28px; }
+  .cardVerdict { grid-column: 2; grid-row: 3; text-align: right; font-size: 12px; }
+  .cardStats { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 8px; padding-top: 8px; }
+  .cardStats dt { font-size: 9px; letter-spacing: .02em; }
+  .cardStats dd { font-size: 18px; }
+  .cardNote { margin-top: 6px; font-size: 11px; }
+
+  .leapLayout { gap: 12px; }
+  .butterfly, .pace, .duel, .ladder { padding: 12px; }
+  .butterflyHead { font-size: 18px; margin-bottom: 4px; }
+  .butterflyRow { grid-template-columns: 34px minmax(0, 1fr) 82px minmax(0, 1fr) 34px; gap: 6px; padding: 3px 0; }
+  .butterflyRow .bLabel { grid-column: auto; order: 0; font-size: 9px; letter-spacing: .02em; line-height: 1.2; }
+  .bValue { font-size: 18px; }
+  .bTrack { height: 10px; }
+  .pace figcaption { font-size: 12px; margin-bottom: 6px; }
+  .pace figcaption b { font-size: 18px; }
+
+  .duel { gap: 16px; margin-top: 10px; }
+  .duelScore h3 { font-size: 10px; letter-spacing: .08em; padding-bottom: 4px; }
+  .duelScore span { font-size: 12px; }
+  .duelScore b { font-size: 38px; vertical-align: -4px; margin: 0 4px; }
+  .tug { height: 16px; margin-top: 6px; }
+  .duelDots { gap: 4px; margin-top: 8px; }
+  .duel .footnote { margin-top: 0; }
+
+  .ladderAxis { margin-left: 102px; }
+  .ladder li button { grid-template-columns: 92px minmax(0, 1fr); gap: 10px; min-height: 36px; padding: 3px 0; }
+  .ladderName { flex-direction: column; gap: 0; align-items: flex-start; }
+  .ladderName b { font-size: 12px; line-height: 1.25; }
+  .ladderName small { font-size: 10px; }
+  .ladderTrack { height: 22px; }
+  .ladderCallout { margin-top: 10px; padding: 10px 12px; font-size: 13px; }
+  .ladder .footnote { margin-top: 8px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .pulse { animation: none; }
   .series circle, .series text, .board li, .boardBar i, .bTrack i, .tug i, .ladderTrack i, .tile, .form button { transition: none; }
