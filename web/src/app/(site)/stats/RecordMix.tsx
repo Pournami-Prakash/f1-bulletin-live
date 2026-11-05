@@ -22,7 +22,7 @@ export default function RecordMix() {
   const everyone = groups[0].count
   return <section id="record-types" className={`${kimi.section} ${styles.records}`} aria-labelledby="record-types-title">
     <header className={kimi.sectionHead}>
-      <p className={kimi.kicker}><span>08</span> Who he beat</p>
+      <p className={kimi.kicker}><span>09</span> Who he beat</p>
       <h2 id="record-types-title">Who was he compared with?</h2>
       <p><b>{everyone} of {recordInsights.length}</b> put him against every driver in F1 history. The rest narrow the field to one race, an age group, a team or a nation.</p>
     </header>

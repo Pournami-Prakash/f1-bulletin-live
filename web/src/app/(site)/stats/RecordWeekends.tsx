@@ -46,7 +46,7 @@ export default function RecordWeekends() {
 
   return <section id="record-book" className={`${kimi.section} ${styles.records}`} aria-labelledby="record-book-title">
     <header className={kimi.sectionHead}>
-      <p className={kimi.kicker}><span>06</span> The record book</p>
+      <p className={kimi.kicker}><span>07</span> The record book</p>
       <h2 id="record-book-title">Where the records fell.</h2>
       <p>One column per race weekend, one dot per record.</p>
     </header>

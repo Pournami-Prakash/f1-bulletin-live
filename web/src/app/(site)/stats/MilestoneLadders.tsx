@@ -41,7 +41,7 @@ export default function MilestoneLadders() {
 
   return <section id="milestones" className={`${kimi.section} ${styles.records}`} aria-labelledby="milestones-title">
     <header className={kimi.sectionHead}>
-      <p className={kimi.kicker}><span>07</span> Milestone ladders</p>
+      <p className={kimi.kicker}><span>08</span> Milestone ladders</p>
       <h2 id="milestones-title">Climbing the ladders first.</h2>
       <p>Youngest to 2 wins, then 3, then 4: each ladder in the list as one climb. Filled rungs are counts he reached younger than anyone in F1 history.</p>
     </header>

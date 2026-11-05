@@ -8,6 +8,7 @@ import RaceByRace from './RaceByRace'
 import TheLeap from './TheLeap'
 import TeammateDuel from './TeammateDuel'
 import YoungestChampions from './YoungestChampions'
+import TitleContext from './TitleContext'
 import RecordWeekends from './RecordWeekends'
 import MilestoneLadders from './MilestoneLadders'
 import RecordMix from './RecordMix'
@@ -25,6 +26,7 @@ export default function StatsPage() {
       <TheLeap />
       <TeammateDuel />
       <YoungestChampions />
+      <TitleContext />
       <RecordWeekends />
       <MilestoneLadders />
       <RecordMix />
