@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, type KeyboardEvent } from 'react'
-import { recordGroups, recordScopes, weekendTally, weekends } from '@/lib/kimi-record-insights'
+import { recordGroups, recordInsights, recordScopes, weekendTally, weekends } from '@/lib/kimi-record-insights'
 import { ageAt, circuitCode } from '@/lib/kimi-stats'
 import { useChartWidth } from './hooks'
 import AgeStrip from './AgeStrip'
@@ -91,6 +91,6 @@ export default function RecordWeekends() {
         </ul>
       </article>
     </div>
-    <p className={styles.note}>The other {229 - tied} records span several races, a season or a 2024 practice session, so they aren’t plotted.</p>
+    <p className={styles.note}>The other {recordInsights.length - tied} records span several races, a season or a 2024 practice session, so they aren’t plotted.</p>
   </section>
 }

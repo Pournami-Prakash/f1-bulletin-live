@@ -49,6 +49,6 @@ export default function TitleContext() {
         </li>)}
       </ul>
     </div>
-    <p className={styles.footnote}>Sources: {sources.map((source, index) => <span key={source.url}>{index ? ' · ' : ''}<a href={source.url}>{source.name}</a></span>)}. Not part of the 229-record list.</p>
+    <p className={styles.footnote}>Sources: {sources.map((source, index) => <span key={source.url}>{index ? ' · ' : ''}<a href={source.url}>{source.name}</a></span>)}.</p>
   </section>
 }
