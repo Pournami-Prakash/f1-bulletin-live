@@ -32,3 +32,15 @@ export const titleFirsts = [
   { id: 'second', value: '2nd', label: 'season, already champion', note: 'Like Fangio 1951, Villeneuve 1997 and Hamilton 2008', source: 'motorbiscuit' },
   { id: 'junior', value: '10th', label: 'Mercedes drivers’ title', note: 'The first won by a graduate of its junior programme', source: 'mercedes' },
 ] as const satisfies readonly { id: string; value: string; label: string; note: string; source: TitleSource }[]
+
+// The same milestones as record-list lines, so the full list counts them with the rest.
+export const titleRecords = [
+  'First Italian world champion since Ascari: 73 years (Mexico 2026)',
+  'First Italian to win the Italian GP since Scarfiotti: 60 years (Italy 2026)',
+  'First Italian to win a GP since Fisichella: 20 years (China 2026)',
+  'Joint fourth-earliest title clinch: 4 races left (Mexico 2026)',
+  'First world champion born this century (Mexico 2026)',
+  'Third Italian world champion, after Farina and Ascari, and 36th different champion (Mexico 2026)',
+  'Champion in his second season, like Fangio, Villeneuve and Hamilton (Mexico 2026)',
+  'First Mercedes junior to win the title, the team’s 10th drivers’ title (Mexico 2026)',
+]

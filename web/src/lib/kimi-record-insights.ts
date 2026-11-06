@@ -1,5 +1,6 @@
 import claims from './kimi-record-claims.json'
 import { seasons, sprints } from './kimi-season-data'
+import { titleRecords } from './title-milestones'
 
 const BIRTH = Date.UTC(2006, 7, 25)
 const DAY = 86_400_000
@@ -66,7 +67,7 @@ function weekendFor(time: number | null, text: string): Weekend | undefined {
   return race ? weekends.find(w => w.race === race && w.year === Number(named[2])) : undefined
 }
 
-export const recordInsights = (claims as string[]).map((text, index) => {
+export const recordInsights = [...(claims as string[]), ...titleRecords].map((text, index) => {
   const age = text.match(/(\d+)y (\d+)m (\d+)d/)
   const time = age ? Date.UTC(2006 + Number(age[1]), 7 + Number(age[2]), 25 + Number(age[3])) : null
   const weekend = weekendFor(time, text)

@@ -5,11 +5,13 @@ import { load } from './load.mjs'
 const require = createRequire(import.meta.url)
 const claims = require('../src/lib/kimi-record-claims.json')
 const data = load('../src/lib/kimi-season-data.ts')
-const { recordInsights, recordScope, weekendTally, ladders, ageBands, weekends } = load('../src/lib/kimi-record-insights.ts', { './kimi-record-claims.json': claims, './kimi-season-data': data })
+const titles = load('../src/lib/title-milestones.ts')
+const { recordInsights, recordScope, weekendTally, ladders, ageBands, weekends } = load('../src/lib/kimi-record-insights.ts', { './kimi-record-claims.json': claims, './kimi-season-data': data, './title-milestones': titles })
 const find = text => recordInsights.find(record => record.text.startsWith(text))
 
 test('every list line is kept once and dated weekends come from the stated age', () => {
-  assert.equal(recordInsights.length, 229)
+  assert.equal(recordInsights.length, 229 + titles.titleRecords.length)
+  assert.equal(find('First Italian world champion since Ascari:').weekendId, '2026-19')
   assert.equal(find('Youngest world champion:').weekendId, '2026-19')
   // “(2026)” alone names no place: the age dates Monaco's pole on the Saturday.
   assert.equal(find('Youngest Monaco GP pole sitter:').weekendId, '2026-6')
@@ -17,7 +19,7 @@ test('every list line is kept once and dated weekends come from the stated age',
   assert.equal(find('Longest points streak by an under-21 driver:').weekendId, null)
   assert.equal(find('Youngest Italian in an F1 session:').weekendId, null)
   assert.deepEqual(weekendTally.slice(0, 4).map(entry => [entry.weekend.race, entry.weekend.year, entry.records.length]),
-    [['Chinese', 2026, 15], ['Italian', 2026, 13], ['Japanese', 2026, 11], ['Monaco', 2026, 10]])
+    [['Chinese', 2026, 16], ['Italian', 2026, 14], ['Japanese', 2026, 11], ['Monaco', 2026, 10]])
 })
 
 test('scopes use the narrowest comparison group', () => {
@@ -29,7 +31,7 @@ test('scopes use the narrowest comparison group', () => {
   assert.equal(recordScope('Youngest grand slam: 19y 9m 13d (Monaco 2026)'), 'youngest')
   assert.equal(recordScope('Most points in a debut season: 150 (2025)'), 'alltime')
   const counts = Object.groupBy(recordInsights, record => record.group)
-  assert.deepEqual(['everyone', 'event', 'age', 'team'].map(id => counts[id].length), [72, 54, 47, 56])
+  assert.deepEqual(['everyone', 'event', 'age', 'team'].map(id => counts[id].length), [75, 54, 47, 61])
 })
 
 test('milestone ladders reproduce the youngest-to-N rungs from race results', () => {
