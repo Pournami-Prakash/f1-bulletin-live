@@ -172,6 +172,9 @@ def main():
         if args.plan:
             continue
         if not completed and (not ready or now >= race_time):
+            if now >= race_time and predictions == 0:
+                raise RuntimeError(f'R{number}: pre-race forecast was missed; race has started. '
+                                   'Only a labeled historical reconstruction is allowed after completion.')
             print("Waiting for qualifying publication or race completion.", flush=True)
             break
         if completed and official_urls is None:
